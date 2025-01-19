@@ -133,7 +133,7 @@ class IDSidePanelView extends ItemView {
             titleItem.addClasses(['tree-item-self', 'is-clickable']);
     
             const iconItem = titleItem.createEl('div');
-            setIcon(iconItem, 'file');
+            setIcon(iconItem, 'file-question');
             iconItem.addClass('tree-item-icon');
     
             const nameItem = titleItem.createEl('div');
