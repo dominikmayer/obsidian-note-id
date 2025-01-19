@@ -83,9 +83,10 @@ class IDSidePanelView extends ItemView {
 				titleItem.addClass('is-active');
 			}
 
-            listItem.addEventListener('click', () => {
-                this.app.workspace.openLinkText(note.file.path, '/', true);
-            });
+			listItem.addEventListener('click', () => {
+				const leaf = this.app.workspace.getLeaf();
+				leaf.openFile(note.file);
+			});
         }
     }
 
