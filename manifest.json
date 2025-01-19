@@ -1,9 +1,9 @@
 {
-	"id": "folgezettel",
-	"name": "Folgezettel",
+	"id": "note-id",
+	"name": "Note ID",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Adds support for Zettelkasten Folgezettel.",
+	"description": "Organizes notes by an ID property, providing a structured way to create and maintain a note sequence, inspired by Zettelkasten principles (\"Folgezettel\").",
 	"author": "Dominik Mayer",
 	"authorUrl": "https://www.dominikmayer.com",
 	"isDesktopOnly": false

@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-folgezettel",
+	"name": "obsidian-note-id",
 	"version": "1.0.0",
-	"description": "Adds support for Zettelkasten Folgezettel to Obsidian",
+	"description": "Organizes notes by an ID property, providing a structured way to create and maintain a note sequence, inspired by Zettelkasten principles (\"Folgezettel\").",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
