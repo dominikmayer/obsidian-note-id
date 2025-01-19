@@ -1,134 +1,165 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, ItemView, Plugin, setIcon, TFile, Vault, WorkspaceLeaf } from 'obsidian';
 
-// Remember to rename these classes and interfaces!
+const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 
-interface MyPluginSettings {
-	mySetting: string;
-}
+class IDSidePanelView extends ItemView {
+    plugin: IDSidePanelPlugin;
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+    constructor(leaf: WorkspaceLeaf, plugin: IDSidePanelPlugin) {
+        super(leaf);
+        this.plugin = plugin;
+    }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+    getViewType() {
+        return VIEW_TYPE_ID_PANEL;
+    }
 
-	async onload() {
-		await this.loadSettings();
+    getDisplayText() {
+        return 'Notes by ID';
+    }
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+    async onOpen() {
+        const container = this.containerEl.children[1] as HTMLElement;
+        container.empty();
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+        this.renderNotes(container);
+    }
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
+    async renderNotes(container: HTMLElement) {
+        // Retrieve all markdown files in the vault
+        const markdownFiles = this.app.vault.getMarkdownFiles();
+
+        // Filter and sort by YAML "ID"
+        interface NoteMeta { title: string; id: string | number; file: TFile; }
+        const notesWithID: NoteMeta[] = [];
+
+        for (const file of markdownFiles) {
+            const cache = this.app.metadataCache.getFileCache(file);
+            if (cache && cache.frontmatter && cache.frontmatter['ID'] != null) {
+                notesWithID.push({
+                    title: file.basename,
+                    id: cache.frontmatter['ID'],
+                    file: file
+                });
+            }
+        }
+
+        // Sort notes by ID (assuming numerical or lexicographical order)
+        notesWithID.sort((a, b) => {
+            if (a.id < b.id) return -1;
+            if (a.id > b.id) return 1;
+            return 0;
+        });
+
+        // Create list elements
+        const listEl = container.createEl('div');
+		const activeFile = this.app.workspace.getActiveFile();
+        for (const note of notesWithID) {
+            const listItem = listEl.createEl('div');
+			listItem.addClass('tree-item')
+			const titleItem = listEl.createEl('div');
+			titleItem.addClasses(['tree-item-self', 'is-clickable'])
+			
+			const iconItem = listEl.createEl('div');
+			setIcon(iconItem, 'file')
+			iconItem.addClass('tree-item-icon')
+			titleItem.appendChild(iconItem)
+
+			const nameItem = listEl.createEl('div', { text: `${note.id}: ${note.title}` });
+			nameItem.addClass('tree-item-inner')
+			titleItem.appendChild(nameItem)
+
+			listItem.appendChild(titleItem)
+
+			if (activeFile && activeFile.path === note.file.path) {
+				titleItem.addClass('is-active');
 			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
+            listItem.addEventListener('click', () => {
+                this.app.workspace.openLinkText(note.file.path, '/', true);
+            });
+        }
+    }
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
-
-	onunload() {
-
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+	public async refresh() {
+        const container = this.containerEl.children[1] as HTMLElement;
+        container.empty();
+        await this.renderNotes(container);
+    }
 }
 
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
+// src/main.ts (continuation)
+export default class IDSidePanelPlugin extends Plugin {
+    private activePanelView: IDSidePanelView | null = null;
+
+    async onload() {
+        // Register the view
+        this.registerView(
+            VIEW_TYPE_ID_PANEL,
+            (leaf) => {
+                const view = new IDSidePanelView(leaf, this);
+                this.activePanelView = view;
+                return view;
+            }
+        );
+
+        // Add a ribbon icon and command to open the panel
+        this.addRibbonIcon('file-digit', 'Open ID Side Panel', () => this.activateView());
+        this.addCommand({
+            id: 'open-id-side-panel',
+            name: 'Open ID Side Panel',
+            callback: () => this.activateView(),
+        });
+
+        // Listen to file changes and metadata changes
+        this.registerEvent(
+            this.app.vault.on('modify', async (file) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    await this.refreshView();
+                }
+            })
+        );
+
+        this.registerEvent(
+            this.app.metadataCache.on('changed', async (file) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    await this.refreshView();
+                }
+            })
+        );
+    }
+
+    async onunload() {
+        // Detach the side panel and clean up
+        this.app.workspace.detachLeavesOfType(VIEW_TYPE_ID_PANEL);
+        this.activePanelView = null;
+    }
+
+	async activateView() {
+		// Get the right leaf or create one if it doesn't exist
+		let leaf = this.app.workspace.getRightLeaf(false);
+	
+		if (!leaf) {
+			// Use getLeaf() to create a new leaf
+			leaf = this.app.workspace.getLeaf(true);
+		}
+	
+		// Set the view state for the leaf
+		await leaf.setViewState({
+			type: VIEW_TYPE_ID_PANEL,
+			active: true,
+		});
+	
+		// Reveal the leaf to make it active
+		this.app.workspace.revealLeaf(leaf);
 	}
 
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+    async refreshView() {
+        if (this.activePanelView) {
+            await this.activePanelView.refresh();
+        } else {
+            // If the panel isn't open, reopen it to ensure consistency
+            await this.activateView();
+        }
+    }
 }
