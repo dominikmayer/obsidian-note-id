@@ -1,6 +1,6 @@
 # Obsidian Note ID
 
-The Obsidian Note ID Plugin adds a sidebar panel that organizes notes by their ID field, providing a powerful way to visualize and manage note relationships.
+The [Obsidian](https://www.obsidian.md/) Note ID Plugin adds a sidebar panel that organizes notes by their ID field, providing a powerful way to visualize and manage note relationships.
 
 ## Features
 
@@ -26,6 +26,10 @@ By organizing notes this way, you can:
 - Gain a bird's-eye view of your knowledge landscape.
 
 For a more in-depth introduction check out [How to Use Folgezettel in Your Zettelkasten: Everything You Need to Know to Get Started](https://writing.bobdoto.computer/how-to-use-folgezettel-in-your-zettelkasten-everything-you-need-to-know-to-get-started/)
+
+## Benefits over Filename-Based Sequences
+
+Some users prepend sequence numbers to file names (e.g., 1.1 Note Title), but this approach can make notes harder to manage. Notes appear cluttered, and the numbers show up in links, reducing readability. Using the ID field in frontmatter avoids these issues, keeping filenames clean while maintaining a structured sequence in the sidebar view.
 
 ## Installation
 
