@@ -107,7 +107,7 @@ class IDSidePanelView extends ItemView {
             const nameItem = titleItem.createEl('div');
             nameItem.addClass('tree-item-inner');
             const idPart = nameItem.createEl('span', { text: `${note.id}: ` });
-            idPart.style.color = 'var(--text-faint)';
+            idPart.addClass('note-id');
             const namePart = nameItem.createEl('span', { text: `${note.title}` });
     
             if (activeFile && activeFile.path === note.file.path) {
