@@ -37,20 +37,29 @@ class IDSidePanelView extends ItemView {
         // Retrieve all markdown files in the vault
         const markdownFiles = this.app.vault.getMarkdownFiles();
 
-        // Filter and sort by YAML "ID"
+        // Filter and sort by normalized YAML "ID"
         interface NoteMeta { title: string; id: string | number; file: TFile; }
         const notesWithID: NoteMeta[] = [];
 
-        for (const file of markdownFiles) {
-            const cache = this.app.metadataCache.getFileCache(file);
-            if (cache && cache.frontmatter && cache.frontmatter['ID'] != null) {
-                notesWithID.push({
-                    title: file.basename,
-                    id: cache.frontmatter['ID'],
-                    file: file
-                });
-            }
-        }
+		for (const file of markdownFiles) {
+			const cache = this.app.metadataCache.getFileCache(file);
+			if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
+				const frontmatter = cache.frontmatter as Record<string, any>;
+		
+				const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
+					acc[key.toLowerCase()] = frontmatter[key];
+					return acc;
+				}, {} as Record<string, any>);
+		
+				if (frontmatterKeys['id'] != null) {
+					notesWithID.push({
+						title: file.basename,
+						id: frontmatterKeys['id'],
+						file: file
+					});
+				}
+			}
+		}
 
         // Sort notes by ID (assuming numerical or lexicographical order)
         notesWithID.sort((a, b) => {
@@ -107,6 +116,7 @@ export default class IDSidePanelPlugin extends Plugin {
             VIEW_TYPE_ID_PANEL,
             (leaf) => {
                 const view = new IDSidePanelView(leaf, this);
+				view.icon = 'file-digit'
                 this.activePanelView = view;
                 return view;
             }
