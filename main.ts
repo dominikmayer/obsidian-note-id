@@ -65,19 +65,19 @@ class IDSidePanelView extends ItemView {
         for (const note of notesWithID) {
             const listItem = listEl.createEl('div');
 			listItem.addClass('tree-item')
-			const titleItem = listEl.createEl('div');
+
+			const titleItem = listItem.createEl('div');
 			titleItem.addClasses(['tree-item-self', 'is-clickable'])
 			
-			const iconItem = listEl.createEl('div');
+			const iconItem = titleItem.createEl('div');
 			setIcon(iconItem, 'file')
 			iconItem.addClass('tree-item-icon')
-			titleItem.appendChild(iconItem)
 
-			const nameItem = listEl.createEl('div', { text: `${note.id}: ${note.title}` });
+			const nameItem = titleItem.createEl('div');
 			nameItem.addClass('tree-item-inner')
-			titleItem.appendChild(nameItem)
-
-			listItem.appendChild(titleItem)
+			const idPart = nameItem.createEl('span', { text: `${note.id}: ` });
+			idPart.style.color = 'var(--text-faint)';
+			const namePart = nameItem.createEl('span', { text: `${note.title}` });
 
 			if (activeFile && activeFile.path === note.file.path) {
 				titleItem.addClass('is-active');
