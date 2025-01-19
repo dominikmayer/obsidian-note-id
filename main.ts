@@ -23,6 +23,14 @@ class IDSidePanelView extends ItemView {
         container.empty();
 
         this.renderNotes(container);
+
+		this.registerEvent(
+			this.app.workspace.on('file-open', async (file) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					await this.refresh();
+				}
+			})
+		);
     }
 
     async renderNotes(container: HTMLElement) {
