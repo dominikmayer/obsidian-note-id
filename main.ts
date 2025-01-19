@@ -36,66 +36,118 @@ class IDSidePanelView extends ItemView {
     async renderNotes(container: HTMLElement) {
         // Retrieve all markdown files in the vault
         const markdownFiles = this.app.vault.getMarkdownFiles();
-
+    
         // Filter and sort by normalized YAML "ID"
-        interface NoteMeta { title: string; id: string | number; file: TFile; }
+        interface NoteMeta { title: string; id: string | number | null; file: TFile; }
         const notesWithID: NoteMeta[] = [];
-
-		for (const file of markdownFiles) {
-			const cache = this.app.metadataCache.getFileCache(file);
-			if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
-				const frontmatter = cache.frontmatter as Record<string, any>;
-		
-				const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
-					acc[key.toLowerCase()] = frontmatter[key];
-					return acc;
-				}, {} as Record<string, any>);
-		
-				if (frontmatterKeys['id'] != null) {
-					notesWithID.push({
-						title: file.basename,
-						id: frontmatterKeys['id'],
-						file: file
-					});
-				}
-			}
-		}
-
-        // Sort notes by ID (assuming numerical or lexicographical order)
+        const notesWithoutID: NoteMeta[] = [];
+    
+        for (const file of markdownFiles) {
+            const cache = this.app.metadataCache.getFileCache(file);
+            if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
+                const frontmatter = cache.frontmatter as Record<string, any>;
+    
+                const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
+                    acc[key.toLowerCase()] = frontmatter[key];
+                    return acc;
+                }, {} as Record<string, any>);
+    
+                if (frontmatterKeys['id'] != null) {
+                    notesWithID.push({
+                        title: file.basename,
+                        id: frontmatterKeys['id'],
+                        file: file
+                    });
+                } else {
+                    notesWithoutID.push({
+                        title: file.basename,
+                        id: null,
+                        file: file
+                    });
+                }
+            } else {
+                notesWithoutID.push({
+                    title: file.basename,
+                    id: null,
+                    file: file
+                });
+            }
+        }
+    
+        // Sort notes with IDs by ID (assuming numerical or lexicographical order)
         notesWithID.sort((a, b) => {
+            if (a.id === null) return 1;
+            if (b.id === null) return -1;
             if (a.id < b.id) return -1;
             if (a.id > b.id) return 1;
             return 0;
         });
 
-        // Create list elements
-        const listEl = container.createEl('div');
-		const activeFile = this.app.workspace.getActiveFile();
+        // Sort notes without IDs by filename
+        notesWithoutID.sort((a, b) => {
+            if (a.title < b.title) return -1;
+            if (a.title > b.title) return 1;
+            return 0;
+        });
+    
+        // Create a container for notes with IDs
+        const listElWithID = container.createEl('div');
+        const activeFile = this.app.workspace.getActiveFile();
         for (const note of notesWithID) {
-            const listItem = listEl.createEl('div');
-			listItem.addClass('tree-item')
-
-			const titleItem = listItem.createEl('div');
-			titleItem.addClasses(['tree-item-self', 'is-clickable'])
-			
-			const iconItem = titleItem.createEl('div');
-			setIcon(iconItem, 'file')
-			iconItem.addClass('tree-item-icon')
-
-			const nameItem = titleItem.createEl('div');
-			nameItem.addClass('tree-item-inner')
-			const idPart = nameItem.createEl('span', { text: `${note.id}: ` });
-			idPart.style.color = 'var(--text-faint)';
-			const namePart = nameItem.createEl('span', { text: `${note.title}` });
-
-			if (activeFile && activeFile.path === note.file.path) {
-				titleItem.addClass('is-active');
-			}
-
-			listItem.addEventListener('click', () => {
-				const leaf = this.app.workspace.getLeaf();
-				leaf.openFile(note.file);
-			});
+            const listItem = listElWithID.createEl('div');
+            listItem.addClass('tree-item');
+    
+            const titleItem = listItem.createEl('div');
+            titleItem.addClasses(['tree-item-self', 'is-clickable']);
+    
+            const iconItem = titleItem.createEl('div');
+            setIcon(iconItem, 'file');
+            iconItem.addClass('tree-item-icon');
+    
+            const nameItem = titleItem.createEl('div');
+            nameItem.addClass('tree-item-inner');
+            const idPart = nameItem.createEl('span', { text: `${note.id}: ` });
+            idPart.style.color = 'var(--text-faint)';
+            const namePart = nameItem.createEl('span', { text: `${note.title}` });
+    
+            if (activeFile && activeFile.path === note.file.path) {
+                titleItem.addClass('is-active');
+            }
+    
+            listItem.addEventListener('click', () => {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(note.file);
+            });
+        }
+    
+        // Add a divider
+        container.createEl('hr');
+        
+        // Create a container for notes without IDs
+        const listElWithoutID = container.createEl('div');
+        for (const note of notesWithoutID) {
+            const listItem = listElWithoutID.createEl('div');
+            listItem.addClass('tree-item');
+    
+            const titleItem = listItem.createEl('div');
+            titleItem.addClasses(['tree-item-self', 'is-clickable']);
+    
+            const iconItem = titleItem.createEl('div');
+            setIcon(iconItem, 'file');
+            iconItem.addClass('tree-item-icon');
+    
+            const nameItem = titleItem.createEl('div');
+            nameItem.addClass('tree-item-inner');
+            const namePart = nameItem.createEl('span', { text: `${note.title}` });
+    
+            if (activeFile && activeFile.path === note.file.path) {
+                titleItem.addClass('is-active');
+            }
+    
+            listItem.addEventListener('click', () => {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(note.file);
+            });
         }
     }
 
