@@ -353,7 +353,29 @@ class VirtualList {
         if (file) {
             this.activeFilePath = file.path;
             this.updateActiveHighlight();
+            this.scrollToActiveFile();
         }
+    }
+
+    private scrollToActiveFile(): void {
+        if (!this.activeFilePath) return;
+
+        const activeIndex = this.items.findIndex((item) => item.file.path === this.activeFilePath);
+        if (activeIndex === -1) return;
+
+        const scrollToPosition = activeIndex * this.itemHeight;
+        const containerHeight = this.rootEl.clientHeight;
+
+        // Check if the active file is already in view
+        if (
+            scrollToPosition >= this.rootEl.scrollTop &&
+            scrollToPosition < this.rootEl.scrollTop + containerHeight
+        ) {
+            return;
+        }
+
+        // Scroll to the position of the active file
+        this.rootEl.scrollTop = scrollToPosition - containerHeight / 2 + this.itemHeight / 2;
     }
 
     private updateContainerHeight(): void {
