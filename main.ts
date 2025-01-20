@@ -57,7 +57,7 @@ class IDSidePanelView extends ItemView {
     renderNotes() {
         const { showNotesWithoutID } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
-    
+
         const notesWithID = allNotes
             .filter(n => n.id !== null)
             .sort((a, b) => {
@@ -65,17 +65,17 @@ class IDSidePanelView extends ItemView {
                 if (b.id === null) return -1;
                 return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
             });
-    
+
         const notesWithoutID = allNotes
             .filter(n => n.id === null)
             .sort((a, b) => a.title.localeCompare(b.title));
-    
+
         let combined: NoteMeta[] = [];
         combined = combined.concat(notesWithID);
         if (showNotesWithoutID) {
             combined = combined.concat(notesWithoutID);
         }
-        
+
         this.virtualList.setItems(combined);
     }
 }
@@ -89,16 +89,16 @@ export default class IDSidePanelPlugin extends Plugin {
     async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
         const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.settings;
         const filePath = file.path.toLowerCase();
-    
+
         // Normalize folder paths to remove trailing slashes and lower case them
         const normInclude = includeFolders.map(f => f.replace(/\/+$/, '').toLowerCase());
         const normExclude = excludeFolders.map(f => f.replace(/\/+$/, '').toLowerCase());
-    
+
         const included =
             normInclude.length === 0 ||
             normInclude.some((folder) => filePath.startsWith(folder + '/'));
         const excluded = normExclude.some((folder) => filePath.startsWith(folder + '/'));
-    
+
         if (!included || excluded) return null;
 
         const cache = this.app.metadataCache.getFileCache(file);
@@ -175,13 +175,13 @@ export default class IDSidePanelPlugin extends Plugin {
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
             const newMeta = await this.extractNoteMeta(file);
-    
+
             if (newMeta) {
                 this.noteCache.set(file.path, newMeta);
             } else {
                 this.noteCache.delete(file.path);
             }
-    
+
             this.queueRefresh();
         }
     }
