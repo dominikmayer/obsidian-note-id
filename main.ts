@@ -180,9 +180,17 @@ class IDSidePanelView extends ItemView {
     }
 
 	public async refresh() {
+        if ('requestIdleCallback' in window) {
+            requestIdleCallback(() => this.refreshNotes());
+        } else {
+            this.refreshNotes()
+        }
+    }
+
+    private async refreshNotes() {
         const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
-        await this.renderNotes(container);
+        this.renderNotes(container);
     }
 }
 
