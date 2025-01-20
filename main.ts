@@ -145,12 +145,12 @@ class IDSidePanelView extends ItemView {
                 leaf.openFile(note.file);
             });
         }
-    
-        if (showNotesWithoutID) {
-            // Add a divider
+
+        if (notesWithID.length > 0 && showNotesWithoutID && notesWithoutID.length > 0) {
             container.createEl('hr');
-            
-            // Create a container for notes without IDs
+        }
+        
+        if (showNotesWithoutID) {
             const listElWithoutID = container.createEl('div');
             for (const note of notesWithoutID) {
                 const listItem = listElWithoutID.createEl('div');
