@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, setIcon, TFile, Vault, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Plugin, setIcon, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 
@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
     showNotesWithoutID: true,
     customIDField: '',
 };
+
+interface NoteMeta { title: string; id: string | number | null; file: TFile; }
 
 class IDSidePanelView extends ItemView {
     plugin: IDSidePanelPlugin;
@@ -48,59 +50,20 @@ class IDSidePanelView extends ItemView {
     }
 
     async renderNotes(container: HTMLElement) {
-        const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.plugin.settings;
+        const { showNotesWithoutID } = this.plugin.settings;
+        const allNotes = Array.from(this.plugin.noteCache.values());
     
-        // Retrieve all markdown files in the vault
-        const markdownFiles = this.app.vault.getMarkdownFiles();
-    
-        interface NoteMeta { title: string; id: string | number | null; file: TFile; }
         const notesWithID: NoteMeta[] = [];
         const notesWithoutID: NoteMeta[] = [];
-    
-        for (const file of markdownFiles) {
-            const filePath = file.path.toLowerCase();
-            const included =
-                includeFolders.length === 0 ||
-                includeFolders.some((folder) => filePath.startsWith(folder.toLowerCase()));
-            const excluded = excludeFolders.some((folder) =>
-                filePath.startsWith(folder.toLowerCase())
-            );
-
-            if (!included || excluded) continue;
-
-            const cache = this.app.metadataCache.getFileCache(file);
-            if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
-                const frontmatter = cache.frontmatter as Record<string, any>;
-    
-                const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
-                    acc[key.toLowerCase()] = frontmatter[key];
-                    return acc;
-                }, {} as Record<string, any>);
-    
-                const idField = customIDField.toLowerCase() || 'id';
-                if (frontmatterKeys[idField] != null) {
-                    notesWithID.push({
-                        title: file.basename,
-                        id: frontmatterKeys[idField],
-                        file: file
-                    });
-                } else if (showNotesWithoutID) {
-                    notesWithoutID.push({
-                        title: file.basename,
-                        id: null,
-                        file: file
-                    });
-                }
+        for (const note of allNotes) {
+            if (note.id !== null) {
+                notesWithID.push(note);
             } else if (showNotesWithoutID) {
-                notesWithoutID.push({
-                    title: file.basename,
-                    id: null,
-                    file: file
-                });
+                notesWithoutID.push(note);
             }
         }
     
-        // Sort notes with IDs by ID (assuming numerical or lexicographical order)
+        // Sorting remains the same
         notesWithID.sort((a, b) => {
             if (a.id === null) return 1;
             if (b.id === null) return -1;
@@ -108,13 +71,8 @@ class IDSidePanelView extends ItemView {
             if (a.id > b.id) return 1;
             return 0;
         });
-
-        // Sort notes without IDs by filename
-        notesWithoutID.sort((a, b) => {
-            if (a.title < b.title) return -1;
-            if (a.title > b.title) return 1;
-            return 0;
-        });
+    
+        notesWithoutID.sort((a, b) => a.title.localeCompare(b.title));
     
         // Create a container for notes with IDs
         const listElWithID = container.createEl('div');
@@ -197,10 +155,47 @@ class IDSidePanelView extends ItemView {
 export default class IDSidePanelPlugin extends Plugin {
     private activePanelView: IDSidePanelView | null = null;
     settings: IDSidePanelSettings;
+    noteCache: Map<string, NoteMeta> = new Map();
+
+    async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
+        const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.settings;
+        const filePath = file.path.toLowerCase();
+        const included =
+          includeFolders.length === 0 ||
+          includeFolders.some((folder) => filePath.startsWith(folder.toLowerCase()));
+        const excluded = excludeFolders.some((folder) =>
+          filePath.startsWith(folder.toLowerCase())
+        );
+        if (!included || excluded) return null;
+    
+        const cache = this.app.metadataCache.getFileCache(file);
+        let id = null;
+        if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
+          const frontmatter = cache.frontmatter as Record<string, any>;
+          const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
+            acc[key.toLowerCase()] = frontmatter[key];
+            return acc;
+          }, {} as Record<string, any>);
+          const idField = customIDField.toLowerCase() || 'id';
+          id = frontmatterKeys[idField] ?? null;
+        }
+        // Optionally filter out notes without ID if not showing them
+        if (id === null && !showNotesWithoutID) return null;
+        return { title: file.basename, id, file };
+      }
+
+      async initializeCache() {
+        const markdownFiles = this.app.vault.getMarkdownFiles();
+        for (const file of markdownFiles) {
+          const meta = await this.extractNoteMeta(file);
+          if (meta) this.noteCache.set(file.path, meta);
+        }
+      }
 
     async onload() {
 
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        await this.initializeCache();
         this.addSettingTab(new IDSidePanelSettingTab(this.app, this));
 
         this.registerView(
@@ -224,27 +219,40 @@ export default class IDSidePanelPlugin extends Plugin {
         // Listen to file changes and metadata changes
         this.registerEvent(
             this.app.vault.on('modify', async (file) => {
-                if (file instanceof TFile && file.extension === 'md') {
-                    await this.refreshView();
-                }
+                await this.handleFileChange(file);
             })
         );
 
         this.registerEvent(
             this.app.vault.on('rename', async (file) => {
-                if (file instanceof TFile && file.extension === 'md') {
-                    await this.refreshView();
-                }
+                await this.handleFileChange(file);
             })
         );
 
         this.registerEvent(
             this.app.metadataCache.on('changed', async (file) => {
-                if (file instanceof TFile && file.extension === 'md') {
-                    await this.refreshView();
-                }
+                await this.handleFileChange(file);
             })
         );
+    }
+
+    async handleFileChange(file: TAbstractFile) {
+        if (file instanceof TFile && file.extension === 'md') {
+            // Remove any cache entries for the same file object but under a different key
+            for (const [path, meta] of this.noteCache.entries()) {
+                if (meta.file === file && path !== file.path) {
+                    this.noteCache.delete(path);
+                }
+            }
+    
+            const meta = await this.extractNoteMeta(file);
+            if (meta) {
+                this.noteCache.set(file.path, meta);
+            } else {
+                this.noteCache.delete(file.path);
+            }
+            await this.refreshView();
+        }
     }
 
 	async activateView() {
@@ -356,11 +364,3 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             );
     }
 }
-
-function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F {
-    let timeout: ReturnType<typeof setTimeout> | null;
-    return function(this: any, ...args: any[]) {
-      if (timeout) clearTimeout(timeout);
-      timeout = setTimeout(() => func.apply(this, args), wait);
-    } as F;
-  }
