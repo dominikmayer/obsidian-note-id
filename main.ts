@@ -2,6 +2,18 @@ import { App, ItemView, Plugin, setIcon, TFile, Vault, WorkspaceLeaf } from 'obs
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 
+interface IDSidePanelSettings {
+    includeFolders: string[];
+    excludeFolders: string[];
+    showNotesWithoutID: boolean;
+}
+
+const DEFAULT_SETTINGS: IDSidePanelSettings = {
+    includeFolders: [],
+    excludeFolders: [],
+    showNotesWithoutID: true,
+};
+
 class IDSidePanelView extends ItemView {
     plugin: IDSidePanelPlugin;
 
@@ -34,6 +46,8 @@ class IDSidePanelView extends ItemView {
     }
 
     async renderNotes(container: HTMLElement) {
+        const { includeFolders, excludeFolders, showNotesWithoutID } = this.plugin.settings;
+
         // Retrieve all markdown files in the vault
         const markdownFiles = this.app.vault.getMarkdownFiles();
     
@@ -43,6 +57,15 @@ class IDSidePanelView extends ItemView {
         const notesWithoutID: NoteMeta[] = [];
     
         for (const file of markdownFiles) {
+            const filePath = file.path.toLowerCase();
+            const included =
+                includeFolders.length === 0 ||
+                includeFolders.some((folder) => filePath.startsWith(folder.toLowerCase()));
+            const excluded = excludeFolders.some((folder) =>
+                filePath.startsWith(folder.toLowerCase())
+            );
+
+            if (!included || excluded) continue;
             const cache = this.app.metadataCache.getFileCache(file);
             if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
                 const frontmatter = cache.frontmatter as Record<string, any>;
@@ -58,14 +81,14 @@ class IDSidePanelView extends ItemView {
                         id: frontmatterKeys['id'],
                         file: file
                     });
-                } else {
+                } else if (showNotesWithoutID) {
                     notesWithoutID.push({
                         title: file.basename,
                         id: null,
                         file: file
                     });
                 }
-            } else {
+            } else if (showNotesWithoutID) {
                 notesWithoutID.push({
                     title: file.basename,
                     id: null,
@@ -120,34 +143,36 @@ class IDSidePanelView extends ItemView {
             });
         }
     
-        // Add a divider
-        container.createEl('hr');
+        if (showNotesWithoutID) {
+            // Add a divider
+            container.createEl('hr');
+            
+            // Create a container for notes without IDs
+            const listElWithoutID = container.createEl('div');
+            for (const note of notesWithoutID) {
+                const listItem = listElWithoutID.createEl('div');
+                listItem.addClass('tree-item');
         
-        // Create a container for notes without IDs
-        const listElWithoutID = container.createEl('div');
-        for (const note of notesWithoutID) {
-            const listItem = listElWithoutID.createEl('div');
-            listItem.addClass('tree-item');
-    
-            const titleItem = listItem.createEl('div');
-            titleItem.addClasses(['tree-item-self', 'is-clickable']);
-    
-            const iconItem = titleItem.createEl('div');
-            setIcon(iconItem, 'file-question');
-            iconItem.addClass('tree-item-icon');
-    
-            const nameItem = titleItem.createEl('div');
-            nameItem.addClass('tree-item-inner');
-            const namePart = nameItem.createEl('span', { text: `${note.title}` });
-    
-            if (activeFile && activeFile.path === note.file.path) {
-                titleItem.addClass('is-active');
+                const titleItem = listItem.createEl('div');
+                titleItem.addClasses(['tree-item-self', 'is-clickable']);
+        
+                const iconItem = titleItem.createEl('div');
+                setIcon(iconItem, 'file-question');
+                iconItem.addClass('tree-item-icon');
+        
+                const nameItem = titleItem.createEl('div');
+                nameItem.addClass('tree-item-inner');
+                const namePart = nameItem.createEl('span', { text: `${note.title}` });
+        
+                if (activeFile && activeFile.path === note.file.path) {
+                    titleItem.addClass('is-active');
+                }
+        
+                listItem.addEventListener('click', () => {
+                    const leaf = this.app.workspace.getLeaf();
+                    leaf.openFile(note.file);
+                });
             }
-    
-            listItem.addEventListener('click', () => {
-                const leaf = this.app.workspace.getLeaf();
-                leaf.openFile(note.file);
-            });
         }
     }
 
@@ -158,12 +183,15 @@ class IDSidePanelView extends ItemView {
     }
 }
 
-// src/main.ts (continuation)
 export default class IDSidePanelPlugin extends Plugin {
     private activePanelView: IDSidePanelView | null = null;
+    settings: IDSidePanelSettings;
 
     async onload() {
-        // Register the view
+
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        this.addSettingTab(new IDSidePanelSettingTab(this.app, this));
+
         this.registerView(
             VIEW_TYPE_ID_PANEL,
             (leaf) => {
@@ -232,5 +260,75 @@ export default class IDSidePanelPlugin extends Plugin {
             // If the panel isn't open, reopen it to ensure consistency
             await this.activateView();
         }
+    }
+
+    async saveSettings() {
+        await this.saveData(this.settings);
+    }
+}
+
+// Settings
+import { PluginSettingTab, Setting } from 'obsidian';
+
+class IDSidePanelSettingTab extends PluginSettingTab {
+    plugin: IDSidePanelPlugin;
+
+    constructor(app: App, plugin: IDSidePanelPlugin) {
+        super(app, plugin);
+        this.plugin = plugin;
+    }
+
+    display(): void {
+        const { containerEl } = this;
+        containerEl.empty();
+
+        //containerEl.createEl('h2', { text: 'ID Side Panel Settings' });
+
+        new Setting(containerEl)
+            .setName('Include Folders')
+            .setDesc('Only include notes from these folders. Leave empty to include all.')
+            .addTextArea((text) =>
+                text
+                    .setPlaceholder('e.g., folder1, folder2')
+                    .setValue(this.plugin.settings.includeFolders.join(', '))
+                    .onChange(async (value) => {
+                        this.plugin.settings.includeFolders = value
+                            .split(',')
+                            .map((v) => v.trim())
+                            .filter((v) => v !== '');
+                        await this.plugin.saveSettings();
+                        await this.plugin.refreshView();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName('Exclude Folders')
+            .setDesc('Exclude notes from these folders.')
+            .addTextArea((text) =>
+                text
+                    .setPlaceholder('e.g., folder1, folder2')
+                    .setValue(this.plugin.settings.excludeFolders.join(', '))
+                    .onChange(async (value) => {
+                        this.plugin.settings.excludeFolders = value
+                            .split(',')
+                            .map((v) => v.trim())
+                            .filter((v) => v !== '');
+                        await this.plugin.saveSettings();
+                        await this.plugin.refreshView();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName('Show Notes Without ID')
+            .setDesc('Toggle the display of notes without IDs.')
+            .addToggle((toggle) =>
+                toggle
+                    .setValue(this.plugin.settings.showNotesWithoutID)
+                    .onChange(async (value) => {
+                        this.plugin.settings.showNotesWithoutID = value;
+                        await this.plugin.saveSettings();
+                        await this.plugin.refreshView();
+                    })
+            );
     }
 }
