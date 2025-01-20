@@ -206,7 +206,7 @@ export default class IDSidePanelPlugin extends Plugin {
         );
 
         // Add a ribbon icon and command to open the panel
-        this.addRibbonIcon('file-digit', 'Open ID Side Panel', () => this.activateView());
+        this.addRibbonIcon('file-digit', 'Open side panel', () => this.activateView());
         this.addCommand({
             id: 'open-id-side-panel',
             name: 'Open ID Side Panel',
