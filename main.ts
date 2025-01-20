@@ -43,10 +43,27 @@ class IDSidePanelView extends ItemView {
         this.registerEvent(
             this.app.workspace.on('file-open', async (file) => {
                 if (file instanceof TFile && file.extension === 'md') {
-                    await this.refresh();
+                    this.updateActiveHighlight(file);
                 }
             })
         );
+    }
+
+    public updateActiveHighlight(file: TFile) {
+        const container = this.containerEl.children[1] as HTMLElement;
+    
+        // Remove .is-active from any previously highlighted items
+        container.querySelectorAll('.tree-item-self.is-active').forEach(el => {
+            el.removeClass('is-active');
+        });
+    
+        // Find the element that matches the new file
+        const newActiveItem = container.querySelector(
+            `[data-file-path="${file.path.replace(/"/g, '\\"')}"]`
+        );
+        if (newActiveItem) {
+            newActiveItem.addClass('is-active');
+        }
     }
 
     async renderNotes(container: HTMLElement) {
@@ -83,6 +100,7 @@ class IDSidePanelView extends ItemView {
 
             const titleItem = listItem.createEl('div');
             titleItem.addClasses(['tree-item-self', 'is-clickable']);
+            titleItem.setAttr('data-file-path', note.file.path);
 
             const iconItem = titleItem.createEl('div');
             setIcon(iconItem, 'file');
@@ -116,6 +134,7 @@ class IDSidePanelView extends ItemView {
 
                 const titleItem = listItem.createEl('div');
                 titleItem.addClasses(['tree-item-self', 'is-clickable']);
+                titleItem.setAttr('data-file-path', note.file.path);
 
                 const iconItem = titleItem.createEl('div');
                 setIcon(iconItem, 'file-question');
@@ -154,6 +173,7 @@ class IDSidePanelView extends ItemView {
 
 export default class IDSidePanelPlugin extends Plugin {
     private activePanelView: IDSidePanelView | null = null;
+    private scheduleRefreshTimeout: number | null = null;
     settings: IDSidePanelSettings;
     noteCache: Map<string, NoteMeta> = new Map();
 
@@ -251,8 +271,18 @@ export default class IDSidePanelPlugin extends Plugin {
             } else {
                 this.noteCache.delete(file.path);
             }
-            await this.refreshView();
+            this.queueRefresh()
         }
+    }
+
+    private queueRefresh(): void {
+        if (this.scheduleRefreshTimeout) {
+            clearTimeout(this.scheduleRefreshTimeout);
+        }
+        this.scheduleRefreshTimeout = window.setTimeout(() => {
+            this.scheduleRefreshTimeout = null;
+            void this.refreshView();
+        }, 300);
     }
 
     async activateView() {
@@ -277,9 +307,6 @@ export default class IDSidePanelPlugin extends Plugin {
     async refreshView() {
         if (this.activePanelView) {
             await this.activePanelView.refresh();
-        } else {
-            // If the panel isn't open, reopen it to ensure consistency
-            await this.activateView();
         }
     }
 
