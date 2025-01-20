@@ -209,7 +209,7 @@ export default class IDSidePanelPlugin extends Plugin {
         this.addRibbonIcon('file-digit', 'Open side panel', () => this.activateView());
         this.addCommand({
             id: 'open-id-side-panel',
-            name: 'Open ID Side Panel',
+            name: 'Open side panel',
             callback: () => this.activateView(),
         });
 
