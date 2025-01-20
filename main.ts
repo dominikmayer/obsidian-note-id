@@ -440,6 +440,10 @@ class VirtualList {
             nameItem.style.whiteSpace = 'nowrap';
             nameItem.style.overflow = 'hidden';
             nameItem.style.textOverflow = 'ellipsis';
+
+            // Add hover tooltip with the full title
+            nameItem.setAttribute('title', note.title);
+            
             if (note.id != null) {
                 nameItem.createEl('span', { text: `${note.id}: ` }).addClass('note-id');
             }
