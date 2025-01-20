@@ -6,12 +6,14 @@ interface IDSidePanelSettings {
     includeFolders: string[];
     excludeFolders: string[];
     showNotesWithoutID: boolean;
+    customIDField: string;
 }
 
 const DEFAULT_SETTINGS: IDSidePanelSettings = {
     includeFolders: [],
     excludeFolders: [],
     showNotesWithoutID: true,
+    customIDField: '',
 };
 
 class IDSidePanelView extends ItemView {
@@ -46,12 +48,11 @@ class IDSidePanelView extends ItemView {
     }
 
     async renderNotes(container: HTMLElement) {
-        const { includeFolders, excludeFolders, showNotesWithoutID } = this.plugin.settings;
-
+        const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.plugin.settings;
+    
         // Retrieve all markdown files in the vault
         const markdownFiles = this.app.vault.getMarkdownFiles();
     
-        // Filter and sort by normalized YAML "ID"
         interface NoteMeta { title: string; id: string | number | null; file: TFile; }
         const notesWithID: NoteMeta[] = [];
         const notesWithoutID: NoteMeta[] = [];
@@ -66,6 +67,7 @@ class IDSidePanelView extends ItemView {
             );
 
             if (!included || excluded) continue;
+
             const cache = this.app.metadataCache.getFileCache(file);
             if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
                 const frontmatter = cache.frontmatter as Record<string, any>;
@@ -75,10 +77,11 @@ class IDSidePanelView extends ItemView {
                     return acc;
                 }, {} as Record<string, any>);
     
-                if (frontmatterKeys['id'] != null) {
+                const idField = customIDField.toLowerCase() || 'id';
+                if (frontmatterKeys[idField] != null) {
                     notesWithID.push({
                         title: file.basename,
-                        id: frontmatterKeys['id'],
+                        id: frontmatterKeys[idField],
                         file: file
                     });
                 } else if (showNotesWithoutID) {
@@ -282,10 +285,21 @@ class IDSidePanelSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        //containerEl.createEl('h2', { text: 'ID Side Panel Settings' });
-
         new Setting(containerEl)
-            .setName('Include Folders')
+            .setName('ID property')
+            .setDesc('Define the frontmatter field used as the ID (case-insensitive).')
+            .addText((text) =>
+                text
+                    .setPlaceholder('ID')
+                    .setValue(this.plugin.settings.customIDField)
+                    .onChange(async (value) => {
+                        this.plugin.settings.customIDField = value.trim();
+                        await this.plugin.saveSettings();
+                        await this.plugin.refreshView();
+                    })
+            );
+        new Setting(containerEl)
+            .setName('Include folders')
             .setDesc('Only include notes from these folders. Leave empty to include all.')
             .addTextArea((text) =>
                 text
@@ -302,7 +316,7 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName('Exclude Folders')
+            .setName('Exclude folders')
             .setDesc('Exclude notes from these folders.')
             .addTextArea((text) =>
                 text
@@ -319,7 +333,7 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
-            .setName('Show Notes Without ID')
+            .setName('Show notes without ID')
             .setDesc('Toggle the display of notes without IDs.')
             .addToggle((toggle) =>
                 toggle
