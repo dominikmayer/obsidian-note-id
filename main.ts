@@ -223,6 +223,14 @@ export default class IDSidePanelPlugin extends Plugin {
         );
 
         this.registerEvent(
+            this.app.vault.on('rename', async (file) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    await this.refreshView();
+                }
+            })
+        );
+
+        this.registerEvent(
             this.app.metadataCache.on('changed', async (file) => {
                 if (file instanceof TFile && file.extension === 'md') {
                     await this.refreshView();
@@ -340,3 +348,11 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             );
     }
 }
+
+function debounce<F extends (...args: any[]) => void>(func: F, wait: number): F {
+    let timeout: ReturnType<typeof setTimeout> | null;
+    return function(this: any, ...args: any[]) {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    } as F;
+  }
