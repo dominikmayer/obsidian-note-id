@@ -40,19 +40,19 @@ class IDSidePanelView extends ItemView {
 
         this.renderNotes(container);
 
-		this.registerEvent(
-			this.app.workspace.on('file-open', async (file) => {
-				if (file instanceof TFile && file.extension === 'md') {
-					await this.refresh();
-				}
-			})
-		);
+        this.registerEvent(
+            this.app.workspace.on('file-open', async (file) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    await this.refresh();
+                }
+            })
+        );
     }
 
     async renderNotes(container: HTMLElement) {
         const { showNotesWithoutID } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
-    
+
         const notesWithID: NoteMeta[] = [];
         const notesWithoutID: NoteMeta[] = [];
         for (const note of allNotes) {
@@ -62,7 +62,7 @@ class IDSidePanelView extends ItemView {
                 notesWithoutID.push(note);
             }
         }
-    
+
         // Sorting remains the same
         notesWithID.sort((a, b) => {
             if (a.id === null) return 1;
@@ -71,33 +71,33 @@ class IDSidePanelView extends ItemView {
             if (a.id > b.id) return 1;
             return 0;
         });
-    
+
         notesWithoutID.sort((a, b) => a.title.localeCompare(b.title));
-    
+
         // Create a container for notes with IDs
         const listElWithID = container.createEl('div');
         const activeFile = this.app.workspace.getActiveFile();
         for (const note of notesWithID) {
             const listItem = listElWithID.createEl('div');
             listItem.addClass('tree-item');
-    
+
             const titleItem = listItem.createEl('div');
             titleItem.addClasses(['tree-item-self', 'is-clickable']);
-    
+
             const iconItem = titleItem.createEl('div');
             setIcon(iconItem, 'file');
             iconItem.addClass('tree-item-icon');
-    
+
             const nameItem = titleItem.createEl('div');
             nameItem.addClass('tree-item-inner');
             const idPart = nameItem.createEl('span', { text: `${note.id}: ` });
             idPart.addClass('note-id');
             const namePart = nameItem.createEl('span', { text: `${note.title}` });
-    
+
             if (activeFile && activeFile.path === note.file.path) {
                 titleItem.addClass('is-active');
             }
-    
+
             listItem.addEventListener('click', () => {
                 const leaf = this.app.workspace.getLeaf();
                 leaf.openFile(note.file);
@@ -107,28 +107,28 @@ class IDSidePanelView extends ItemView {
         if (notesWithID.length > 0 && showNotesWithoutID && notesWithoutID.length > 0) {
             container.createEl('hr');
         }
-        
+
         if (showNotesWithoutID) {
             const listElWithoutID = container.createEl('div');
             for (const note of notesWithoutID) {
                 const listItem = listElWithoutID.createEl('div');
                 listItem.addClass('tree-item');
-        
+
                 const titleItem = listItem.createEl('div');
                 titleItem.addClasses(['tree-item-self', 'is-clickable']);
-        
+
                 const iconItem = titleItem.createEl('div');
                 setIcon(iconItem, 'file-question');
                 iconItem.addClass('tree-item-icon');
-        
+
                 const nameItem = titleItem.createEl('div');
                 nameItem.addClass('tree-item-inner');
                 const namePart = nameItem.createEl('span', { text: `${note.title}` });
-        
+
                 if (activeFile && activeFile.path === note.file.path) {
                     titleItem.addClass('is-active');
                 }
-        
+
                 listItem.addEventListener('click', () => {
                     const leaf = this.app.workspace.getLeaf();
                     leaf.openFile(note.file);
@@ -137,7 +137,7 @@ class IDSidePanelView extends ItemView {
         }
     }
 
-	public async refresh() {
+    public async refresh() {
         if ('requestIdleCallback' in window) {
             requestIdleCallback(() => this.refreshNotes());
         } else {
@@ -161,36 +161,36 @@ export default class IDSidePanelPlugin extends Plugin {
         const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.settings;
         const filePath = file.path.toLowerCase();
         const included =
-          includeFolders.length === 0 ||
-          includeFolders.some((folder) => filePath.startsWith(folder.toLowerCase()));
+            includeFolders.length === 0 ||
+            includeFolders.some((folder) => filePath.startsWith(folder.toLowerCase()));
         const excluded = excludeFolders.some((folder) =>
-          filePath.startsWith(folder.toLowerCase())
+            filePath.startsWith(folder.toLowerCase())
         );
         if (!included || excluded) return null;
-    
+
         const cache = this.app.metadataCache.getFileCache(file);
         let id = null;
         if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
-          const frontmatter = cache.frontmatter as Record<string, any>;
-          const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
-            acc[key.toLowerCase()] = frontmatter[key];
-            return acc;
-          }, {} as Record<string, any>);
-          const idField = customIDField.toLowerCase() || 'id';
-          id = frontmatterKeys[idField] ?? null;
+            const frontmatter = cache.frontmatter as Record<string, any>;
+            const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
+                acc[key.toLowerCase()] = frontmatter[key];
+                return acc;
+            }, {} as Record<string, any>);
+            const idField = customIDField.toLowerCase() || 'id';
+            id = frontmatterKeys[idField] ?? null;
         }
         // Optionally filter out notes without ID if not showing them
         if (id === null && !showNotesWithoutID) return null;
         return { title: file.basename, id, file };
-      }
+    }
 
-      async initializeCache() {
+    async initializeCache() {
         const markdownFiles = this.app.vault.getMarkdownFiles();
         for (const file of markdownFiles) {
-          const meta = await this.extractNoteMeta(file);
-          if (meta) this.noteCache.set(file.path, meta);
+            const meta = await this.extractNoteMeta(file);
+            if (meta) this.noteCache.set(file.path, meta);
         }
-      }
+    }
 
     async onload() {
 
@@ -202,7 +202,7 @@ export default class IDSidePanelPlugin extends Plugin {
             VIEW_TYPE_ID_PANEL,
             (leaf) => {
                 const view = new IDSidePanelView(leaf, this);
-				view.icon = 'file-digit'
+                view.icon = 'file-digit'
                 this.activePanelView = view;
                 return view;
             }
@@ -244,7 +244,7 @@ export default class IDSidePanelPlugin extends Plugin {
                     this.noteCache.delete(path);
                 }
             }
-    
+
             const meta = await this.extractNoteMeta(file);
             if (meta) {
                 this.noteCache.set(file.path, meta);
@@ -255,24 +255,24 @@ export default class IDSidePanelPlugin extends Plugin {
         }
     }
 
-	async activateView() {
-		// Get the right leaf or create one if it doesn't exist
-		let leaf = this.app.workspace.getRightLeaf(false);
-	
-		if (!leaf) {
-			// Use getLeaf() to create a new leaf
-			leaf = this.app.workspace.getLeaf(true);
-		}
-	
-		// Set the view state for the leaf
-		await leaf.setViewState({
-			type: VIEW_TYPE_ID_PANEL,
-			active: true,
-		});
-	
-		// Reveal the leaf to make it active
-		this.app.workspace.revealLeaf(leaf);
-	}
+    async activateView() {
+        // Get the right leaf or create one if it doesn't exist
+        let leaf = this.app.workspace.getRightLeaf(false);
+
+        if (!leaf) {
+            // Use getLeaf() to create a new leaf
+            leaf = this.app.workspace.getLeaf(true);
+        }
+
+        // Set the view state for the leaf
+        await leaf.setViewState({
+            type: VIEW_TYPE_ID_PANEL,
+            active: true,
+        });
+
+        // Reveal the leaf to make it active
+        this.app.workspace.revealLeaf(leaf);
+    }
 
     async refreshView() {
         if (this.activePanelView) {
