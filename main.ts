@@ -20,154 +20,63 @@ interface NoteMeta { title: string; id: string | number | null; file: TFile; }
 
 class IDSidePanelView extends ItemView {
     plugin: IDSidePanelPlugin;
+    private virtualList: VirtualList;
 
     constructor(leaf: WorkspaceLeaf, plugin: IDSidePanelPlugin) {
         super(leaf);
         this.plugin = plugin;
     }
 
-    getViewType() {
-        return VIEW_TYPE_ID_PANEL;
-    }
-
-    getDisplayText() {
-        return 'Notes by ID';
+    getViewType() { return VIEW_TYPE_ID_PANEL; }
+    getDisplayText() { return 'Notes by ID'; }
+    public getVirtualList(): VirtualList {
+        return this.virtualList;
     }
 
     async onOpen() {
         const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
 
-        this.renderNotes(container);
+        this.virtualList = new VirtualList(this.app, container);
+
+        this.virtualList.setActiveFile(this.app.workspace.getActiveFile());
+        this.renderNotes();
 
         this.registerEvent(
-            this.app.workspace.on('file-open', async (file) => {
-                if (file instanceof TFile && file.extension === 'md') {
-                    this.updateActiveHighlight(file);
-                }
+            this.app.workspace.on('file-open', (file) => {
+                this.refresh(file)
             })
         );
     }
 
-    public updateActiveHighlight(file: TFile) {
-        const container = this.containerEl.children[1] as HTMLElement;
-    
-        // Remove .is-active from any previously highlighted items
-        container.querySelectorAll('.tree-item-self.is-active').forEach(el => {
-            el.removeClass('is-active');
-        });
-    
-        // Find the element that matches the new file
-        const newActiveItem = container.querySelector(
-            `[data-file-path="${file.path.replace(/"/g, '\\"')}"]`
-        );
-        if (newActiveItem) {
-            newActiveItem.addClass('is-active');
-        }
+    public async refresh(file: TFile | null = null) {
+        this.virtualList.setActiveFile(file);
+        this.renderNotes();
     }
 
-    async renderNotes(container: HTMLElement) {
+    renderNotes() {
         const { showNotesWithoutID } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
-
-        const notesWithID: NoteMeta[] = [];
-        const notesWithoutID: NoteMeta[] = [];
-        for (const note of allNotes) {
-            if (note.id !== null) {
-                notesWithID.push(note);
-            } else if (showNotesWithoutID) {
-                notesWithoutID.push(note);
-            }
-        }
-
-        // Sorting remains the same
-        notesWithID.sort((a, b) => {
-            if (a.id === null) return 1;
-            if (b.id === null) return -1;
-            if (a.id < b.id) return -1;
-            if (a.id > b.id) return 1;
-            return 0;
-        });
-
-        notesWithoutID.sort((a, b) => a.title.localeCompare(b.title));
-
-        // Create a container for notes with IDs
-        const listElWithID = container.createEl('div');
-        const activeFile = this.app.workspace.getActiveFile();
-        for (const note of notesWithID) {
-            const listItem = listElWithID.createEl('div');
-            listItem.addClass('tree-item');
-
-            const titleItem = listItem.createEl('div');
-            titleItem.addClasses(['tree-item-self', 'is-clickable']);
-            titleItem.setAttr('data-file-path', note.file.path);
-
-            const iconItem = titleItem.createEl('div');
-            setIcon(iconItem, 'file');
-            iconItem.addClass('tree-item-icon');
-
-            const nameItem = titleItem.createEl('div');
-            nameItem.addClass('tree-item-inner');
-            const idPart = nameItem.createEl('span', { text: `${note.id}: ` });
-            idPart.addClass('note-id');
-            const namePart = nameItem.createEl('span', { text: `${note.title}` });
-
-            if (activeFile && activeFile.path === note.file.path) {
-                titleItem.addClass('is-active');
-            }
-
-            listItem.addEventListener('click', () => {
-                const leaf = this.app.workspace.getLeaf();
-                leaf.openFile(note.file);
+    
+        const notesWithID = allNotes
+            .filter(n => n.id !== null)
+            .sort((a, b) => {
+                if (a.id === null) return 1;
+                if (b.id === null) return -1;
+                return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
             });
-        }
-
-        if (notesWithID.length > 0 && showNotesWithoutID && notesWithoutID.length > 0) {
-            container.createEl('hr');
-        }
-
+    
+        const notesWithoutID = allNotes
+            .filter(n => n.id === null)
+            .sort((a, b) => a.title.localeCompare(b.title));
+    
+        let combined: NoteMeta[] = [];
+        combined = combined.concat(notesWithID);
         if (showNotesWithoutID) {
-            const listElWithoutID = container.createEl('div');
-            for (const note of notesWithoutID) {
-                const listItem = listElWithoutID.createEl('div');
-                listItem.addClass('tree-item');
-
-                const titleItem = listItem.createEl('div');
-                titleItem.addClasses(['tree-item-self', 'is-clickable']);
-                titleItem.setAttr('data-file-path', note.file.path);
-
-                const iconItem = titleItem.createEl('div');
-                setIcon(iconItem, 'file-question');
-                iconItem.addClass('tree-item-icon');
-
-                const nameItem = titleItem.createEl('div');
-                nameItem.addClass('tree-item-inner');
-                const namePart = nameItem.createEl('span', { text: `${note.title}` });
-
-                if (activeFile && activeFile.path === note.file.path) {
-                    titleItem.addClass('is-active');
-                }
-
-                listItem.addEventListener('click', () => {
-                    const leaf = this.app.workspace.getLeaf();
-                    leaf.openFile(note.file);
-                });
-            }
+            combined = combined.concat(notesWithoutID);
         }
-    }
-
-    public async refresh() {
-        if ('requestIdleCallback' in window) {
-            requestIdleCallback(() => this.refreshNotes());
-        } else {
-            this.refreshNotes()
-        }
-    }
-
-    private async refreshNotes() {
-        const container = this.containerEl.children[1] as HTMLElement;
-        container.empty();
-        this.renderNotes(container);
+        
+        this.virtualList.setItems(combined);
     }
 }
 
@@ -180,12 +89,16 @@ export default class IDSidePanelPlugin extends Plugin {
     async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
         const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.settings;
         const filePath = file.path.toLowerCase();
+    
+        // Normalize folder paths to remove trailing slashes and lower case them
+        const normInclude = includeFolders.map(f => f.replace(/\/+$/, '').toLowerCase());
+        const normExclude = excludeFolders.map(f => f.replace(/\/+$/, '').toLowerCase());
+    
         const included =
-            includeFolders.length === 0 ||
-            includeFolders.some((folder) => filePath.startsWith(folder.toLowerCase()));
-        const excluded = excludeFolders.some((folder) =>
-            filePath.startsWith(folder.toLowerCase())
-        );
+            normInclude.length === 0 ||
+            normInclude.some((folder) => filePath.startsWith(folder + '/'));
+        const excluded = normExclude.some((folder) => filePath.startsWith(folder + '/'));
+    
         if (!included || excluded) return null;
 
         const cache = this.app.metadataCache.getFileCache(file);
@@ -205,6 +118,7 @@ export default class IDSidePanelPlugin extends Plugin {
     }
 
     async initializeCache() {
+        this.noteCache.clear();
         const markdownFiles = this.app.vault.getMarkdownFiles();
         for (const file of markdownFiles) {
             const meta = await this.extractNoteMeta(file);
@@ -228,7 +142,6 @@ export default class IDSidePanelPlugin extends Plugin {
             }
         );
 
-        // Add a ribbon icon and command to open the panel
         this.addRibbonIcon('file-digit', 'Open side panel', () => this.activateView());
         this.addCommand({
             id: 'open-id-side-panel',
@@ -236,7 +149,6 @@ export default class IDSidePanelPlugin extends Plugin {
             callback: () => this.activateView(),
         });
 
-        // Listen to file changes and metadata changes
         this.registerEvent(
             this.app.vault.on('modify', async (file) => {
                 await this.handleFileChange(file);
@@ -244,7 +156,11 @@ export default class IDSidePanelPlugin extends Plugin {
         );
 
         this.registerEvent(
-            this.app.vault.on('rename', async (file) => {
+            this.app.vault.on('rename', async (file, oldPath) => {
+                this.noteCache.delete(oldPath);
+                if (this.activePanelView && this.activePanelView?.getVirtualList().getActiveFilePath() === oldPath && file instanceof TFile) {
+                    this.activePanelView.getVirtualList().setActiveFile(file);
+                }
                 await this.handleFileChange(file);
             })
         );
@@ -258,20 +174,15 @@ export default class IDSidePanelPlugin extends Plugin {
 
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
-            // Remove any cache entries for the same file object but under a different key
-            for (const [path, meta] of this.noteCache.entries()) {
-                if (meta.file === file && path !== file.path) {
-                    this.noteCache.delete(path);
-                }
-            }
-
-            const meta = await this.extractNoteMeta(file);
-            if (meta) {
-                this.noteCache.set(file.path, meta);
+            const newMeta = await this.extractNoteMeta(file);
+    
+            if (newMeta) {
+                this.noteCache.set(file.path, newMeta);
             } else {
                 this.noteCache.delete(file.path);
             }
-            this.queueRefresh()
+    
+            this.queueRefresh();
         }
     }
 
@@ -282,7 +193,7 @@ export default class IDSidePanelPlugin extends Plugin {
         this.scheduleRefreshTimeout = window.setTimeout(() => {
             this.scheduleRefreshTimeout = null;
             void this.refreshView();
-        }, 300);
+        }, 50);
     }
 
     async activateView() {
@@ -306,12 +217,14 @@ export default class IDSidePanelPlugin extends Plugin {
 
     async refreshView() {
         if (this.activePanelView) {
-            await this.activePanelView.refresh();
+            this.activePanelView.refresh();
         }
     }
 
     async saveSettings() {
         await this.saveData(this.settings);
+        await this.initializeCache();
+        await this.refreshView();
     }
 }
 
@@ -340,7 +253,6 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.customIDField = value.trim();
                         await this.plugin.saveSettings();
-                        await this.plugin.refreshView();
                     })
             );
         new Setting(containerEl)
@@ -356,7 +268,6 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                             .map((v) => v.trim())
                             .filter((v) => v !== '');
                         await this.plugin.saveSettings();
-                        await this.plugin.refreshView();
                     })
             );
 
@@ -373,7 +284,6 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                             .map((v) => v.trim())
                             .filter((v) => v !== '');
                         await this.plugin.saveSettings();
-                        await this.plugin.refreshView();
                     })
             );
 
@@ -386,8 +296,155 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                     .onChange(async (value) => {
                         this.plugin.settings.showNotesWithoutID = value;
                         await this.plugin.saveSettings();
-                        await this.plugin.refreshView();
                     })
             );
+    }
+}
+
+class VirtualList {
+    private app: App;
+    private rootEl: HTMLElement;
+    private spacerEl: HTMLElement;
+    private itemsEl: HTMLElement;
+
+    private itemHeight = 28; // px, assume each row is ~28px tall
+    private buffer = 5;      // how many extra rows to render above/below the viewport
+    private items: NoteMeta[] = [];
+    private renderedStart = 0;
+    private renderedEnd = -1;
+    private activeFilePath: string | null = null;
+    private dataChanged = false;
+
+    constructor(app: App, rootEl: HTMLElement) {
+        this.app = app;
+        this.rootEl = rootEl;
+        this.rootEl.style.overflowY = 'auto';
+        this.rootEl.style.position = 'relative';
+        this.rootEl.addClass('virtual-list-container');
+
+        // This spacer fills total scrollable area
+        this.spacerEl = this.rootEl.createEl('div');
+        this.spacerEl.style.position = 'relative';
+        this.spacerEl.addClass('virtual-list-spacer');
+
+        // This itemsEl holds the actual rendered items
+        this.itemsEl = this.spacerEl.createEl('div');
+        this.itemsEl.style.position = 'absolute';
+        this.itemsEl.style.top = '0';
+        this.itemsEl.addClass('virtual-list-items');
+        this.itemsEl.style.width = '100%';
+
+        // Listen to scroll
+        this.rootEl.addEventListener('scroll', () => this.onScroll());
+    }
+
+    public setItems(items: NoteMeta[]): void {
+        this.items = items;
+        this.dataChanged = true;
+        this.updateContainerHeight();
+        requestAnimationFrame(() => this.renderRows());
+    }
+
+    public getActiveFilePath(): string | null {
+        return this.activeFilePath;
+    }
+
+    public setActiveFile(file: TFile | null): void {
+        if (file) {
+            this.activeFilePath = file.path;
+            this.updateActiveHighlight();
+        }
+    }
+
+    private updateContainerHeight(): void {
+        const totalHeight = this.items.length * this.itemHeight;
+        this.spacerEl.style.height = totalHeight + 'px';
+    }
+
+    private onScroll(): void {
+        this.renderRows();
+    }
+
+    private renderRows(): void {
+        const scrollTop = this.rootEl.scrollTop;
+        const containerHeight = this.rootEl.clientHeight;
+
+        // Calculate visible range
+        const startIndex = Math.max(
+            0,
+            Math.floor(scrollTop / this.itemHeight) - this.buffer
+        );
+        const endIndex = Math.min(
+            this.items.length - 1,
+            Math.floor((scrollTop + containerHeight) / this.itemHeight) + this.buffer
+        );
+
+        // Avoid unnecessary re-renders
+        if (!this.dataChanged && startIndex === this.renderedStart && endIndex === this.renderedEnd) {
+            return;
+        }
+
+        this.renderedStart = startIndex;
+        this.renderedEnd = endIndex;
+        this.dataChanged = false;
+
+        // Clear out old rows
+        this.itemsEl.empty();
+
+        // Render the rows for the visible range
+        for (let i = startIndex; i <= endIndex; i++) {
+            const note = this.items[i];
+            const top = i * this.itemHeight;
+
+            const rowEl = this.itemsEl.createEl('div');
+            rowEl.addClass('tree-item');
+            rowEl.style.position = 'absolute';
+            rowEl.style.top = `${top}px`;
+            rowEl.style.left = '0';
+            rowEl.style.right = '0';
+            rowEl.style.height = `${this.itemHeight}px`;
+            rowEl.style.overflow = 'hidden';
+
+            const titleItem = rowEl.createEl('div');
+            titleItem.addClasses(['tree-item-self', 'is-clickable']);
+            titleItem.setAttr('data-file-path', note.file.path);
+
+            const iconItem = titleItem.createEl('div');
+            setIcon(iconItem, note.id != null ? 'file' : 'file-question');
+            iconItem.addClass('tree-item-icon');
+
+            const nameItem = titleItem.createEl('div');
+            nameItem.addClass('tree-item-inner');
+            nameItem.style.whiteSpace = 'nowrap';
+            nameItem.style.overflow = 'hidden';
+            nameItem.style.textOverflow = 'ellipsis';
+            if (note.id != null) {
+                nameItem.createEl('span', { text: `${note.id}: ` }).addClass('note-id');
+            }
+            nameItem.createEl('span', { text: note.title });
+
+            // Highlight the active file
+            if (this.activeFilePath === note.file.path) {
+                titleItem.addClass('is-active');
+            }
+
+            rowEl.addEventListener('click', () => {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(note.file);
+            });
+        }
+    }
+
+    private updateActiveHighlight(): void {
+        // Highlight the active file in the rendered range
+        Array.from(this.itemsEl.children).forEach((rowEl) => {
+            const titleItem = rowEl.querySelector('.tree-item-self');
+            const filePath = titleItem?.getAttribute('data-file-path');
+            if (filePath === this.activeFilePath) {
+                titleItem?.addClass('is-active');
+            } else {
+                titleItem?.removeClass('is-active');
+            }
+        });
     }
 }
