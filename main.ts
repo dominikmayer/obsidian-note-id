@@ -426,7 +426,7 @@ class VirtualList {
             iconItem.addClass('tree-item-icon');
 
             const nameItem = titleItem.createEl('div');
-            nameItem.addClass('note-id-item-inner');
+            nameItem.addClass('tree-item-inner');
 
             setTooltip(rowEl, note.title)
             

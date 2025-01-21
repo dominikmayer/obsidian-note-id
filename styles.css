@@ -24,7 +24,7 @@
     overflow: hidden;
 }
 
-.note-id-item-inner {
+.note-id-list .tree-item-inner {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
