@@ -318,21 +318,15 @@ class VirtualList {
     constructor(app: App, rootEl: HTMLElement) {
         this.app = app;
         this.rootEl = rootEl;
-        this.rootEl.style.overflowY = 'auto';
-        this.rootEl.style.position = 'relative';
-        this.rootEl.addClass('virtual-list-container');
+        this.rootEl.addClass('note-id-list');
 
         // This spacer fills total scrollable area
         this.spacerEl = this.rootEl.createEl('div');
-        this.spacerEl.style.position = 'relative';
-        this.spacerEl.addClass('virtual-list-spacer');
+        this.spacerEl.addClass('note-id-list-spacer');
 
         // This itemsEl holds the actual rendered items
         this.itemsEl = this.spacerEl.createEl('div');
-        this.itemsEl.style.position = 'absolute';
-        this.itemsEl.style.top = '0';
-        this.itemsEl.addClass('virtual-list-items');
-        this.itemsEl.style.width = '100%';
+        this.itemsEl.addClass('note-id-list-items');
 
         // Listen to scroll
         this.rootEl.addEventListener('scroll', () => this.onScroll());
@@ -419,13 +413,9 @@ class VirtualList {
             const top = i * this.itemHeight;
 
             const rowEl = this.itemsEl.createEl('div');
-            rowEl.addClass('tree-item');
-            rowEl.style.position = 'absolute';
+            rowEl.addClass('note-id-item');
             rowEl.style.top = `${top}px`;
-            rowEl.style.left = '0';
-            rowEl.style.right = '0';
             rowEl.style.height = `${this.itemHeight}px`;
-            rowEl.style.overflow = 'hidden';
 
             const titleItem = rowEl.createEl('div');
             titleItem.addClasses(['tree-item-self', 'is-clickable']);
@@ -436,10 +426,7 @@ class VirtualList {
             iconItem.addClass('tree-item-icon');
 
             const nameItem = titleItem.createEl('div');
-            nameItem.addClass('tree-item-inner');
-            nameItem.style.whiteSpace = 'nowrap';
-            nameItem.style.overflow = 'hidden';
-            nameItem.style.textOverflow = 'ellipsis';
+            nameItem.addClass('note-id-item-inner');
 
             setTooltip(nameItem, note.title)
             

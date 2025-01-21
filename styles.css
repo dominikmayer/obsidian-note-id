@@ -1,3 +1,31 @@
 .note-id {
     color: var(--text-faint);
 }
+
+.note-id-list {
+    overflow-y: auto;
+    position: relative;
+}
+
+.note-id-list-spacer {
+    position: relative;
+}
+
+.note-id-list-items {
+    position: absolute;
+    top: 0;
+    width: 100%;
+}
+
+.note-id-item {
+    position: absolute;
+    left: 0;
+    right: 0;
+    overflow: hidden;
+}
+
+.note-id-item-inner {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
