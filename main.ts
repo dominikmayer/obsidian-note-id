@@ -428,7 +428,7 @@ class VirtualList {
             const nameItem = titleItem.createEl('div');
             nameItem.addClass('note-id-item-inner');
 
-            setTooltip(nameItem, note.title)
+            setTooltip(rowEl, note.title)
             
             if (note.id != null) {
                 nameItem.createEl('span', { text: `${note.id}: ` }).addClass('note-id');
