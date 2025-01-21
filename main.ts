@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, setIcon, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 
@@ -441,8 +441,7 @@ class VirtualList {
             nameItem.style.overflow = 'hidden';
             nameItem.style.textOverflow = 'ellipsis';
 
-            // Add hover tooltip with the full title
-            nameItem.setAttribute('title', note.title);
+            setTooltip(nameItem, note.title)
             
             if (note.id != null) {
                 nameItem.createEl('span', { text: `${note.id}: ` }).addClass('note-id');
