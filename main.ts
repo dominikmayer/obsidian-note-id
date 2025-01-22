@@ -1,4 +1,5 @@
 import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
+import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 
@@ -43,18 +44,17 @@ class IDSidePanelView extends ItemView {
         const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
 
+        const elmContainer = container.createDiv();
+        
+        console.log("onOpen");
+        const elmApp = Elm.Main.init({
+            node: elmContainer,
+        });
+        (this as any).elmApp = elmApp;
+
         this.virtualList = new VirtualList(this.app, container);
 
         this.virtualList.setActiveFile(this.app.workspace.getActiveFile());
-        console.log("onOpen");
-
-        // this.registerEvent( 
-        //     // Also fires when app/panel is first opened
-        //     this.app.workspace.on('resize', () => {
-        //         console.log("resize");
-        //         this.virtualList.update();
-        //     })
-        // );
     
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
@@ -85,6 +85,19 @@ class IDSidePanelView extends ItemView {
         combined = combined.concat(notesWithID);
         if (showNotesWithoutID) {
             combined = combined.concat(notesWithoutID);
+        }
+
+        const elmApp = (this as any).elmApp;
+        if (elmApp && elmApp.ports && elmApp.ports.receiveNotes) {
+            console.log("Sending notes to Elm:", combined);
+            elmApp.ports.receiveNotes.send(
+                combined.map((note) => ({
+                    title: note.title,
+                    id: note.id || "No ID",
+                }))
+            );
+        } else {
+            console.error("Elm app or ports not set up correctly");
         }
 
         this.virtualList.setItems(combined);
