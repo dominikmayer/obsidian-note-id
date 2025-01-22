@@ -48,26 +48,21 @@ class IDSidePanelView extends ItemView {
         this.virtualList.setActiveFile(this.app.workspace.getActiveFile());
         console.log("onOpen");
 
-        this.registerEvent( 
-            // Also fires when app/panel is first opened
-            this.app.workspace.on('resize', () => {
-                console.log("resize");
-                this.refresh();
-            })
-        );
+        // this.registerEvent( 
+        //     // Also fires when app/panel is first opened
+        //     this.app.workspace.on('resize', () => {
+        //         console.log("resize");
+        //         this.virtualList.update();
+        //     })
+        // );
     
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                this.refresh(file)
+                console.log("file-open");
+                this.virtualList.setActiveFile(file);
             })
         );
-    }
-
-    public async refresh(file: TFile | null = null) {
-        this.virtualList.setActiveFile(file);
-        requestAnimationFrame(() => {
-            this.renderNotes();
-        });
+        this.renderNotes();
     }
 
     renderNotes() {
@@ -199,9 +194,6 @@ export default class IDSidePanelPlugin extends Plugin {
             const newMeta = await this.extractNoteMeta(file);
 
             if (newMeta) {
-                // Preserve height if already cached
-                const cachedMeta = this.noteCache.get(file.path);
-
                 this.noteCache.set(file.path, newMeta);
             } else {
                 this.noteCache.delete(file.path);
@@ -217,7 +209,8 @@ export default class IDSidePanelPlugin extends Plugin {
         }
         this.scheduleRefreshTimeout = window.setTimeout(() => {
             this.scheduleRefreshTimeout = null;
-            void this.refreshView();
+            if (this.activePanelView)
+                this.activePanelView.renderNotes();
         }, 50);
     }
 
@@ -243,7 +236,7 @@ export default class IDSidePanelPlugin extends Plugin {
 
     async refreshView() {
         if (this.activePanelView) {
-            this.activePanelView.refresh();
+            this.activePanelView.renderNotes();
         }
     }
 
@@ -362,7 +355,6 @@ class VirtualList {
     }
 
     private debounce(func: Function, wait: number) {
-        console.log("debounce")
         let timeout: number | null = null;
         return (...args: any[]) => {
             if (timeout !== null) {
@@ -396,6 +388,7 @@ class VirtualList {
             this.activeFilePath = file.path;
             this.updateActiveHighlight();
             this.scrollToActiveFile();
+            this.renderRows();
         }
     }
 
@@ -440,6 +433,7 @@ class VirtualList {
     }
 
     private renderRows(): void {
+        console.log("renderRows");
         const scrollTop = this.rootEl.scrollTop;
         const containerHeight = this.rootEl.clientHeight;
       
@@ -526,6 +520,10 @@ class VirtualList {
         }
         
         this.updateContainerHeight();
+    }
+
+    public update(): void {
+        this.renderRows();
     }
 
     private updateActiveHighlight(): void {
