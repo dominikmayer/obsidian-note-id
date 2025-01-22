@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Html exposing (Html, div, text, span)
-import Html.Attributes exposing (class, style, attribute)
+import Html.Attributes
 import Html.Events exposing (onClick)
 import Ports exposing (..)
 import Scroll
@@ -13,15 +13,32 @@ import Task
 
 
 type alias Model =
-    { notes : List Note
+    { notes : List NoteMeta
     , currentFile : Maybe String
     }
 
 
-type alias Note =
+type alias NoteMeta =
     { title : String
     , id : Maybe String
     , filePath : String
+    }
+
+
+type alias Settings =
+    { includeFolders : List String
+    , excludeFolders : List String
+    , showNotesWithoutID : Bool
+    , customIDField : String
+    }
+
+
+exampleSettings : Settings
+exampleSettings =
+    { includeFolders = [ "Zettel" ]
+    , excludeFolders = []
+    , showNotesWithoutID = True
+    , customIDField = "id"
     }
 
 
@@ -40,7 +57,7 @@ init _ =
 
 
 type Msg
-    = UpdateNotes (List Note)
+    = UpdateNotes (List NoteMeta)
     | OpenFile String
     | FileOpened (Maybe String)
     | NoOp
@@ -86,7 +103,7 @@ view model =
         ]
 
 
-viewNote : Note -> Maybe String -> Html Msg
+viewNote : NoteMeta -> Maybe String -> Html Msg
 viewNote note currentFile =
     div
         [ Html.Attributes.class ""
