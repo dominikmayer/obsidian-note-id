@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, div, text, span)
+import Html exposing (Html, div, span)
 import Html.Attributes
 import Html.Events exposing (onClick)
 import Ports exposing (..)
@@ -79,8 +79,16 @@ update msg model =
                             Just path ->
                                 let
                                     scrollCmd =
-                                        Scroll.scrollElementY "note-id-list" path 0 0
-                                            |> Task.attempt (\_ -> NoOp)
+                                        Scroll.scrollElementY "note-id-list" path 0.5 0.5
+                                            |> Task.attempt
+                                                (\result ->
+                                                    case result of
+                                                        Ok _ ->
+                                                            Debug.log "Scroll succeeded" NoOp
+
+                                                        Err err ->
+                                                            Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
+                                                )
                                 in
                                     ( { model | currentFile = Just path }, scrollCmd )
 
@@ -94,20 +102,17 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    div []
-        [ text "Elm app running"
-        , div
-            [ Html.Attributes.class "note-id-list"
-            ]
-            (List.map (\note -> viewNote note model.currentFile) model.notes)
+    div
+        [ Html.Attributes.class "note-id-list"
+        , Html.Attributes.id "note-id-list"
         ]
+        (List.map (\note -> viewNote note model.currentFile) model.notes)
 
 
 viewNote : NoteMeta -> Maybe String -> Html Msg
 viewNote note currentFile =
     div
-        [ Html.Attributes.class ""
-        , Html.Attributes.id note.filePath
+        [ Html.Attributes.id note.filePath
         , onClick (OpenFile note.filePath)
         ]
         [ div
