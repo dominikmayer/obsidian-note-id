@@ -23,6 +23,8 @@ interface NoteMeta {
     height: number;
 }
 
+const DEFAULT_ROW_HEIGHT = 28;
+
 class IDSidePanelView extends ItemView {
     plugin: IDSidePanelPlugin;
     private virtualList: VirtualList;
@@ -51,11 +53,7 @@ class IDSidePanelView extends ItemView {
             // Also fires when app/panel is first opened
             this.app.workspace.on('resize', () => {
                 console.log("resize");
-                // Ensures that measurer is properly laid out
-                // requestAnimationFrame(() => {
-                    // this.plugin.measureHeights();
-                    this.refresh();
-                // });
+                this.refresh();
             })
         );
     
@@ -69,7 +67,6 @@ class IDSidePanelView extends ItemView {
     public async refresh(file: TFile | null = null) {
         this.virtualList.setActiveFile(file);
         requestAnimationFrame(() => {
-            this.plugin.measureHeights();
             this.renderNotes();
         });
     }
@@ -137,7 +134,7 @@ export default class IDSidePanelPlugin extends Plugin {
 
         // Preserve the cached height if it exists
         const cachedMeta = this.noteCache.get(file.path);
-        const height = cachedMeta?.height ?? 0;
+        const height = cachedMeta?.height ?? DEFAULT_ROW_HEIGHT;
     
         return { title: file.basename, id, file, height: height };
     }
@@ -446,8 +443,9 @@ class VirtualList {
         this.items = items;
         this.cumulativeHeights = [];
         this.items.reduce((sum, item, index) => {
-            this.cumulativeHeights[index] = sum + item.height;
-            return sum + item.height;
+            const height = item.height || DEFAULT_ROW_HEIGHT;
+            this.cumulativeHeights[index] = sum + height;
+            return sum + height;
         }, 0);
     
         this.updateContainerHeight();
@@ -491,7 +489,7 @@ class VirtualList {
 
     private updateContainerHeight(): void {
         const totalHeight = this.cumulativeHeights[this.cumulativeHeights.length - 1] || 0;
-        this.spacerEl.style.height = totalHeight + 'px';
+        this.spacerEl.style.height = `${totalHeight}px`;
     }
 
     private findStartIndex(scrollTop: number): number {
@@ -514,39 +512,35 @@ class VirtualList {
     private renderRows(): void {
         const scrollTop = this.rootEl.scrollTop;
         const containerHeight = this.rootEl.clientHeight;
-    
+      
         let startIndex = this.findStartIndex(scrollTop) - this.buffer;
         startIndex = Math.max(0, startIndex);
-    
+      
         let endIndex = startIndex;
         let accumulatedHeight = this.cumulativeHeights[startIndex] - (this.cumulativeHeights[startIndex - 1] || 0);
-        while (endIndex < this.items.length && (accumulatedHeight < containerHeight + this.buffer * 28)) {
+        while (endIndex < this.items.length && (accumulatedHeight < containerHeight + this.buffer * DEFAULT_ROW_HEIGHT)) {
             endIndex++;
-            accumulatedHeight += this.items[endIndex]?.height || 0; // Fallback to 0 height
+            accumulatedHeight += this.items[endIndex]?.height || DEFAULT_ROW_HEIGHT;
         }
         endIndex = Math.min(this.items.length - 1, endIndex + this.buffer);
-
-        // Avoid unnecessary re-renders
+    
         if (!this.dataChanged && startIndex === this.renderedStart && endIndex === this.renderedEnd) {
             return;
         }
-
+    
         this.renderedStart = startIndex;
         this.renderedEnd = endIndex;
         this.dataChanged = false;
-
-        // Clear out old rows
+    
         this.itemsEl.empty();
-
-        // Render the rows for the visible range
+    
         for (let i = startIndex; i <= endIndex; i++) {
             const note = this.items[i];
             const top = i === 0 ? 0 : this.cumulativeHeights[i - 1];
-
+    
             const rowEl = this.itemsEl.createEl('div');
             rowEl.addClass('note-id-item');
             rowEl.style.top = `${top}px`;
-            rowEl.style.height = `${this.items[i].height}px`;
 
             const titleItem = rowEl.createEl('div');
             titleItem.addClasses(['tree-item-self', 'is-clickable']);
@@ -570,11 +564,32 @@ class VirtualList {
                 titleItem.addClass('is-active');
             }
 
+            requestAnimationFrame(() => {
+                const measuredHeight = rowEl.getBoundingClientRect().height;
+                if (note.height !== measuredHeight) {
+                    note.height = measuredHeight;
+                    this.items[i] = note; // update item height
+                    this.recalculateCumulativeHeights(i);
+                    this.renderRows();
+                }
+            });
+    
             rowEl.addEventListener('click', () => {
                 const leaf = this.app.workspace.getLeaf();
                 leaf.openFile(note.file);
             });
         }
+    }
+
+    private recalculateCumulativeHeights(startIndex: number): void {
+        let height = startIndex === 0 ? 0 : this.cumulativeHeights[startIndex - 1];
+        
+        for (let i = startIndex; i < this.items.length; i++) {
+            height += this.items[i].height || DEFAULT_ROW_HEIGHT;
+            this.cumulativeHeights[i] = height;
+        }
+        
+        this.updateContainerHeight();
     }
 
     private updateActiveHighlight(): void {
