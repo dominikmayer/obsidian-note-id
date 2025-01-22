@@ -52,6 +52,16 @@ class IDSidePanelView extends ItemView {
         });
         (this as any).elmApp = elmApp;
 
+        elmApp.ports.openFile.subscribe((filePath: string) => {
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (file instanceof TFile) {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(file);
+            }
+        });
+
+        container.createEl("hr");
+
         this.virtualList = new VirtualList(this.app, container);
 
         this.virtualList.setActiveFile(this.app.workspace.getActiveFile());
@@ -91,9 +101,10 @@ class IDSidePanelView extends ItemView {
         if (elmApp && elmApp.ports && elmApp.ports.receiveNotes) {
             console.log("Sending notes to Elm:", combined);
             elmApp.ports.receiveNotes.send(
-                combined.map((note) => ({
+                combined.map((note, index) => ({
                     title: note.title,
-                    id: note.id || "No ID",
+                    id: note.id ? note.id.toString() : null, // Convert Maybe to a string
+                    filePath: note.file.path
                 }))
             );
         } else {

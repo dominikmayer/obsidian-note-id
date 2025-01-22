@@ -1,8 +1,10 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, div, text, ul, li)
+import Html exposing (Html, div, text, span)
+import Html.Attributes exposing (class, style, attribute)
 import Ports exposing (..)
+import Html.Events exposing (onClick)
 
 
 -- Define the model to store notes
@@ -14,7 +16,8 @@ type alias Model =
 
 type alias Note =
     { title : String
-    , id : String
+    , id : Maybe String
+    , filePath : String
     }
 
 
@@ -34,26 +37,54 @@ init _ =
 
 type Msg
     = UpdateNotes (List Note)
+    | OpenFile String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         UpdateNotes notes ->
-            ( Debug.log "Received notes in Elm" notes, Cmd.none )
+            ( notes, Cmd.none )
+
+        OpenFile filePath ->
+            ( model, Ports.openFile filePath )
 
 
 view : Model -> Html Msg
 view notes =
     div []
         [ text "Elm app running"
-        , ul [] (List.map viewNote notes)
+        , div
+            [ Html.Attributes.class "note-id-list"
+            ]
+            (List.map viewNote notes)
         ]
 
 
-viewNote : Note -> Html msg
+viewNote : Note -> Html Msg
 viewNote note =
-    li [] [ text (note.title ++ " (ID: " ++ note.id ++ ")") ]
+    div
+        [ Html.Attributes.class ""
+        , onClick (OpenFile note.filePath)
+          -- Attach the click handler
+        ]
+        [ div
+            [ Html.Attributes.class "tree-item-self is-clickable"
+            , Html.Attributes.attribute "data-file-path" note.filePath
+            ]
+            [ div
+                [ Html.Attributes.class "tree-item-inner" ]
+                (case note.id of
+                    Just id ->
+                        [ span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                        , Html.text note.title
+                        ]
+
+                    Nothing ->
+                        [ Html.text note.title ]
+                )
+            ]
+        ]
 
 
 subscriptions : Model -> Sub Msg
