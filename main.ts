@@ -357,7 +357,19 @@ class VirtualList {
         this.itemsEl.addClass('note-id-list-items');
 
         // Listen to scroll
-        this.rootEl.addEventListener('scroll', () => this.onScroll());
+        const debouncedRender = this.debounce(() => this.renderRows(), 10);
+        this.rootEl.addEventListener('scroll', debouncedRender);
+    }
+
+    private debounce(func: Function, wait: number) {
+        console.log("debounce")
+        let timeout: number | null = null;
+        return (...args: any[]) => {
+            if (timeout !== null) {
+                clearTimeout(timeout);
+            }
+            timeout = window.setTimeout(() => func(...args), wait);
+        };
     }
 
     public async setItems(items: NoteMeta[]): Promise<void> {
@@ -427,10 +439,6 @@ class VirtualList {
         return Math.max(0, low);
     }
 
-    private onScroll(): void {
-        this.renderRows();
-    }
-
     private renderRows(): void {
         const scrollTop = this.rootEl.scrollTop;
         const containerHeight = this.rootEl.clientHeight;
@@ -486,13 +494,19 @@ class VirtualList {
                 titleItem.addClass('is-active');
             }
 
+            let heightUpdated = false;
+
             requestAnimationFrame(() => {
                 const measuredHeight = rowEl.getBoundingClientRect().height;
                 if (this.heights[i] !== measuredHeight) {
                     this.heights[i] = measuredHeight;
-                    this.items[i] = note; // update item height
                     this.recalculateCumulativeHeights(i);
-                    this.renderRows();
+                    heightUpdated = true;
+                }
+            
+                if (heightUpdated) {
+                    this.dataChanged = true;
+                    requestAnimationFrame(() => this.renderRows());
                 }
             });
     
