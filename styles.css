@@ -24,8 +24,8 @@
     overflow: hidden;
 }
 
-.note-id-list .tree-item-inner {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.note-id-measurement-item {
+    position: absolute;
+    visibility: hidden;
+    height: auto;
 }

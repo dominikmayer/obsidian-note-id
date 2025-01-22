@@ -16,7 +16,12 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
     customIDField: '',
 };
 
-interface NoteMeta { title: string; id: string | number | null; file: TFile; }
+interface NoteMeta {
+    title: string;
+    id: string | number | null;
+    file: TFile;
+    height: number;
+}
 
 class IDSidePanelView extends ItemView {
     plugin: IDSidePanelPlugin;
@@ -40,8 +45,20 @@ class IDSidePanelView extends ItemView {
         this.virtualList = new VirtualList(this.app, container);
 
         this.virtualList.setActiveFile(this.app.workspace.getActiveFile());
-        this.renderNotes();
+        console.log("onOpen");
 
+        this.registerEvent( 
+            // Also fires when app/panel is first opened
+            this.app.workspace.on('resize', () => {
+                console.log("resize");
+                // Ensures that measurer is properly laid out
+                // requestAnimationFrame(() => {
+                    // this.plugin.measureHeights();
+                    this.refresh();
+                // });
+            })
+        );
+    
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
                 this.refresh(file)
@@ -51,7 +68,10 @@ class IDSidePanelView extends ItemView {
 
     public async refresh(file: TFile | null = null) {
         this.virtualList.setActiveFile(file);
-        this.renderNotes();
+        requestAnimationFrame(() => {
+            this.plugin.measureHeights();
+            this.renderNotes();
+        });
     }
 
     renderNotes() {
@@ -112,17 +132,94 @@ export default class IDSidePanelPlugin extends Plugin {
             const idField = customIDField.toLowerCase() || 'id';
             id = frontmatterKeys[idField] ?? null;
         }
-        // Optionally filter out notes without ID if not showing them
+    
         if (id === null && !showNotesWithoutID) return null;
-        return { title: file.basename, id, file };
+
+        // Preserve the cached height if it exists
+        const cachedMeta = this.noteCache.get(file.path);
+        const height = cachedMeta?.height ?? 0;
+    
+        return { title: file.basename, id, file, height: height };
+    }
+
+    async measureHeights() {
+        if (!this.activePanelView) return;
+        
+        const measurer = this.createMeasurementElement()
+        if (!measurer) return;
+
+        for (const [path, meta] of this.noteCache) {
+            this.measureHeight(measurer, path, meta);
+        }
+    }
+
+    private measurementEl: HTMLDivElement | null = null;
+
+    private createMeasurementElement(): HTMLDivElement | null {
+        if (!this.activePanelView) return null;
+
+        if (this.measurementEl && !this.activePanelView.containerEl.contains(this.measurementEl)) {
+            this.measurementEl.remove();
+            this.measurementEl = null; // Reset to ensure proper recreation
+        }
+        
+        if (!this.measurementEl) {
+            const wrapper = this.activePanelView.containerEl.createDiv();
+            wrapper.addClasses(['view-content', 'note-id-measurement-item']);
+            const spacerEl = wrapper.createDiv();
+            spacerEl.addClass('note-id-list-spacer');
+            const list = spacerEl.createDiv();
+            list.addClass('note-id-list-items');
+    
+            this.measurementEl = list.createDiv();
+            this.measurementEl.addClasses(['note-id-item']);
+            this.measurementEl.createDiv();
+            setIcon(this.measurementEl, 'file');
+        } 
+        console.log("Measurer:", this.measurementEl.offsetHeight, this.measurementEl.clientHeight);
+        return this.measurementEl;
+    }
+
+    async measureHeight(measurer: HTMLDivElement, path: string, meta: NoteMeta) {
+        measurer.empty();
+        const titleItem = measurer.createEl('div');
+        titleItem.addClasses(['tree-item-self', 'is-clickable']);
+
+        const iconItem = titleItem.createEl('div');
+        iconItem.addClass('tree-item-icon');
+        setIcon(iconItem, 'file');
+
+        const nameItem = titleItem.createEl('div');
+        nameItem.classList.add('tree-item-inner');
+        if (meta.id != null) {
+            const spanId = nameItem.createEl('span');
+            spanId.textContent = `${meta.id}: `;
+            spanId.addClass('note-id');
+        }
+        const spanTitle = nameItem.createEl('span');
+        spanTitle.textContent = meta.title;
+
+        // meta.height = measurer.clientHeight;
+        meta.height = measurer.getBoundingClientRect().height;
+        this.noteCache.set(path, meta);
+        console.log("Measured height for:", path, meta.height, measurer.offsetHeight, measurer.clientHeight);
     }
 
     async initializeCache() {
+        const oldHeights = new Map<string, number>();
+        for (const [path, meta] of this.noteCache) {
+            oldHeights.set(path, meta.height);
+        }
+    
         this.noteCache.clear();
         const markdownFiles = this.app.vault.getMarkdownFiles();
         for (const file of markdownFiles) {
             const meta = await this.extractNoteMeta(file);
-            if (meta) this.noteCache.set(file.path, meta);
+            if (meta) {
+                // Preserve height if previously measured
+                meta.height = oldHeights.get(file.path) ?? 0;
+                this.noteCache.set(file.path, meta);
+            }
         }
     }
 
@@ -177,13 +274,24 @@ export default class IDSidePanelPlugin extends Plugin {
             const newMeta = await this.extractNoteMeta(file);
 
             if (newMeta) {
+                // Preserve height if already cached
+                const cachedMeta = this.noteCache.get(file.path);
+                newMeta.height = cachedMeta?.height ?? 0;
+
                 this.noteCache.set(file.path, newMeta);
+                this.updateHeight(file.path, newMeta);
             } else {
                 this.noteCache.delete(file.path);
             }
 
             this.queueRefresh();
         }
+    }
+
+    private updateHeight(path: string, meta: NoteMeta) {
+        let measurer = this.createMeasurementElement()!
+        if (!measurer) return;
+        this.measureHeight(measurer, path, meta)
     }
 
     private queueRefresh(): void {
@@ -205,7 +313,6 @@ export default class IDSidePanelPlugin extends Plugin {
             leaf = this.app.workspace.getLeaf(true);
         }
 
-        // Set the view state for the leaf
         await leaf.setViewState({
             type: VIEW_TYPE_ID_PANEL,
             active: true,
@@ -213,6 +320,8 @@ export default class IDSidePanelPlugin extends Plugin {
 
         // Reveal the leaf to make it active
         this.app.workspace.revealLeaf(leaf);
+        console.log("opening");
+        await this.refreshView();
     }
 
     async refreshView() {
@@ -222,6 +331,7 @@ export default class IDSidePanelPlugin extends Plugin {
     }
 
     async saveSettings() {
+        console.log("saving settings");
         await this.saveData(this.settings);
         await this.initializeCache();
         await this.refreshView();
@@ -307,9 +417,9 @@ class VirtualList {
     private spacerEl: HTMLElement;
     private itemsEl: HTMLElement;
 
-    private itemHeight = 28; // px, assume each row is ~28px tall
     private buffer = 5;      // how many extra rows to render above/below the viewport
     private items: NoteMeta[] = [];
+    private cumulativeHeights: number[] = [];
     private renderedStart = 0;
     private renderedEnd = -1;
     private activeFilePath: string | null = null;
@@ -332,10 +442,16 @@ class VirtualList {
         this.rootEl.addEventListener('scroll', () => this.onScroll());
     }
 
-    public setItems(items: NoteMeta[]): void {
+    public async setItems(items: NoteMeta[]): Promise<void> {
         this.items = items;
-        this.dataChanged = true;
+        this.cumulativeHeights = [];
+        this.items.reduce((sum, item, index) => {
+            this.cumulativeHeights[index] = sum + item.height;
+            return sum + item.height;
+        }, 0);
+    
         this.updateContainerHeight();
+        this.dataChanged = true;
         requestAnimationFrame(() => this.renderRows());
     }
 
@@ -353,13 +469,14 @@ class VirtualList {
 
     private scrollToActiveFile(): void {
         if (!this.activeFilePath) return;
-
-        const activeIndex = this.items.findIndex((item) => item.file.path === this.activeFilePath);
+    
+        const activeIndex = this.items.findIndex(item => item.file.path === this.activeFilePath);
         if (activeIndex === -1) return;
-
-        const scrollToPosition = activeIndex * this.itemHeight;
+    
+        // Compute the top position based on cumulative heights
+        const scrollToPosition = activeIndex === 0 ? 0 : this.cumulativeHeights[activeIndex - 1];
         const containerHeight = this.rootEl.clientHeight;
-
+    
         // Check if the active file is already in view
         if (
             scrollToPosition >= this.rootEl.scrollTop &&
@@ -367,14 +484,27 @@ class VirtualList {
         ) {
             return;
         }
-
-        // Scroll to the position of the active file
-        this.rootEl.scrollTop = scrollToPosition - containerHeight / 2 + this.itemHeight / 2;
+    
+        // Scroll to center the active file in the container
+        this.rootEl.scrollTop = scrollToPosition - containerHeight / 2 + (this.items[activeIndex].height || 0) / 2;
     }
 
     private updateContainerHeight(): void {
-        const totalHeight = this.items.length * this.itemHeight;
+        const totalHeight = this.cumulativeHeights[this.cumulativeHeights.length - 1] || 0;
         this.spacerEl.style.height = totalHeight + 'px';
+    }
+
+    private findStartIndex(scrollTop: number): number {
+        let low = 0, high = this.cumulativeHeights.length - 1;
+        while (low <= high) {
+            const mid = Math.floor((low + high) / 2);
+            if (this.cumulativeHeights[mid] < scrollTop) {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return Math.max(0, low);
     }
 
     private onScroll(): void {
@@ -384,16 +514,17 @@ class VirtualList {
     private renderRows(): void {
         const scrollTop = this.rootEl.scrollTop;
         const containerHeight = this.rootEl.clientHeight;
-
-        // Calculate visible range
-        const startIndex = Math.max(
-            0,
-            Math.floor(scrollTop / this.itemHeight) - this.buffer
-        );
-        const endIndex = Math.min(
-            this.items.length - 1,
-            Math.floor((scrollTop + containerHeight) / this.itemHeight) + this.buffer
-        );
+    
+        let startIndex = this.findStartIndex(scrollTop) - this.buffer;
+        startIndex = Math.max(0, startIndex);
+    
+        let endIndex = startIndex;
+        let accumulatedHeight = this.cumulativeHeights[startIndex] - (this.cumulativeHeights[startIndex - 1] || 0);
+        while (endIndex < this.items.length && (accumulatedHeight < containerHeight + this.buffer * 28)) {
+            endIndex++;
+            accumulatedHeight += this.items[endIndex]?.height || 0; // Fallback to 0 height
+        }
+        endIndex = Math.min(this.items.length - 1, endIndex + this.buffer);
 
         // Avoid unnecessary re-renders
         if (!this.dataChanged && startIndex === this.renderedStart && endIndex === this.renderedEnd) {
@@ -410,12 +541,12 @@ class VirtualList {
         // Render the rows for the visible range
         for (let i = startIndex; i <= endIndex; i++) {
             const note = this.items[i];
-            const top = i * this.itemHeight;
+            const top = i === 0 ? 0 : this.cumulativeHeights[i - 1];
 
             const rowEl = this.itemsEl.createEl('div');
             rowEl.addClass('note-id-item');
             rowEl.style.top = `${top}px`;
-            rowEl.style.height = `${this.itemHeight}px`;
+            rowEl.style.height = `${this.items[i].height}px`;
 
             const titleItem = rowEl.createEl('div');
             titleItem.addClasses(['tree-item-self', 'is-clickable']);
@@ -428,14 +559,13 @@ class VirtualList {
             const nameItem = titleItem.createEl('div');
             nameItem.addClass('tree-item-inner');
 
-            setTooltip(rowEl, note.title)
-            
+            setTooltip(rowEl, note.title);
+
             if (note.id != null) {
                 nameItem.createEl('span', { text: `${note.id}: ` }).addClass('note-id');
             }
             nameItem.createEl('span', { text: note.title });
 
-            // Highlight the active file
             if (this.activeFilePath === note.file.path) {
                 titleItem.addClass('is-active');
             }
