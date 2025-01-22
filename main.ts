@@ -20,7 +20,6 @@ interface NoteMeta {
     title: string;
     id: string | number | null;
     file: TFile;
-    height: number;
 }
 
 const DEFAULT_ROW_HEIGHT = 28;
@@ -134,87 +133,16 @@ export default class IDSidePanelPlugin extends Plugin {
 
         // Preserve the cached height if it exists
         const cachedMeta = this.noteCache.get(file.path);
-        const height = cachedMeta?.height ?? DEFAULT_ROW_HEIGHT;
-    
-        return { title: file.basename, id, file, height: height };
-    }
-
-    async measureHeights() {
-        if (!this.activePanelView) return;
         
-        const measurer = this.createMeasurementElement()
-        if (!measurer) return;
-
-        for (const [path, meta] of this.noteCache) {
-            this.measureHeight(measurer, path, meta);
-        }
-    }
-
-    private measurementEl: HTMLDivElement | null = null;
-
-    private createMeasurementElement(): HTMLDivElement | null {
-        if (!this.activePanelView) return null;
-
-        if (this.measurementEl && !this.activePanelView.containerEl.contains(this.measurementEl)) {
-            this.measurementEl.remove();
-            this.measurementEl = null; // Reset to ensure proper recreation
-        }
-        
-        if (!this.measurementEl) {
-            const wrapper = this.activePanelView.containerEl.createDiv();
-            wrapper.addClasses(['view-content', 'note-id-measurement-item']);
-            const spacerEl = wrapper.createDiv();
-            spacerEl.addClass('note-id-list-spacer');
-            const list = spacerEl.createDiv();
-            list.addClass('note-id-list-items');
-    
-            this.measurementEl = list.createDiv();
-            this.measurementEl.addClasses(['note-id-item']);
-            this.measurementEl.createDiv();
-            setIcon(this.measurementEl, 'file');
-        } 
-        console.log("Measurer:", this.measurementEl.offsetHeight, this.measurementEl.clientHeight);
-        return this.measurementEl;
-    }
-
-    async measureHeight(measurer: HTMLDivElement, path: string, meta: NoteMeta) {
-        measurer.empty();
-        const titleItem = measurer.createEl('div');
-        titleItem.addClasses(['tree-item-self', 'is-clickable']);
-
-        const iconItem = titleItem.createEl('div');
-        iconItem.addClass('tree-item-icon');
-        setIcon(iconItem, 'file');
-
-        const nameItem = titleItem.createEl('div');
-        nameItem.classList.add('tree-item-inner');
-        if (meta.id != null) {
-            const spanId = nameItem.createEl('span');
-            spanId.textContent = `${meta.id}: `;
-            spanId.addClass('note-id');
-        }
-        const spanTitle = nameItem.createEl('span');
-        spanTitle.textContent = meta.title;
-
-        // meta.height = measurer.clientHeight;
-        meta.height = measurer.getBoundingClientRect().height;
-        this.noteCache.set(path, meta);
-        console.log("Measured height for:", path, meta.height, measurer.offsetHeight, measurer.clientHeight);
+        return { title: file.basename, id, file };
     }
 
     async initializeCache() {
-        const oldHeights = new Map<string, number>();
-        for (const [path, meta] of this.noteCache) {
-            oldHeights.set(path, meta.height);
-        }
-    
         this.noteCache.clear();
         const markdownFiles = this.app.vault.getMarkdownFiles();
         for (const file of markdownFiles) {
             const meta = await this.extractNoteMeta(file);
             if (meta) {
-                // Preserve height if previously measured
-                meta.height = oldHeights.get(file.path) ?? 0;
                 this.noteCache.set(file.path, meta);
             }
         }
@@ -273,22 +201,14 @@ export default class IDSidePanelPlugin extends Plugin {
             if (newMeta) {
                 // Preserve height if already cached
                 const cachedMeta = this.noteCache.get(file.path);
-                newMeta.height = cachedMeta?.height ?? 0;
 
                 this.noteCache.set(file.path, newMeta);
-                this.updateHeight(file.path, newMeta);
             } else {
                 this.noteCache.delete(file.path);
             }
 
             this.queueRefresh();
         }
-    }
-
-    private updateHeight(path: string, meta: NoteMeta) {
-        let measurer = this.createMeasurementElement()!
-        if (!measurer) return;
-        this.measureHeight(measurer, path, meta)
     }
 
     private queueRefresh(): void {
@@ -416,6 +336,7 @@ class VirtualList {
 
     private buffer = 5;      // how many extra rows to render above/below the viewport
     private items: NoteMeta[] = [];
+    private heights: number[];
     private cumulativeHeights: number[] = [];
     private renderedStart = 0;
     private renderedEnd = -1;
@@ -441,9 +362,10 @@ class VirtualList {
 
     public async setItems(items: NoteMeta[]): Promise<void> {
         this.items = items;
+        this.heights = new Array(items.length).fill(DEFAULT_ROW_HEIGHT);
         this.cumulativeHeights = [];
-        this.items.reduce((sum, item, index) => {
-            const height = item.height || DEFAULT_ROW_HEIGHT;
+        this.items.reduce((sum, _, index) => {
+            const height = this.heights[index];
             this.cumulativeHeights[index] = sum + height;
             return sum + height;
         }, 0);
@@ -484,7 +406,7 @@ class VirtualList {
         }
     
         // Scroll to center the active file in the container
-        this.rootEl.scrollTop = scrollToPosition - containerHeight / 2 + (this.items[activeIndex].height || 0) / 2;
+        this.rootEl.scrollTop = scrollToPosition - containerHeight / 2 + (this.heights[activeIndex] || 0) / 2;
     }
 
     private updateContainerHeight(): void {
@@ -520,7 +442,7 @@ class VirtualList {
         let accumulatedHeight = this.cumulativeHeights[startIndex] - (this.cumulativeHeights[startIndex - 1] || 0);
         while (endIndex < this.items.length && (accumulatedHeight < containerHeight + this.buffer * DEFAULT_ROW_HEIGHT)) {
             endIndex++;
-            accumulatedHeight += this.items[endIndex]?.height || DEFAULT_ROW_HEIGHT;
+            accumulatedHeight += this.heights[endIndex] || DEFAULT_ROW_HEIGHT;
         }
         endIndex = Math.min(this.items.length - 1, endIndex + this.buffer);
     
@@ -566,8 +488,8 @@ class VirtualList {
 
             requestAnimationFrame(() => {
                 const measuredHeight = rowEl.getBoundingClientRect().height;
-                if (note.height !== measuredHeight) {
-                    note.height = measuredHeight;
+                if (this.heights[i] !== measuredHeight) {
+                    this.heights[i] = measuredHeight;
                     this.items[i] = note; // update item height
                     this.recalculateCumulativeHeights(i);
                     this.renderRows();
@@ -585,7 +507,7 @@ class VirtualList {
         let height = startIndex === 0 ? 0 : this.cumulativeHeights[startIndex - 1];
         
         for (let i = startIndex; i < this.items.length; i++) {
-            height += this.items[i].height || DEFAULT_ROW_HEIGHT;
+            height += this.heights[i] || DEFAULT_ROW_HEIGHT;
             this.cumulativeHeights[i] = height;
         }
         
