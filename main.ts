@@ -94,7 +94,6 @@ class IDSidePanelView extends ItemView {
 
         const elmApp = (this as any).elmApp;
         if (elmApp && elmApp.ports && elmApp.ports.receiveNotes) {
-            console.log("Sending notes to Elm:", combined);
             elmApp.ports.receiveNotes.send(
                 combined.map((note, index) => ({
                     title: note.title,

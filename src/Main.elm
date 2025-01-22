@@ -4,6 +4,7 @@ import Browser
 import Html exposing (Html, div, span)
 import Html.Attributes
 import Html.Events exposing (onClick)
+import Html.Lazy
 import Ports exposing (..)
 import Scroll
 import Task
@@ -109,7 +110,7 @@ view model =
         [ Html.Attributes.class "note-id-list"
         , Html.Attributes.id "note-id-list"
         ]
-        (List.map (\note -> viewNote note model.currentFile) model.notes)
+        (List.map (\note -> Html.Lazy.lazy2 viewNote note model.currentFile) model.notes)
 
 
 viewNote : NoteMeta -> Maybe String -> Html Msg
