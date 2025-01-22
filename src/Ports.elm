@@ -13,6 +13,9 @@ port sendNotes : List Encode.Value -> Cmd msg
 port receiveNotes : (List Note -> msg) -> Sub msg
 
 
+port receiveFileOpen : (Maybe String -> msg) -> Sub msg
+
+
 type alias Note =
     { title : String
     , id : Maybe String

@@ -68,6 +68,11 @@ class IDSidePanelView extends ItemView {
     
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
+                if ((this as any).elmApp && (this as any).elmApp.ports.receiveFileOpen) {
+                    const filePath = file?.path || null;
+                    (this as any).elmApp.ports.receiveFileOpen.send(filePath);
+                }
+
                 console.log("file-open");
                 this.virtualList.setActiveFile(file);
             })

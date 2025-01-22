@@ -11,7 +11,9 @@ import Html.Events exposing (onClick)
 
 
 type alias Model =
-    List Note
+    { notes : List Note
+    , currentFile : Maybe String
+    }
 
 
 type alias Note =
@@ -32,44 +34,51 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    Debug.log "Elm app initialized" ( [], Cmd.none )
+    ( { notes = [], currentFile = Nothing }, Cmd.none )
 
 
 type Msg
     = UpdateNotes (List Note)
     | OpenFile String
+    | FileOpened (Maybe String)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         UpdateNotes notes ->
-            ( notes, Cmd.none )
+            ( { model | notes = notes }, Cmd.none )
 
         OpenFile filePath ->
             ( model, Ports.openFile filePath )
 
+        FileOpened filePath ->
+            ( { model | currentFile = filePath }, Cmd.none )
+
 
 view : Model -> Html Msg
-view notes =
+view model =
     div []
         [ text "Elm app running"
         , div
             [ Html.Attributes.class "note-id-list"
             ]
-            (List.map viewNote notes)
+            (List.map (\note -> viewNote note model.currentFile) model.notes)
         ]
 
 
-viewNote : Note -> Html Msg
-viewNote note =
+viewNote : Note -> Maybe String -> Html Msg
+viewNote note currentFile =
     div
         [ Html.Attributes.class ""
         , onClick (OpenFile note.filePath)
-          -- Attach the click handler
         ]
         [ div
-            [ Html.Attributes.class "tree-item-self is-clickable"
+            [ Html.Attributes.classList
+                [ ( "tree-item-self", True )
+                , ( "is-clickable", True )
+                , ( "is-active", Just note.filePath == currentFile )
+                ]
             , Html.Attributes.attribute "data-file-path" note.filePath
             ]
             [ div
@@ -89,4 +98,7 @@ viewNote note =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    Ports.receiveNotes UpdateNotes
+    Sub.batch
+        [ Ports.receiveNotes UpdateNotes
+        , Ports.receiveFileOpen FileOpened
+        ]
