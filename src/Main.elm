@@ -3,8 +3,10 @@ module Main exposing (..)
 import Browser
 import Html exposing (Html, div, text, span)
 import Html.Attributes exposing (class, style, attribute)
-import Ports exposing (..)
 import Html.Events exposing (onClick)
+import Ports exposing (..)
+import Scroll
+import Task
 
 
 -- Define the model to store notes
@@ -41,19 +43,36 @@ type Msg
     = UpdateNotes (List Note)
     | OpenFile String
     | FileOpened (Maybe String)
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        UpdateNotes notes ->
-            ( { model | notes = notes }, Cmd.none )
+    (Debug.log "Processing message" msg)
+        |> (\_ ->
+                case msg of
+                    UpdateNotes notes ->
+                        ( { model | notes = notes }, Cmd.none )
 
-        OpenFile filePath ->
-            ( model, Ports.openFile filePath )
+                    OpenFile filePath ->
+                        ( model, Ports.openFile filePath )
 
-        FileOpened filePath ->
-            ( { model | currentFile = filePath }, Cmd.none )
+                    FileOpened filePath ->
+                        case filePath of
+                            Just path ->
+                                let
+                                    scrollCmd =
+                                        Scroll.scrollElementY "note-id-list" path 0 0
+                                            |> Task.attempt (\_ -> NoOp)
+                                in
+                                    ( { model | currentFile = Just path }, scrollCmd )
+
+                            Nothing ->
+                                ( model, Cmd.none )
+
+                    NoOp ->
+                        ( model, Cmd.none )
+           )
 
 
 view : Model -> Html Msg
@@ -71,6 +90,7 @@ viewNote : Note -> Maybe String -> Html Msg
 viewNote note currentFile =
     div
         [ Html.Attributes.class ""
+        , Html.Attributes.id note.filePath
         , onClick (OpenFile note.filePath)
         ]
         [ div
