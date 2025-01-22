@@ -335,6 +335,7 @@ class VirtualList {
     private renderedEnd = -1;
     private activeFilePath: string | null = null;
     private dataChanged = false;
+    private lastScrollTop: number = 0;  // Track last scroll position
 
     constructor(app: App, rootEl: HTMLElement) {
         this.app = app;
@@ -433,10 +434,16 @@ class VirtualList {
     }
 
     private renderRows(): void {
-        console.log("renderRows");
         const scrollTop = this.rootEl.scrollTop;
         const containerHeight = this.rootEl.clientHeight;
       
+        const SCROLL_THRESHOLD = this.buffer * DEFAULT_ROW_HEIGHT * 0.5; // pixels
+        if (Math.abs(scrollTop - this.lastScrollTop) < SCROLL_THRESHOLD && !this.dataChanged) {
+            return; // Skip rendering if minor scroll and no data change
+        }
+        this.lastScrollTop = scrollTop;
+        console.log("renderRows");
+
         let startIndex = this.findStartIndex(scrollTop) - this.buffer;
         startIndex = Math.max(0, startIndex);
       
