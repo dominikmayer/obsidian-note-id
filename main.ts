@@ -183,6 +183,17 @@ export default class IDSidePanelPlugin extends Plugin {
         );
 
         this.registerEvent(
+            this.app.vault.on('delete', async (file) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    if (this.noteCache.has(file.path)) {
+                        this.noteCache.delete(file.path);
+                        this.queueRefresh();
+                    }
+                }
+            })
+        );
+
+        this.registerEvent(
             this.app.metadataCache.on('changed', async (file) => {
                 await this.handleFileChange(file);
             })
@@ -192,14 +203,26 @@ export default class IDSidePanelPlugin extends Plugin {
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
             const newMeta = await this.extractNoteMeta(file);
-
-            if (newMeta) {
-                this.noteCache.set(file.path, newMeta);
-            } else {
-                this.noteCache.delete(file.path);
+    
+            if (!newMeta) {
+                // If the file is not relevant but was previously cached, remove it
+                if (this.noteCache.has(file.path)) {
+                    this.noteCache.delete(file.path);
+                    this.queueRefresh();
+                }
+                return;
             }
-
-            this.queueRefresh();
+    
+            const oldMeta = this.noteCache.get(file.path);
+    
+            const metaChanged = !oldMeta || 
+                                newMeta.id !== oldMeta.id || 
+                                newMeta.title !== oldMeta.title;
+    
+            if (metaChanged) {
+                this.noteCache.set(file.path, newMeta);
+                this.queueRefresh();
+            }
         }
     }
 
@@ -437,8 +460,8 @@ class VirtualList {
         const scrollTop = this.rootEl.scrollTop;
         const containerHeight = this.rootEl.clientHeight;
       
-        const SCROLL_THRESHOLD = this.buffer * DEFAULT_ROW_HEIGHT * 0.5; // pixels
-        if (Math.abs(scrollTop - this.lastScrollTop) < SCROLL_THRESHOLD && !this.dataChanged) {
+        const scrollThreshold = this.buffer * DEFAULT_ROW_HEIGHT * 0.5; // pixels
+        if (Math.abs(scrollTop - this.lastScrollTop) < scrollThreshold && !this.dataChanged) {
             return; // Skip rendering if minor scroll and no data change
         }
         this.lastScrollTop = scrollTop;
