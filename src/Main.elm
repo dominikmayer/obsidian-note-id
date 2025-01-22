@@ -15,6 +15,7 @@ import Task
 type alias Model =
     { notes : List NoteMeta
     , currentFile : Maybe String
+    , settings : Settings
     }
 
 
@@ -53,7 +54,12 @@ main =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { notes = [], currentFile = Nothing }, Cmd.none )
+    ( { notes = []
+      , currentFile = Nothing
+      , settings = exampleSettings
+      }
+    , Cmd.none
+    )
 
 
 type Msg
@@ -65,39 +71,36 @@ type Msg
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    (Debug.log "Processing message" msg)
-        |> (\_ ->
-                case msg of
-                    UpdateNotes notes ->
-                        ( { model | notes = notes }, Cmd.none )
+    case msg of
+        UpdateNotes notes ->
+            ( { model | notes = notes }, Cmd.none )
 
-                    OpenFile filePath ->
-                        ( model, Ports.openFile filePath )
+        OpenFile filePath ->
+            ( model, Ports.openFile filePath )
 
-                    FileOpened filePath ->
-                        case filePath of
-                            Just path ->
-                                let
-                                    scrollCmd =
-                                        Scroll.scrollElementY "note-id-list" path 0.5 0.5
-                                            |> Task.attempt
-                                                (\result ->
-                                                    case result of
-                                                        Ok _ ->
-                                                            Debug.log "Scroll succeeded" NoOp
+        FileOpened filePath ->
+            case filePath of
+                Just path ->
+                    let
+                        scrollCmd =
+                            Scroll.scrollElementY "note-id-list" path 0.5 0.5
+                                |> Task.attempt
+                                    (\result ->
+                                        case result of
+                                            Ok _ ->
+                                                Debug.log "Scroll succeeded" NoOp
 
-                                                        Err err ->
-                                                            Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
-                                                )
-                                in
-                                    ( { model | currentFile = Just path }, scrollCmd )
+                                            Err err ->
+                                                Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
+                                    )
+                    in
+                        ( { model | currentFile = Just path }, scrollCmd )
 
-                            Nothing ->
-                                ( model, Cmd.none )
+                Nothing ->
+                    ( model, Cmd.none )
 
-                    NoOp ->
-                        ( model, Cmd.none )
-           )
+        NoOp ->
+            ( model, Cmd.none )
 
 
 view : Model -> Html Msg
