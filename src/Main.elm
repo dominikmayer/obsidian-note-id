@@ -6,6 +6,7 @@ import Dict exposing (Dict, foldl)
 import Html exposing (Html, div, span)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
+import Html.Lazy exposing (lazy)
 import Json.Decode as Decode
 import Ports exposing (..)
 import Scroll
@@ -17,8 +18,8 @@ type alias Model =
     { notes : List NoteMeta
     , currentFile : Maybe String
     , settings : Settings
-    , cumulativeHeights : Dict Int Int
-    , rowHeights : Dict Int Int
+    , cumulativeHeights : Dict Int Float
+    , rowHeights : Dict Int Float
     , scrollTop : Float
     , containerHeight : Float
     , buffer : Int
@@ -62,7 +63,7 @@ defaultSettings =
     }
 
 
-defaultItemHeight : Int
+defaultItemHeight : Float
 defaultItemHeight =
     26
 
@@ -90,7 +91,8 @@ type Msg
     | NoOp
     | Scroll
     | ScrollUpdate (Result Browser.Dom.Error Browser.Dom.Viewport)
-    | RowHeightMeasured Int Int
+    | MeasureRowHeight String Int
+    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -170,23 +172,33 @@ update msg model =
                     in
                         ( model, Cmd.none )
 
-        RowHeightMeasured path height ->
+        RowHeightMeasured rowId (Ok element) ->
             let
-                updatedHeights =
-                    Dict.insert path height model.rowHeights
+                height =
+                    element.element.height
+
+                updatedRowHeights =
+                    Dict.insert rowId height model.rowHeights
 
                 updatedCumulativeHeights =
-                    calculateCumulativeHeights updatedHeights
+                    calculateCumulativeHeights updatedRowHeights
             in
                 ( { model
-                    | rowHeights = updatedHeights
+                    | rowHeights = updatedRowHeights
                     , cumulativeHeights = updatedCumulativeHeights
                   }
                 , Cmd.none
                 )
 
+        RowHeightMeasured _ (Err _) ->
+            -- Handle error gracefully (e.g., log it)
+            ( model, Cmd.none )
 
-calculateCumulativeHeights : Dict Int Int -> Dict Int Int
+        MeasureRowHeight rowId index ->
+            ( model, Browser.Dom.getElement rowId |> Task.attempt (RowHeightMeasured index) )
+
+
+calculateCumulativeHeights : Dict Int Float -> Dict Int Float
 calculateCumulativeHeights heights =
     foldl
         (\index height ( accumHeights, cumulative ) ->
@@ -206,7 +218,7 @@ calculateVisibleRange model =
     let
         start =
             Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> toFloat (Maybe.withDefault 0 (Dict.get i model.cumulativeHeights)) > model.scrollTop)
+                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) > model.scrollTop)
                 |> List.head
                 |> Maybe.withDefault 0
 
@@ -215,28 +227,12 @@ calculateVisibleRange model =
 
         end =
             Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> toFloat (Maybe.withDefault 0 (Dict.get i model.cumulativeHeights)) < model.scrollTop + model.containerHeight)
+                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < model.scrollTop + model.containerHeight)
                 |> lastElement
                 |> Maybe.withDefault (List.length model.notes - 1)
     in
         Debug.log "Visible Range" { start = max 0 (start - buffer), end = min (List.length model.notes) (end + buffer) }
             |> identity
-
-
-measureRowHeight : Int -> Html.Attribute Msg
-measureRowHeight index =
-    on "resize"
-        (Decode.map
-            (\value ->
-                case String.toInt value of
-                    Just intValue ->
-                        RowHeightMeasured index intValue
-
-                    Nothing ->
-                        RowHeightMeasured index 0
-            )
-            Decode.string
-        )
 
 
 lastElement : List a -> Maybe a
@@ -270,7 +266,7 @@ view model =
             , onScroll Scroll
             ]
             [ div
-                [ Html.Attributes.style "height" (String.fromInt (totalHeight model) ++ "px") ]
+                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px") ]
                 [ div []
                     (List.indexedMap (viewRow model) visibleItems)
                 ]
@@ -287,7 +283,7 @@ scrollTopDecoder =
     Decode.field "target" (Decode.field "scrollTop" Decode.float)
 
 
-totalHeight : Model -> Int
+totalHeight : Model -> Float
 totalHeight model =
     case Dict.get (List.length model.notes - 1) model.cumulativeHeights of
         Just height ->
@@ -302,29 +298,11 @@ viewRow model index note =
     let
         top =
             Dict.get (index - 1) model.cumulativeHeights
-
-        resizeDecoder : Decode.Decoder Msg
-        resizeDecoder =
-            Decode.field "target"
-                (Decode.field "value"
-                    (Decode.string
-                        |> Decode.andThen
-                            (\value ->
-                                case String.toInt value of
-                                    Just intValue ->
-                                        Decode.succeed (RowHeightMeasured index intValue)
-
-                                    Nothing ->
-                                        Decode.succeed (RowHeightMeasured index 0)
-                            )
-                    )
-                )
     in
         div
             [ Html.Attributes.id note.filePath
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
             , onClick (OpenFile note.filePath)
-            , on "resize" resizeDecoder
             ]
             [ div
                 [ Html.Attributes.classList
