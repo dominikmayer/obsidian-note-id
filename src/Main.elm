@@ -149,7 +149,9 @@ update msg model =
             ( model, Cmd.none )
 
         Scroll scrollTop ->
-            ( { model | scrollTop = scrollTop }, Cmd.none )
+            Debug.log "Scroll Top Updated" scrollTop
+                |> always
+                    ( { model | scrollTop = scrollTop }, Cmd.none )
 
         RowHeightMeasured path height ->
             let
@@ -232,37 +234,6 @@ lastElement list =
         |> List.head
 
 
-
--- findEndIndex : Float -> Float -> Int -> List Float -> Int
--- findEndIndex scrollTop containerHeight buffer cumulativeHeights =
---     -- Implement logic to find the end index
---     List.length cumulativeHeights
--- recalculateHeights : Model -> List Float -> Model
--- recalculateHeights model newHeights =
---     -- Update heights and recalculate cumulative heights
---     model
--- getContainerHeight : Task.Task Browser.Dom.Error Float
--- getContainerHeight =
---     Task.map
---         (\element -> element.element.height)
---         (Browser.Dom.getElement "note-id-list")
--- measureRowHeights : Int -> Int -> Cmd Msg
--- measureRowHeights start end =
---     getContainerHeight
---         |> Task.attempt
---             (\result ->
---                 case result of
---                     Ok height ->
---                         Debug.log "Container height"
---                             UpdateContainerHeight
---                             (round height)
---                     -- Convert to Int
---                     Err _ ->
---                         Debug.log "Container height failed"
---                             NoOp
---             )
-
-
 slice : Int -> Int -> List a -> List a
 slice start end list =
     list
@@ -285,9 +256,10 @@ view model =
         --     ]
         --     (List.map (\note -> Html.Lazy.lazy2 viewNote note model.currentFile) model.notes)
         div [ Html.Attributes.class "virtual-list", onScroll Scroll ]
-            [ div [ Html.Attributes.style "height" (String.fromInt (totalHeight model) ++ "px") ] []
-            , div []
-                (List.indexedMap (viewRow model) visibleItems)
+            [ div [ Html.Attributes.style "height" (String.fromInt (totalHeight model) ++ "px") ]
+                [ div []
+                    (List.indexedMap (viewRow model) visibleItems)
+                ]
             ]
 
 
@@ -363,33 +335,36 @@ viewRow model index note =
                     )
                 )
     in
-        div
-            [ Html.Attributes.id note.filePath
-            , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
-            , onClick (OpenFile note.filePath)
-            , on "resize" resizeDecoder
-            ]
-            [ div
-                [ Html.Attributes.classList
-                    [ ( "tree-item-self", True )
-                    , ( "is-clickable", True )
-                    , ( "is-active", Just note.filePath == model.currentFile )
+        Debug.log "Row Top" (toString top)
+            |> always
+                (div
+                    [ Html.Attributes.id note.filePath
+                    , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
+                    , onClick (OpenFile note.filePath)
+                    , on "resize" resizeDecoder
                     ]
-                , Html.Attributes.attribute "data-file-path" note.filePath
-                ]
-                [ div
-                    [ Html.Attributes.class "tree-item-inner" ]
-                    (case note.id of
-                        Just id ->
-                            [ span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                            , Html.text note.title
+                    [ div
+                        [ Html.Attributes.classList
+                            [ ( "tree-item-self", True )
+                            , ( "is-clickable", True )
+                            , ( "is-active", Just note.filePath == model.currentFile )
                             ]
+                        , Html.Attributes.attribute "data-file-path" note.filePath
+                        ]
+                        [ div
+                            [ Html.Attributes.class "tree-item-inner" ]
+                            (case note.id of
+                                Just id ->
+                                    [ span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                                    , Html.text note.title
+                                    ]
 
-                        Nothing ->
-                            [ Html.text note.title ]
-                    )
-                ]
-            ]
+                                Nothing ->
+                                    [ Html.text note.title ]
+                            )
+                        ]
+                    ]
+                )
 
 
 subscriptions : Model -> Sub Msg
