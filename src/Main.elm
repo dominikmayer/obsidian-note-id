@@ -3,10 +3,9 @@ module Main exposing (..)
 import Browser
 import Browser.Dom
 import Dict exposing (Dict, foldl)
-import Html exposing (Html, div, span, text)
+import Html exposing (Html, div, span)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
-import Html.Lazy
 import Json.Decode as Decode
 import Ports exposing (..)
 import Scroll
@@ -19,10 +18,7 @@ type alias Model =
     , currentFile : Maybe String
     , settings : Settings
     , cumulativeHeights : Dict Int Int
-    , rowHeights :
-        Dict Int Int
-        -- , renderStart : Int
-        -- , renderEnd : Int
+    , rowHeights : Dict Int Int
     , scrollTop : Float
     , containerHeight : Float
     , buffer : Int
@@ -35,10 +31,7 @@ defaultModel =
     , currentFile = Nothing
     , settings = defaultSettings
     , cumulativeHeights = Dict.empty
-    , rowHeights =
-        Dict.empty
-        -- , renderStart = 0
-        -- , renderEnd = -1
+    , rowHeights = Dict.empty
     , scrollTop = 0
     , containerHeight = 500
     , buffer = 5
@@ -158,14 +151,10 @@ update msg model =
                     let
                         newScrollTop =
                             viewport.viewport.y
-
-                        -- Use y for vertical scrolling
-                        _ =
-                            Debug.log "Scroll Position" newScrollTop
-
-                        -- Debug the position
                     in
-                        ( { model | scrollTop = newScrollTop }, Cmd.none )
+                        Debug.log "Scroll Top" newScrollTop
+                            |> always
+                                ( { model | scrollTop = newScrollTop }, Cmd.none )
 
                 Err error ->
                     -- Handle the error (e.g., log it or ignore it)
@@ -189,12 +178,6 @@ update msg model =
                   }
                 , Cmd.none
                 )
-
-
-findStartIndex : Float -> Int -> List Float -> Int
-findStartIndex scrollTop buffer cumulativeHeights =
-    -- Implement binary search or linear logic to find the start index
-    0
 
 
 calculateCumulativeHeights : Dict Int Int -> Dict Int Int
@@ -277,11 +260,8 @@ view model =
             [ Html.Attributes.class "virtual-list"
             , Html.Attributes.id "virtual-list"
             , Html.Attributes.style "height" "100%"
-              -- Fixed height
             , Html.Attributes.style "overflow" "auto"
-              -- Enable scrolling
             , onScroll Scroll
-              -- Trigger the Scroll message
             ]
             [ div
                 [ Html.Attributes.style "height" (String.fromInt (totalHeight model) ++ "px") ]
