@@ -150,11 +150,17 @@ update msg model =
                 Ok viewport ->
                     let
                         newScrollTop =
-                            viewport.viewport.y
+                            Debug.log "Scroll Top" viewport.viewport.y
+
+                        containerHeight =
+                            Debug.log "Container Height" viewport.viewport.height
                     in
-                        Debug.log "Scroll Top" newScrollTop
-                            |> always
-                                ( { model | scrollTop = newScrollTop }, Cmd.none )
+                        ( { model
+                            | scrollTop = newScrollTop
+                            , containerHeight = containerHeight
+                          }
+                        , Cmd.none
+                        )
 
                 Err error ->
                     -- Handle the error (e.g., log it or ignore it)
