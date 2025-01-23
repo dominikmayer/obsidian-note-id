@@ -1,10 +1,11 @@
 module Main exposing (..)
 
 import Browser
+import Browser.Dom
 import Html exposing (Html, div, span)
 import Html.Attributes
 import Html.Events exposing (onClick)
-import Html.Lazy
+import InfiniteList
 import Ports exposing (..)
 import Scroll
 import Task
@@ -17,6 +18,8 @@ type alias Model =
     { notes : List NoteMeta
     , currentFile : Maybe String
     , settings : Settings
+    , infiniteList : InfiniteList.Model
+    , containerHeight : Int
     }
 
 
@@ -58,8 +61,10 @@ init _ =
     ( { notes = []
       , currentFile = Nothing
       , settings = exampleSettings
+      , infiniteList = InfiniteList.init
+      , containerHeight = 500
       }
-    , Cmd.none
+    , getContainerHeightCmd
     )
 
 
@@ -68,6 +73,8 @@ type Msg
     | OpenFile String
     | FileOpened (Maybe String)
     | NoOp
+    | InfiniteListMsg InfiniteList.Model
+    | UpdateContainerHeight Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -103,14 +110,63 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
+        InfiniteListMsg infiniteList ->
+            ( { model | infiniteList = infiniteList }, Cmd.none )
+
+        UpdateContainerHeight height ->
+            ( { model | containerHeight = height }, Cmd.none )
+
+
+config : Model -> InfiniteList.Config NoteMeta Msg
+config model =
+    InfiniteList.config
+        { itemView = itemView model.currentFile
+        , itemHeight = InfiniteList.withConstantHeight 50
+        , containerHeight = model.containerHeight
+        }
+        |> InfiniteList.withClass "note-id-list-scroll"
+
+
+getContainerHeight : Task.Task Browser.Dom.Error Float
+getContainerHeight =
+    Task.map
+        (\element -> element.element.height)
+        (Browser.Dom.getElement "note-id-list")
+
+
+getContainerHeightCmd : Cmd Msg
+getContainerHeightCmd =
+    getContainerHeight
+        |> Task.attempt
+            (\result ->
+                case result of
+                    Ok height ->
+                        Debug.log "Container height"
+                            UpdateContainerHeight
+                            (round height)
+
+                    -- Convert to Int
+                    Err _ ->
+                        Debug.log "Container height failed"
+                            NoOp
+            )
+
+
+itemView : Maybe String -> Int -> Int -> NoteMeta -> Html Msg
+itemView currentFile _ _ item =
+    viewNote item currentFile
+
 
 view : Model -> Html Msg
 view model =
     div
         [ Html.Attributes.class "note-id-list"
         , Html.Attributes.id "note-id-list"
+        , InfiniteList.onScroll InfiniteListMsg
+        , Html.Attributes.style "height" "100%"
         ]
-        (List.map (\note -> Html.Lazy.lazy2 viewNote note model.currentFile) model.notes)
+        -- (List.map (\note -> Html.Lazy.lazy2 viewNote note model.currentFile) model.notes)
+        [ InfiniteList.view (config model) model.infiniteList model.notes ]
 
 
 viewNote : NoteMeta -> Maybe String -> Html Msg
@@ -118,6 +174,7 @@ viewNote note currentFile =
     div
         [ Html.Attributes.id note.filePath
         , onClick (OpenFile note.filePath)
+        , Html.Attributes.style "height" "26px"
         ]
         [ div
             [ Html.Attributes.classList
