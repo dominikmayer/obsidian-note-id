@@ -131,7 +131,7 @@ update msg model =
             ( model, Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list") )
 
         ViewportUpdated result ->
-            handleViewportUdpate model result
+            handleViewportUpdate model result
 
         RowHeightMeasured rowId (Ok element) ->
             let
@@ -205,11 +205,11 @@ fileOpened model filePath =
             ( model, Cmd.none )
 
 
-handleViewportUdpate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUdpate model result =
+handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
+handleViewportUpdate model result =
     case result of
         Ok viewport ->
-            handleViewportUdpateSucceeded model viewport
+            handleViewportUpdateSucceeded model viewport
 
         Err error ->
             Debug.log "Error fetching viewport" error
@@ -217,8 +217,8 @@ handleViewportUdpate model result =
                     ( model, Cmd.none )
 
 
-handleViewportUdpateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUdpateSucceeded model viewport =
+handleViewportUpdateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
+handleViewportUpdateSucceeded model viewport =
     let
         newScrollTop =
             Debug.log "Scroll Top" viewport.viewport.y
@@ -238,11 +238,11 @@ handleViewportUdpateSucceeded model viewport =
                     |> List.filter
                         (\index ->
                             case Dict.get index model.rowHeights of
-                                Just (Default value) ->
+                                Just (Default _) ->
                                     True
 
                                 -- Include rows with default value
-                                Just (Measured value) ->
+                                Just (Measured _) ->
                                     False
 
                                 -- Exclude rows with measured value
@@ -256,12 +256,12 @@ handleViewportUdpateSucceeded model viewport =
             unmeasuredIndices
                 |> List.filterMap
                     (\index ->
-                        case Debug.log "Row ID (FilePath)" (noteFilePath model index) of
-                            Just filePath ->
-                                Just (Browser.Dom.getElement filePath |> Task.attempt (RowHeightMeasured index))
-
-                            Nothing ->
-                                Nothing
+                        Debug.log "Row ID (FilePath)" (noteFilePath model index)
+                            |> Maybe.map
+                                (\filePath ->
+                                    Browser.Dom.getElement filePath
+                                        |> Task.attempt (RowHeightMeasured index)
+                                )
                     )
                 |> Cmd.batch
     in
