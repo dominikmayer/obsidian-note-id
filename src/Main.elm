@@ -3,10 +3,10 @@ module Main exposing (..)
 import Browser
 import Browser.Dom
 import Dict exposing (Dict, foldl)
-import Html exposing (Html, div, span)
+import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
-import Html.Lazy exposing (lazy)
+import List.Extra exposing (..)
 import Json.Decode as Decode
 import Ports exposing (..)
 import Scroll
@@ -19,11 +19,27 @@ type alias Model =
     , currentFile : Maybe String
     , settings : Settings
     , cumulativeHeights : Dict Int Float
-    , rowHeights : Dict Int Float
+    , rowHeights : Dict Int RowHeight
     , scrollTop : Float
     , containerHeight : Float
     , buffer : Int
+    , visibleRange : ( Int, Int )
     }
+
+
+type RowHeight
+    = Measured Float
+    | Default Float
+
+
+rowHeightToFloat : RowHeight -> Float
+rowHeightToFloat rowHeight =
+    case rowHeight of
+        Measured value ->
+            value
+
+        Default value ->
+            value
 
 
 defaultModel : Model
@@ -36,6 +52,7 @@ defaultModel =
     , scrollTop = 0
     , containerHeight = 500
     , buffer = 5
+    , visibleRange = ( 0, 20 )
     }
 
 
@@ -85,12 +102,12 @@ init _ =
 
 
 type Msg
-    = UpdateNotes (List NoteMeta)
-    | OpenFile String
+    = NotesProvided (List NoteMeta)
+    | NoteClicked String
     | FileOpened (Maybe String)
     | NoOp
-    | Scroll
-    | ScrollUpdate (Result Browser.Dom.Error Browser.Dom.Viewport)
+    | Scrolled
+    | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
     | MeasureRowHeight String Int
     | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
 
@@ -98,87 +115,31 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        UpdateNotes notes ->
-            let
-                initialHeights =
-                    List.indexedMap (\i _ -> ( i, defaultItemHeight )) notes
-                        -- Default initial height of 40
-                        |>
-                            Dict.fromList
+        NotesProvided notes ->
+            updateNotes model notes
 
-                cumulativeHeights =
-                    calculateCumulativeHeights initialHeights
-            in
-                ( { model
-                    | notes = notes
-                    , rowHeights = initialHeights
-                    , cumulativeHeights = cumulativeHeights
-                  }
-                , Cmd.none
-                )
-
-        OpenFile filePath ->
+        NoteClicked filePath ->
             ( model, Ports.openFile filePath )
 
         FileOpened filePath ->
-            case filePath of
-                Just path ->
-                    let
-                        scrollCmd =
-                            Scroll.scrollElementY "note-id-list" path 0.5 0.5
-                                |> Task.attempt
-                                    (\result ->
-                                        case result of
-                                            Ok _ ->
-                                                Debug.log "Scroll succeeded" NoOp
-
-                                            Err err ->
-                                                Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
-                                    )
-                    in
-                        ( { model | currentFile = Just path }, scrollCmd )
-
-                Nothing ->
-                    ( model, Cmd.none )
+            fileOpened model filePath
 
         NoOp ->
             ( model, Cmd.none )
 
-        Scroll ->
-            ( model, Task.attempt ScrollUpdate (Browser.Dom.getViewportOf "virtual-list") )
+        Scrolled ->
+            ( model, Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list") )
 
-        ScrollUpdate result ->
-            case result of
-                Ok viewport ->
-                    let
-                        newScrollTop =
-                            Debug.log "Scroll Top" viewport.viewport.y
-
-                        containerHeight =
-                            Debug.log "Container Height" viewport.viewport.height
-                    in
-                        ( { model
-                            | scrollTop = newScrollTop
-                            , containerHeight = containerHeight
-                          }
-                        , Cmd.none
-                        )
-
-                Err error ->
-                    -- Handle the error (e.g., log it or ignore it)
-                    let
-                        _ =
-                            Debug.log "Error fetching viewport" error
-                    in
-                        ( model, Cmd.none )
+        ViewportUpdated result ->
+            handleViewportUdpate model result
 
         RowHeightMeasured rowId (Ok element) ->
             let
                 height =
-                    element.element.height
+                    Debug.log "Measured" element.element.height
 
                 updatedRowHeights =
-                    Dict.insert rowId height model.rowHeights
+                    Dict.insert rowId (Measured height) model.rowHeights
 
                 updatedCumulativeHeights =
                     calculateCumulativeHeights updatedRowHeights
@@ -190,19 +151,150 @@ update msg model =
                 , Cmd.none
                 )
 
-        RowHeightMeasured _ (Err _) ->
-            -- Handle error gracefully (e.g., log it)
-            ( model, Cmd.none )
+        RowHeightMeasured err (Err _) ->
+            Debug.log "Couldn't measure" err
+                |> always
+                    ( model, Cmd.none )
 
         MeasureRowHeight rowId index ->
             ( model, Browser.Dom.getElement rowId |> Task.attempt (RowHeightMeasured index) )
 
 
-calculateCumulativeHeights : Dict Int Float -> Dict Int Float
+updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
+updateNotes model notes =
+    let
+        initialHeights =
+            List.indexedMap (\i _ -> ( i, Default defaultItemHeight )) notes
+                -- Default initial height of 40
+                |>
+                    Dict.fromList
+
+        cumulativeHeights =
+            calculateCumulativeHeights initialHeights
+    in
+        ( { model
+            | notes =
+                notes
+            , rowHeights = initialHeights
+            , cumulativeHeights = cumulativeHeights
+          }
+        , Cmd.none
+        )
+
+
+fileOpened : Model -> Maybe String -> ( Model, Cmd Msg )
+fileOpened model filePath =
+    case filePath of
+        Just path ->
+            let
+                scrollCmd =
+                    Scroll.scrollElementY "note-id-list" path 0.5 0.5
+                        |> Task.attempt
+                            (\result ->
+                                case result of
+                                    Ok _ ->
+                                        Debug.log "Scroll succeeded" NoOp
+
+                                    Err err ->
+                                        Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
+                            )
+            in
+                ( { model | currentFile = Just path }, scrollCmd )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+handleViewportUdpate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
+handleViewportUdpate model result =
+    case result of
+        Ok viewport ->
+            handleViewportUdpateSucceeded model viewport
+
+        Err error ->
+            Debug.log "Error fetching viewport" error
+                |> always
+                    ( model, Cmd.none )
+
+
+handleViewportUdpateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
+handleViewportUdpateSucceeded model viewport =
+    let
+        newScrollTop =
+            Debug.log "Scroll Top" viewport.viewport.y
+
+        newContainerHeight =
+            viewport.viewport.height
+
+        visibleRange =
+            Debug.log "Visible range" (calculateVisibleRange model newScrollTop newContainerHeight)
+
+        ( start, end ) =
+            visibleRange
+
+        unmeasuredIndices =
+            Debug.log "Unmeasured" <|
+                (List.range start end
+                    |> List.filter
+                        (\index ->
+                            case Dict.get index model.rowHeights of
+                                Just (Default value) ->
+                                    True
+
+                                -- Include rows with default value
+                                Just (Measured value) ->
+                                    False
+
+                                -- Exclude rows with measured value
+                                Nothing ->
+                                    True
+                         -- Include rows not yet in the dictionary
+                        )
+                )
+
+        measureCmds =
+            unmeasuredIndices
+                |> List.filterMap
+                    (\index ->
+                        case Debug.log "Row ID (FilePath)" (noteFilePath model index) of
+                            Just filePath ->
+                                Just (Browser.Dom.getElement filePath |> Task.attempt (RowHeightMeasured index))
+
+                            Nothing ->
+                                Nothing
+                    )
+                |> Cmd.batch
+    in
+        ( { model
+            | scrollTop = newScrollTop
+            , containerHeight = newContainerHeight
+            , visibleRange = visibleRange
+          }
+        , measureCmds
+        )
+
+
+noteId : Model -> Int -> String
+noteId model index =
+    List.Extra.getAt index model.notes
+        |> Maybe.map .filePath
+        |> Maybe.withDefault ("row-" ++ String.fromInt index)
+
+
+noteFilePath : Model -> Int -> Maybe String
+noteFilePath model index =
+    List.Extra.getAt index model.notes
+        |> Maybe.map .filePath
+
+
+calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
 calculateCumulativeHeights heights =
     foldl
-        (\index height ( accumHeights, cumulative ) ->
+        (\index rowHeight ( accumHeights, cumulative ) ->
             let
+                height =
+                    rowHeightToFloat rowHeight
+
                 cumulativeHeight =
                     cumulative + height
             in
@@ -213,33 +305,28 @@ calculateCumulativeHeights heights =
         |> Tuple.first
 
 
-calculateVisibleRange : Model -> { start : Int, end : Int }
-calculateVisibleRange model =
+calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
+calculateVisibleRange model scrollTop containerHeight =
     let
+        -- Find the start of the visible range
         start =
             Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) > model.scrollTop)
+                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) >= scrollTop)
                 |> List.head
                 |> Maybe.withDefault 0
 
-        buffer =
-            model.buffer
-
+        -- Find the end of the visible range
         end =
             Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < model.scrollTop + model.containerHeight)
-                |> lastElement
+                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < scrollTop + containerHeight)
+                |> last
                 |> Maybe.withDefault (List.length model.notes - 1)
+
+        -- Apply buffer to the range
+        buffer =
+            model.buffer
     in
-        Debug.log "Visible Range" { start = max 0 (start - buffer), end = min (List.length model.notes) (end + buffer) }
-            |> identity
-
-
-lastElement : List a -> Maybe a
-lastElement list =
-    list
-        |> List.reverse
-        |> List.head
+        ( (max 0 (start - buffer)), (min (List.length model.notes - 1) (end + buffer)) )
 
 
 slice : Int -> Int -> List a -> List a
@@ -252,18 +339,18 @@ slice start end list =
 view : Model -> Html Msg
 view model =
     let
-        visibleRange =
-            calculateVisibleRange model
+        ( start, end ) =
+            model.visibleRange
 
         visibleItems =
-            slice visibleRange.start visibleRange.end model.notes
+            slice start end model.notes
     in
         div
             [ Html.Attributes.class "virtual-list"
             , Html.Attributes.id "virtual-list"
             , Html.Attributes.style "height" "100%"
             , Html.Attributes.style "overflow" "auto"
-            , onScroll Scroll
+            , onScroll Scrolled
             ]
             [ div
                 [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px") ]
@@ -302,7 +389,7 @@ viewRow model index note =
         div
             [ Html.Attributes.id note.filePath
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
-            , onClick (OpenFile note.filePath)
+            , onClick (NoteClicked note.filePath)
             ]
             [ div
                 [ Html.Attributes.classList
@@ -316,7 +403,7 @@ viewRow model index note =
                     [ Html.Attributes.class "tree-item-inner" ]
                     (case note.id of
                         Just id ->
-                            [ span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                            [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
                             , Html.text note.title
                             ]
 
@@ -330,6 +417,6 @@ viewRow model index note =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Ports.receiveNotes UpdateNotes
+        [ Ports.receiveNotes NotesProvided
         , Ports.receiveFileOpen FileOpened
         ]
