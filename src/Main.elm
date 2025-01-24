@@ -133,28 +133,8 @@ update msg model =
         ViewportUpdated result ->
             handleViewportUpdate model result
 
-        RowHeightMeasured rowId (Ok element) ->
-            let
-                height =
-                    Debug.log "Measured" element.element.height
-
-                updatedRowHeights =
-                    Dict.insert rowId (Measured height) model.rowHeights
-
-                updatedCumulativeHeights =
-                    calculateCumulativeHeights updatedRowHeights
-            in
-                ( { model
-                    | rowHeights = updatedRowHeights
-                    , cumulativeHeights = updatedCumulativeHeights
-                  }
-                , Cmd.none
-                )
-
-        RowHeightMeasured err (Err _) ->
-            Debug.log "Couldn't measure" err
-                |> always
-                    ( model, Cmd.none )
+        RowHeightMeasured index result ->
+            handleRowHeightMeasurementResult model index result
 
         MeasureRowHeight rowId index ->
             ( model, Browser.Dom.getElement rowId |> Task.attempt (RowHeightMeasured index) )
@@ -232,6 +212,9 @@ handleViewportUpdateSucceeded model viewport =
         ( start, end ) =
             visibleRange
 
+        shownHeights =
+            Debug.log "shown Heights" <| getElementsInRange start end model.rowHeights
+
         unmeasuredIndices =
             Debug.log "Unmeasured" <|
                 (List.range start end
@@ -274,6 +257,38 @@ handleViewportUpdateSucceeded model viewport =
         )
 
 
+handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
+handleRowHeightMeasurementResult model index result =
+    case result of
+        Ok element ->
+            updateRowHeight model index element
+
+        Err err ->
+            Debug.log "Couldn't measure" err
+                |> always
+                    ( model, Cmd.none )
+
+
+updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
+updateRowHeight model index element =
+    let
+        height =
+            Debug.log "Measured" element.element.height
+
+        updatedRowHeights =
+            Dict.insert index (Measured height) model.rowHeights
+
+        updatedCumulativeHeights =
+            calculateCumulativeHeights updatedRowHeights
+    in
+        ( { model
+            | rowHeights = updatedRowHeights
+            , cumulativeHeights = updatedCumulativeHeights
+          }
+        , Cmd.none
+        )
+
+
 noteId : Model -> Int -> String
 noteId model index =
     List.Extra.getAt index model.notes
@@ -285,6 +300,12 @@ noteFilePath : Model -> Int -> Maybe String
 noteFilePath model index =
     List.Extra.getAt index model.notes
         |> Maybe.map .filePath
+
+
+getElementsInRange : Int -> Int -> Dict Int v -> List ( Int, v )
+getElementsInRange start end dict =
+    Dict.toList dict
+        |> List.filter (\( key, _ ) -> key >= start && key <= end)
 
 
 calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
