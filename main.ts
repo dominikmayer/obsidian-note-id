@@ -43,7 +43,6 @@ class IDSidePanelView extends ItemView {
 
         const elmContainer = container.createDiv();
         
-        console.log("onOpen");
         const elmApp = Elm.Main.init({
             node: elmContainer,
         });
@@ -63,8 +62,6 @@ class IDSidePanelView extends ItemView {
                     const filePath = file?.path || null;
                     (this as any).elmApp.ports.receiveFileOpen.send(filePath);
                 }
-
-                console.log("file-open");
             })
         );
         this.renderNotes();
@@ -105,8 +102,6 @@ class IDSidePanelView extends ItemView {
                     filePath: note.file.path
                 }))
             );
-        } else {
-            console.error("Elm app or ports not set up correctly");
         }
     }
 }
@@ -199,11 +194,8 @@ export default class IDSidePanelPlugin extends Plugin {
                 await this.handleFileChange(file);
                 // Sending this after the files are reloaded so scrolling works
                 const elmApp = this.getElmApp();
-                console.log("elmApp", elmApp);
                 if (elmApp && elmApp.ports.receiveFileRenamed) {
                     elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
-                } else {
-                    console.log("error")
                 }
             })
         );
@@ -279,7 +271,6 @@ export default class IDSidePanelPlugin extends Plugin {
 
         // Reveal the leaf to make it active
         this.app.workspace.revealLeaf(leaf);
-        console.log("opening");
         await this.refreshView();
     }
 
@@ -290,7 +281,6 @@ export default class IDSidePanelPlugin extends Plugin {
     }
 
     async saveSettings() {
-        console.log("saving settings");
         await this.saveData(this.settings);
         await this.initializeCache();
         await this.refreshView();

@@ -232,8 +232,7 @@ scrollToNote model path =
                 scrollToPosition "virtual-list" elementStart model.containerHeight
 
         Nothing ->
-            Debug.log "Item not found" path
-                |> always Cmd.none
+            Cmd.none
 
 
 scrollToPosition : String -> Float -> Float -> Cmd Msg
@@ -252,10 +251,8 @@ handleViewportUpdate model result =
         Ok viewport ->
             handleViewportUpdateSucceeded model viewport
 
-        Err error ->
-            Debug.log "Error fetching viewport" error
-                |> always
-                    ( model, Cmd.none )
+        Err _ ->
+            ( model, Cmd.none )
 
 
 handleViewportUpdateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
@@ -274,7 +271,7 @@ handleViewportUpdateSucceeded model viewport =
             visibleRange
 
         unmeasuredIndices =
-            List.range start end
+            List.range start (end - 1)
                 |> List.filter
                     (\index ->
                         case Dict.get index model.rowHeights of
@@ -316,10 +313,8 @@ handleRowHeightMeasurementResult model index result =
         Ok element ->
             updateRowHeight model index element
 
-        Err err ->
-            Debug.log "Couldn't measure" err
-                |> always
-                    ( model, Cmd.none )
+        Err _ ->
+            ( model, Cmd.none )
 
 
 updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
@@ -340,13 +335,6 @@ updateRowHeight model index element =
           }
         , Cmd.none
         )
-
-
-noteId : Model -> Int -> String
-noteId model index =
-    List.Extra.getAt index model.notes
-        |> Maybe.map .filePath
-        |> Maybe.withDefault ("row-" ++ String.fromInt index)
 
 
 noteFilePath : Model -> Int -> Maybe String
