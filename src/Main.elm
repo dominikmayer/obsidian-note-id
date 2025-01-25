@@ -365,25 +365,22 @@ calculateCumulativeHeights heights =
 calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
-        -- Find the start of the visible range
         start =
             Dict.keys model.cumulativeHeights
                 |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) >= scrollTop)
                 |> List.head
                 |> Maybe.withDefault 0
 
-        -- Find the end of the visible range
         end =
             Dict.keys model.cumulativeHeights
                 |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < scrollTop + containerHeight)
                 |> last
                 |> Maybe.withDefault (List.length model.notes - 1)
 
-        -- Apply buffer to the range
         buffer =
             model.buffer
     in
-        ( (max 0 (start - buffer)), (min (List.length model.notes - 1) (end + buffer)) )
+        ( (max 0 (start - buffer)), (min (List.length model.notes) (end + buffer)) )
 
 
 slice : Int -> Int -> List a -> List a
