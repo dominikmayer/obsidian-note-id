@@ -86,6 +86,7 @@ defaultItemHeight =
     26
 
 
+main : Program () Model Msg
 main =
     Browser.element
         { init = init
@@ -343,12 +344,6 @@ noteFilePath model index =
         |> Maybe.map .filePath
 
 
-getElementsInRange : Int -> Int -> Dict Int v -> List ( Int, v )
-getElementsInRange start end dict =
-    Dict.toList dict
-        |> List.filter (\( key, _ ) -> key >= start && key <= end)
-
-
 calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
 calculateCumulativeHeights heights =
     foldl
@@ -440,11 +435,6 @@ onScroll msg =
     on "scroll" (Decode.succeed msg)
 
 
-scrollTopDecoder : Decode.Decoder Float
-scrollTopDecoder =
-    Decode.field "target" (Decode.field "scrollTop" Decode.float)
-
-
 totalHeight : Model -> Float
 totalHeight model =
     case Dict.get (List.length model.notes - 1) model.cumulativeHeights of
@@ -458,9 +448,6 @@ totalHeight model =
 viewRow : Model -> Int -> NoteMeta -> Html Msg
 viewRow model index note =
     let
-        height =
-            rowHeightToFloat (Maybe.withDefault (Default defaultItemHeight) (Dict.get index model.rowHeights))
-
         top =
             Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
     in
