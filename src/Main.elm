@@ -103,6 +103,7 @@ init _ =
 
 type Msg
     = NotesProvided (List NoteMeta)
+    | NotesUpdated
     | NoteClicked String
     | FileOpened (Maybe String)
     | NoOp
@@ -118,6 +119,9 @@ update msg model =
         NotesProvided notes ->
             updateNotes model notes
 
+        NotesUpdated ->
+            ( model, measureViewport )
+
         NoteClicked filePath ->
             ( model, Ports.openFile filePath )
 
@@ -128,7 +132,7 @@ update msg model =
             ( model, Cmd.none )
 
         Scrolled ->
-            ( model, Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list") )
+            ( model, measureViewport )
 
         ViewportUpdated result ->
             handleViewportUpdate model result
@@ -158,8 +162,13 @@ updateNotes model notes =
             , rowHeights = initialHeights
             , cumulativeHeights = cumulativeHeights
           }
-        , Cmd.none
+        , Task.perform (\_ -> NotesUpdated) (Task.succeed ())
         )
+
+
+measureViewport : Cmd Msg
+measureViewport =
+    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list")
 
 
 fileOpened : Model -> Maybe String -> ( Model, Cmd Msg )
@@ -212,28 +221,23 @@ handleViewportUpdateSucceeded model viewport =
         ( start, end ) =
             visibleRange
 
-        shownHeights =
-            Debug.log "shown Heights" <| getElementsInRange start end model.rowHeights
-
         unmeasuredIndices =
-            Debug.log "Unmeasured" <|
-                (List.range start end
-                    |> List.filter
-                        (\index ->
-                            case Dict.get index model.rowHeights of
-                                Just (Default _) ->
-                                    True
+            List.range start end
+                |> List.filter
+                    (\index ->
+                        case Dict.get index model.rowHeights of
+                            Just (Default _) ->
+                                True
 
-                                -- Include rows with default value
-                                Just (Measured _) ->
-                                    False
+                            -- Include rows with default value
+                            Just (Measured _) ->
+                                False
 
-                                -- Exclude rows with measured value
-                                Nothing ->
-                                    True
-                         -- Include rows not yet in the dictionary
-                        )
-                )
+                            -- Exclude rows with measured value
+                            Nothing ->
+                                True
+                     -- Include rows not yet in the dictionary
+                    )
 
         measureCmds =
             unmeasuredIndices
@@ -361,10 +365,25 @@ view : Model -> Html Msg
 view model =
     let
         ( start, end ) =
-            model.visibleRange
+            Debug.log "visible range view: " model.visibleRange
 
         visibleItems =
             slice start end model.notes
+
+        _ =
+            Debug.log "cummulative heights: " model.cumulativeHeights
+
+        rows =
+            List.indexedMap
+                (\localIndex item ->
+                    let
+                        globalIndex =
+                            start + localIndex
+                    in
+                        viewRow model globalIndex item
+                )
+                -- (Debug.log "visible items: " visibleItems)
+                visibleItems
     in
         div
             [ Html.Attributes.class "virtual-list"
@@ -373,10 +392,19 @@ view model =
             , Html.Attributes.style "overflow" "auto"
             , onScroll Scrolled
             ]
-            [ div
-                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px") ]
-                [ div []
-                    (List.indexedMap (viewRow model) visibleItems)
+            [ --     div
+              --     [ Html.Attributes.style "position" "absolute"
+              --     ]
+              --     [ Html.text ("start: " ++ toString start ++ ", end: " ++ toString end)
+              --     ]
+              -- ,
+              div
+                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px")
+                , Html.Attributes.class "note-id-list-spacer"
+                ]
+                [ div [ Html.Attributes.class "note-id-list-items" ]
+                    rows
+                  -- (List.indexedMap (viewRow model) (Debug.log "visible items: " visibleItems))
                 ]
             ]
 
@@ -404,12 +432,17 @@ totalHeight model =
 viewRow : Model -> Int -> NoteMeta -> Html Msg
 viewRow model index note =
     let
+        height =
+            rowHeightToFloat (Maybe.withDefault (Default defaultItemHeight) (Dict.get index model.rowHeights))
+
         top =
-            Dict.get (index - 1) model.cumulativeHeights
+            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
     in
         div
             [ Html.Attributes.id note.filePath
+            , Html.Attributes.class "note-id-item"
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
+            , Html.Attributes.style "height" ("height: " ++ toString height ++ "px")
             , onClick (NoteClicked note.filePath)
             ]
             [ div
