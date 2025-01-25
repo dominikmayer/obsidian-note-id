@@ -2,11 +2,6 @@
     color: var(--text-faint);
 }
 
-.note-id-list {
-    overflow-y: auto;
-    position: relative;
-}
-
 .note-id-list-spacer {
     position: relative;
 }
@@ -22,12 +17,6 @@
     left: 0;
     right: 0;
     overflow: hidden;
-}
-
-.note-id-measurement-item {
-    position: absolute;
-    visibility: hidden;
-    height: auto;
 }
 
 .virtual-list {
