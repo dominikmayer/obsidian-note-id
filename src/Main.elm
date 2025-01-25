@@ -147,22 +147,38 @@ update msg model =
 
 
 updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
-updateNotes model notes =
+updateNotes model newNotes =
     let
-        initialHeights =
-            List.indexedMap (\i _ -> ( i, Default defaultItemHeight )) notes
-                -- Default initial height of 40
-                |>
-                    Dict.fromList
+        existingHeights =
+            newNotes
+                |> List.filterMap
+                    (\note ->
+                        findIndexByFilePath note.filePath model.notes
+                            |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
+                            |> Maybe.map (\height -> ( note.filePath, height ))
+                    )
+                |> Dict.fromList
 
-        cumulativeHeights =
-            calculateCumulativeHeights initialHeights
+        updatedRowHeights =
+            newNotes
+                |> List.indexedMap
+                    (\i note ->
+                        case Dict.get note.filePath existingHeights of
+                            Just height ->
+                                ( i, height )
+
+                            Nothing ->
+                                ( i, Default defaultItemHeight )
+                    )
+                |> Dict.fromList
+
+        updatedCumulativeHeights =
+            calculateCumulativeHeights updatedRowHeights
     in
         ( { model
-            | notes =
-                notes
-            , rowHeights = initialHeights
-            , cumulativeHeights = cumulativeHeights
+            | notes = newNotes
+            , rowHeights = updatedRowHeights
+            , cumulativeHeights = updatedCumulativeHeights
           }
         , Task.perform (\_ -> NotesUpdated) (Task.succeed ())
         )
