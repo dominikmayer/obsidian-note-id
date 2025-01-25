@@ -9,7 +9,6 @@ import Html.Events exposing (on, onClick)
 import List.Extra exposing (..)
 import Json.Decode as Decode
 import Ports exposing (..)
-import Scroll
 import Task
 import Debug exposing (toString)
 
@@ -167,19 +166,43 @@ measureViewport =
     Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list")
 
 
+findIndexByFilePath : String -> List NoteMeta -> Maybe Int
+findIndexByFilePath targetFilePath notes =
+    notes
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( _, note ) -> note.filePath == targetFilePath)
+        |> List.head
+        |> Maybe.map Tuple.first
+
+
 fileOpened : Model -> Maybe String -> ( Model, Cmd Msg )
 fileOpened model filePath =
     case filePath of
         Just path ->
             let
                 scrollCmd =
-                    Scroll.scrollElementY "virtual-list" path 0.5 0.5
-                        |> Task.attempt handleScrollResult
+                    scrollTo model path
             in
                 ( { model | currentFile = Just path }, scrollCmd )
 
         Nothing ->
             ( model, Cmd.none )
+
+
+scrollTo : Model -> String -> Cmd Msg
+scrollTo model path =
+    let
+        index =
+            Maybe.withDefault 0 (findIndexByFilePath path model.notes)
+
+        elementStart =
+            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+
+        position =
+            elementStart - 0.5 * model.containerHeight
+    in
+        Browser.Dom.setViewportOf "virtual-list" 0 position
+            |> Task.attempt handleScrollResult
 
 
 handleScrollResult : Result Browser.Dom.Error x -> Msg
