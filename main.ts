@@ -70,6 +70,10 @@ class IDSidePanelView extends ItemView {
         this.renderNotes();
     }
 
+    getElmApp() {
+        return (this as any).elmApp;
+    }
+
     renderNotes() {
         const { showNotesWithoutID } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
@@ -156,6 +160,10 @@ export default class IDSidePanelPlugin extends Plugin {
         }
     }
 
+    private getElmApp() {
+        return this.activePanelView ? this.activePanelView.getElmApp() : null;
+    }
+
     async onload() {
 
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -187,6 +195,13 @@ export default class IDSidePanelPlugin extends Plugin {
 
         this.registerEvent(
             this.app.vault.on('rename', async (file, oldPath) => {
+                const elmApp = this.getElmApp();
+                console.log("elmApp", elmApp);
+                if (elmApp && elmApp.ports.receiveFileRenamed) {
+                    elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
+                } else {
+                    console.log("error")
+                }
                 this.noteCache.delete(oldPath);
                 await this.handleFileChange(file);
             })

@@ -104,6 +104,7 @@ init _ =
 
 type Msg
     = FileOpened (Maybe String)
+    | FileRenamed ( String, String )
     | NoteClicked String
     | NotesProvided (List NoteMeta)
     | NotesUpdated
@@ -118,6 +119,9 @@ update msg model =
     case msg of
         FileOpened filePath ->
             fileOpened model filePath
+
+        FileRenamed paths ->
+            handleFileRename model paths
 
         NoteClicked filePath ->
             ( { model | fileOpenedByPlugin = True }, Ports.openFile filePath )
@@ -161,6 +165,18 @@ updateNotes model notes =
           }
         , Task.perform (\_ -> NotesUpdated) (Task.succeed ())
         )
+
+
+handleFileRename : Model -> ( String, String ) -> ( Model, Cmd Msg )
+handleFileRename model ( oldPath, newPath ) =
+    let
+        updatedCurrentFile =
+            if model.currentFile == Just oldPath then
+                Just newPath
+            else
+                model.currentFile
+    in
+        ( { model | currentFile = updatedCurrentFile }, Cmd.none )
 
 
 measureViewport : Cmd Msg
@@ -298,7 +314,7 @@ updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
 updateRowHeight model index element =
     let
         height =
-            Debug.log "Measured" element.element.height
+            element.element.height
 
         updatedRowHeights =
             Dict.insert index (Measured height) model.rowHeights
@@ -483,4 +499,5 @@ subscriptions _ =
     Sub.batch
         [ Ports.receiveNotes NotesProvided
         , Ports.receiveFileOpen FileOpened
+        , Ports.receiveFileRenamed FileRenamed
         ]
