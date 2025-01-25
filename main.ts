@@ -195,6 +195,9 @@ export default class IDSidePanelPlugin extends Plugin {
 
         this.registerEvent(
             this.app.vault.on('rename', async (file, oldPath) => {
+                this.noteCache.delete(oldPath);
+                await this.handleFileChange(file);
+                // Sending this after the files are reloaded so scrolling works
                 const elmApp = this.getElmApp();
                 console.log("elmApp", elmApp);
                 if (elmApp && elmApp.ports.receiveFileRenamed) {
@@ -202,8 +205,6 @@ export default class IDSidePanelPlugin extends Plugin {
                 } else {
                     console.log("error")
                 }
-                this.noteCache.delete(oldPath);
-                await this.handleFileChange(file);
             })
         );
 

@@ -175,8 +175,14 @@ handleFileRename model ( oldPath, newPath ) =
                 Just newPath
             else
                 model.currentFile
+
+        cmd =
+            if model.currentFile == Just oldPath then
+                scrollToNote model newPath
+            else
+                Cmd.none
     in
-        ( { model | currentFile = updatedCurrentFile }, Cmd.none )
+        ( { model | currentFile = updatedCurrentFile }, cmd )
 
 
 measureViewport : Cmd Msg
@@ -199,7 +205,7 @@ fileOpened model filePath =
         Just path ->
             let
                 ( updatedModel, scrollCmd ) =
-                    scrollTo model path
+                    scrollToExternallyOpenedNote model path
             in
                 ( { updatedModel | currentFile = Just path }, scrollCmd )
 
@@ -207,31 +213,37 @@ fileOpened model filePath =
             ( model, Cmd.none )
 
 
-scrollTo : Model -> String -> ( Model, Cmd Msg )
-scrollTo model path =
+scrollToExternallyOpenedNote : Model -> String -> ( Model, Cmd Msg )
+scrollToExternallyOpenedNote model path =
     if model.fileOpenedByPlugin then
         ( { model | fileOpenedByPlugin = False }, Cmd.none )
     else
-        case findIndexByFilePath path model.notes of
-            Just index ->
-                let
-                    elementStart =
-                        Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+        ( model, scrollToNote model path )
 
-                    position =
-                        elementStart - 0.5 * model.containerHeight
 
-                    updatedModel =
-                        { model | fileOpenedByPlugin = False }
-                in
-                    ( updatedModel
-                    , Browser.Dom.setViewportOf "virtual-list" 0 position
-                        |> Task.attempt (\_ -> NoOp)
-                    )
+scrollToNote : Model -> String -> Cmd Msg
+scrollToNote model path =
+    case findIndexByFilePath path model.notes of
+        Just index ->
+            let
+                elementStart =
+                    Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+            in
+                scrollToPosition "virtual-list" elementStart model.containerHeight
 
-            Nothing ->
-                Debug.log "Item not found" path
-                    |> (\_ -> ( model, Cmd.none ))
+        Nothing ->
+            Debug.log "Item not found" path
+                |> always Cmd.none
+
+
+scrollToPosition : String -> Float -> Float -> Cmd Msg
+scrollToPosition targetId elementStart containerHeight =
+    let
+        position =
+            elementStart - 0.5 * containerHeight
+    in
+        Browser.Dom.setViewportOf targetId 0 position
+            |> Task.attempt (\_ -> NoOp)
 
 
 handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
