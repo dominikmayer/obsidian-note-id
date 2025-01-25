@@ -210,13 +210,13 @@ handleViewportUpdateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Ms
 handleViewportUpdateSucceeded model viewport =
     let
         newScrollTop =
-            Debug.log "Scroll Top" viewport.viewport.y
+            viewport.viewport.y
 
         newContainerHeight =
             viewport.viewport.height
 
         visibleRange =
-            Debug.log "Visible range" (calculateVisibleRange model newScrollTop newContainerHeight)
+            calculateVisibleRange model newScrollTop newContainerHeight
 
         ( start, end ) =
             visibleRange
@@ -243,7 +243,7 @@ handleViewportUpdateSucceeded model viewport =
             unmeasuredIndices
                 |> List.filterMap
                     (\index ->
-                        Debug.log "Row ID (FilePath)" (noteFilePath model index)
+                        noteFilePath model index
                             |> Maybe.map
                                 (\filePath ->
                                     Browser.Dom.getElement filePath
@@ -365,13 +365,10 @@ view : Model -> Html Msg
 view model =
     let
         ( start, end ) =
-            Debug.log "visible range view: " model.visibleRange
+            model.visibleRange
 
         visibleItems =
             slice start end model.notes
-
-        _ =
-            Debug.log "cummulative heights: " model.cumulativeHeights
 
         rows =
             List.indexedMap
@@ -382,29 +379,22 @@ view model =
                     in
                         viewRow model globalIndex item
                 )
-                -- (Debug.log "visible items: " visibleItems)
                 visibleItems
     in
         div
             [ Html.Attributes.class "virtual-list"
             , Html.Attributes.id "virtual-list"
+              -- Height needs to be in the element for fast measurement
             , Html.Attributes.style "height" "100%"
-            , Html.Attributes.style "overflow" "auto"
+              -- , Html.Attributes.style "overflow" "auto"
             , onScroll Scrolled
             ]
-            [ --     div
-              --     [ Html.Attributes.style "position" "absolute"
-              --     ]
-              --     [ Html.text ("start: " ++ toString start ++ ", end: " ++ toString end)
-              --     ]
-              -- ,
-              div
+            [ div
                 [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px")
                 , Html.Attributes.class "note-id-list-spacer"
                 ]
                 [ div [ Html.Attributes.class "note-id-list-items" ]
                     rows
-                  -- (List.indexedMap (viewRow model) (Debug.log "visible items: " visibleItems))
                 ]
             ]
 

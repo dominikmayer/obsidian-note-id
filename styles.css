@@ -29,3 +29,7 @@
     visibility: hidden;
     height: auto;
 }
+
+.virtual-list {
+    overflow: auto;
+}
