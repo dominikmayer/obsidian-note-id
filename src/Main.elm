@@ -86,6 +86,7 @@ defaultItemHeight =
     26
 
 
+main : Program () Model Msg
 main =
     Browser.element
         { init = init
@@ -146,22 +147,38 @@ update msg model =
 
 
 updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
-updateNotes model notes =
+updateNotes model newNotes =
     let
-        initialHeights =
-            List.indexedMap (\i _ -> ( i, Default defaultItemHeight )) notes
-                -- Default initial height of 40
-                |>
-                    Dict.fromList
+        existingHeights =
+            newNotes
+                |> List.filterMap
+                    (\note ->
+                        findIndexByFilePath note.filePath model.notes
+                            |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
+                            |> Maybe.map (\height -> ( note.filePath, height ))
+                    )
+                |> Dict.fromList
 
-        cumulativeHeights =
-            calculateCumulativeHeights initialHeights
+        updatedRowHeights =
+            newNotes
+                |> List.indexedMap
+                    (\i note ->
+                        case Dict.get note.filePath existingHeights of
+                            Just height ->
+                                ( i, height )
+
+                            Nothing ->
+                                ( i, Default defaultItemHeight )
+                    )
+                |> Dict.fromList
+
+        updatedCumulativeHeights =
+            calculateCumulativeHeights updatedRowHeights
     in
         ( { model
-            | notes =
-                notes
-            , rowHeights = initialHeights
-            , cumulativeHeights = cumulativeHeights
+            | notes = newNotes
+            , rowHeights = updatedRowHeights
+            , cumulativeHeights = updatedCumulativeHeights
           }
         , Task.perform (\_ -> NotesUpdated) (Task.succeed ())
         )
@@ -343,12 +360,6 @@ noteFilePath model index =
         |> Maybe.map .filePath
 
 
-getElementsInRange : Int -> Int -> Dict Int v -> List ( Int, v )
-getElementsInRange start end dict =
-    Dict.toList dict
-        |> List.filter (\( key, _ ) -> key >= start && key <= end)
-
-
 calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
 calculateCumulativeHeights heights =
     foldl
@@ -370,25 +381,22 @@ calculateCumulativeHeights heights =
 calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
-        -- Find the start of the visible range
         start =
             Dict.keys model.cumulativeHeights
                 |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) >= scrollTop)
                 |> List.head
                 |> Maybe.withDefault 0
 
-        -- Find the end of the visible range
         end =
             Dict.keys model.cumulativeHeights
                 |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < scrollTop + containerHeight)
                 |> last
                 |> Maybe.withDefault (List.length model.notes - 1)
 
-        -- Apply buffer to the range
         buffer =
             model.buffer
     in
-        ( (max 0 (start - buffer)), (min (List.length model.notes - 1) (end + buffer)) )
+        ( (max 0 (start - buffer)), (min (List.length model.notes) (end + buffer)) )
 
 
 slice : Int -> Int -> List a -> List a
@@ -440,11 +448,6 @@ onScroll msg =
     on "scroll" (Decode.succeed msg)
 
 
-scrollTopDecoder : Decode.Decoder Float
-scrollTopDecoder =
-    Decode.field "target" (Decode.field "scrollTop" Decode.float)
-
-
 totalHeight : Model -> Float
 totalHeight model =
     case Dict.get (List.length model.notes - 1) model.cumulativeHeights of
@@ -458,9 +461,6 @@ totalHeight model =
 viewRow : Model -> Int -> NoteMeta -> Html Msg
 viewRow model index note =
     let
-        height =
-            rowHeightToFloat (Maybe.withDefault (Default defaultItemHeight) (Dict.get index model.rowHeights))
-
         top =
             Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
     in
