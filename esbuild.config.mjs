@@ -1,6 +1,9 @@
 import esbuild from "esbuild";
 import process from "process";
 import builtins from "builtin-modules";
+import elmPlugin from "esbuild-plugin-elm";
+import path from "path";
+import fs from "fs";
 
 const banner =
 `/*
@@ -38,12 +41,23 @@ const context = await esbuild.context({
 	sourcemap: prod ? false : "inline",
 	treeShaking: true,
 	outfile: "main.js",
+	plugins: [elmPlugin()],
 	minify: prod,
 });
 
-if (prod) {
-	await context.rebuild();
-	process.exit(0);
+// Watch mode
+if (!prod) {
+    // Start watching with esbuild
+    await context.watch();
+
+    const elmDir = path.resolve("src");
+    fs.watch(elmDir, { recursive: true }, (eventType, filename) => {
+        if (filename.endsWith(".elm")) {
+            console.log(`Change detected in ${filename}. Rebuilding...`);
+            context.rebuild();
+        }
+    });
 } else {
-	await context.watch();
+    await context.rebuild();
+    process.exit(0);
 }

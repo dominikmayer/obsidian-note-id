@@ -2,11 +2,6 @@
     color: var(--text-faint);
 }
 
-.note-id-list {
-    overflow-y: auto;
-    position: relative;
-}
-
 .note-id-list-spacer {
     position: relative;
 }
@@ -24,8 +19,6 @@
     overflow: hidden;
 }
 
-.note-id-list .tree-item-inner {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.virtual-list {
+    overflow: auto;
 }

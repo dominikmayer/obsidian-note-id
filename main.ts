@@ -1,4 +1,5 @@
 import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
+import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 
@@ -16,11 +17,17 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
     customIDField: '',
 };
 
-interface NoteMeta { title: string; id: string | number | null; file: TFile; }
+interface NoteMeta {
+    title: string;
+    id: string | number | null;
+    file: TFile;
+}
+
+const DEFAULT_ROW_HEIGHT = 28;
 
 class IDSidePanelView extends ItemView {
     plugin: IDSidePanelPlugin;
-    private virtualList: VirtualList;
+    // private virtualList: VirtualList;
 
     constructor(leaf: WorkspaceLeaf, plugin: IDSidePanelPlugin) {
         super(leaf);
@@ -29,29 +36,39 @@ class IDSidePanelView extends ItemView {
 
     getViewType() { return VIEW_TYPE_ID_PANEL; }
     getDisplayText() { return 'Notes by ID'; }
-    public getVirtualList(): VirtualList {
-        return this.virtualList;
-    }
 
     async onOpen() {
         const container = this.containerEl.children[1] as HTMLElement;
         container.empty();
 
-        this.virtualList = new VirtualList(this.app, container);
+        const elmContainer = container.createDiv();
+        
+        const elmApp = Elm.Main.init({
+            node: elmContainer,
+        });
+        (this as any).elmApp = elmApp;
 
-        this.virtualList.setActiveFile(this.app.workspace.getActiveFile());
-        this.renderNotes();
-
+        elmApp.ports.openFile.subscribe((filePath: string) => {
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (file instanceof TFile) {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(file);
+            }
+        });
+    
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                this.refresh(file)
+                if ((this as any).elmApp && (this as any).elmApp.ports.receiveFileOpen) {
+                    const filePath = file?.path || null;
+                    (this as any).elmApp.ports.receiveFileOpen.send(filePath);
+                }
             })
         );
+        this.renderNotes();
     }
 
-    public async refresh(file: TFile | null = null) {
-        this.virtualList.setActiveFile(file);
-        this.renderNotes();
+    getElmApp() {
+        return (this as any).elmApp;
     }
 
     renderNotes() {
@@ -76,7 +93,16 @@ class IDSidePanelView extends ItemView {
             combined = combined.concat(notesWithoutID);
         }
 
-        this.virtualList.setItems(combined);
+        const elmApp = (this as any).elmApp;
+        if (elmApp && elmApp.ports && elmApp.ports.receiveNotes) {
+            elmApp.ports.receiveNotes.send(
+                combined.map((note, index) => ({
+                    title: note.title,
+                    id: note.id ? note.id.toString() : null, // Convert Maybe to a string
+                    filePath: note.file.path
+                }))
+            );
+        }
     }
 }
 
@@ -112,8 +138,9 @@ export default class IDSidePanelPlugin extends Plugin {
             const idField = customIDField.toLowerCase() || 'id';
             id = frontmatterKeys[idField] ?? null;
         }
-        // Optionally filter out notes without ID if not showing them
+    
         if (id === null && !showNotesWithoutID) return null;
+
         return { title: file.basename, id, file };
     }
 
@@ -122,8 +149,14 @@ export default class IDSidePanelPlugin extends Plugin {
         const markdownFiles = this.app.vault.getMarkdownFiles();
         for (const file of markdownFiles) {
             const meta = await this.extractNoteMeta(file);
-            if (meta) this.noteCache.set(file.path, meta);
+            if (meta) {
+                this.noteCache.set(file.path, meta);
+            }
         }
+    }
+
+    private getElmApp() {
+        return this.activePanelView ? this.activePanelView.getElmApp() : null;
     }
 
     async onload() {
@@ -158,10 +191,23 @@ export default class IDSidePanelPlugin extends Plugin {
         this.registerEvent(
             this.app.vault.on('rename', async (file, oldPath) => {
                 this.noteCache.delete(oldPath);
-                if (this.activePanelView && this.activePanelView?.getVirtualList().getActiveFilePath() === oldPath && file instanceof TFile) {
-                    this.activePanelView.getVirtualList().setActiveFile(file);
-                }
                 await this.handleFileChange(file);
+                // Sending this after the files are reloaded so scrolling works
+                const elmApp = this.getElmApp();
+                if (elmApp && elmApp.ports.receiveFileRenamed) {
+                    elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
+                }
+            })
+        );
+
+        this.registerEvent(
+            this.app.vault.on('delete', async (file) => {
+                if (file instanceof TFile && file.extension === 'md') {
+                    if (this.noteCache.has(file.path)) {
+                        this.noteCache.delete(file.path);
+                        this.queueRefresh();
+                    }
+                }
             })
         );
 
@@ -175,14 +221,26 @@ export default class IDSidePanelPlugin extends Plugin {
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
             const newMeta = await this.extractNoteMeta(file);
-
-            if (newMeta) {
-                this.noteCache.set(file.path, newMeta);
-            } else {
-                this.noteCache.delete(file.path);
+    
+            if (!newMeta) {
+                // If the file is not relevant but was previously cached, remove it
+                if (this.noteCache.has(file.path)) {
+                    this.noteCache.delete(file.path);
+                    this.queueRefresh();
+                }
+                return;
             }
-
-            this.queueRefresh();
+    
+            const oldMeta = this.noteCache.get(file.path);
+    
+            const metaChanged = !oldMeta || 
+                                newMeta.id !== oldMeta.id || 
+                                newMeta.title !== oldMeta.title;
+    
+            if (metaChanged) {
+                this.noteCache.set(file.path, newMeta);
+                this.queueRefresh();
+            }
         }
     }
 
@@ -192,7 +250,8 @@ export default class IDSidePanelPlugin extends Plugin {
         }
         this.scheduleRefreshTimeout = window.setTimeout(() => {
             this.scheduleRefreshTimeout = null;
-            void this.refreshView();
+            if (this.activePanelView)
+                this.activePanelView.renderNotes();
         }, 50);
     }
 
@@ -205,7 +264,6 @@ export default class IDSidePanelPlugin extends Plugin {
             leaf = this.app.workspace.getLeaf(true);
         }
 
-        // Set the view state for the leaf
         await leaf.setViewState({
             type: VIEW_TYPE_ID_PANEL,
             active: true,
@@ -213,11 +271,12 @@ export default class IDSidePanelPlugin extends Plugin {
 
         // Reveal the leaf to make it active
         this.app.workspace.revealLeaf(leaf);
+        await this.refreshView();
     }
 
     async refreshView() {
         if (this.activePanelView) {
-            this.activePanelView.refresh();
+            this.activePanelView.renderNotes();
         }
     }
 
@@ -298,165 +357,5 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     })
             );
-    }
-}
-
-class VirtualList {
-    private app: App;
-    private rootEl: HTMLElement;
-    private spacerEl: HTMLElement;
-    private itemsEl: HTMLElement;
-
-    private itemHeight = 28; // px, assume each row is ~28px tall
-    private buffer = 5;      // how many extra rows to render above/below the viewport
-    private items: NoteMeta[] = [];
-    private renderedStart = 0;
-    private renderedEnd = -1;
-    private activeFilePath: string | null = null;
-    private dataChanged = false;
-
-    constructor(app: App, rootEl: HTMLElement) {
-        this.app = app;
-        this.rootEl = rootEl;
-        this.rootEl.addClass('note-id-list');
-
-        // This spacer fills total scrollable area
-        this.spacerEl = this.rootEl.createEl('div');
-        this.spacerEl.addClass('note-id-list-spacer');
-
-        // This itemsEl holds the actual rendered items
-        this.itemsEl = this.spacerEl.createEl('div');
-        this.itemsEl.addClass('note-id-list-items');
-
-        // Listen to scroll
-        this.rootEl.addEventListener('scroll', () => this.onScroll());
-    }
-
-    public setItems(items: NoteMeta[]): void {
-        this.items = items;
-        this.dataChanged = true;
-        this.updateContainerHeight();
-        requestAnimationFrame(() => this.renderRows());
-    }
-
-    public getActiveFilePath(): string | null {
-        return this.activeFilePath;
-    }
-
-    public setActiveFile(file: TFile | null): void {
-        if (file) {
-            this.activeFilePath = file.path;
-            this.updateActiveHighlight();
-            this.scrollToActiveFile();
-        }
-    }
-
-    private scrollToActiveFile(): void {
-        if (!this.activeFilePath) return;
-
-        const activeIndex = this.items.findIndex((item) => item.file.path === this.activeFilePath);
-        if (activeIndex === -1) return;
-
-        const scrollToPosition = activeIndex * this.itemHeight;
-        const containerHeight = this.rootEl.clientHeight;
-
-        // Check if the active file is already in view
-        if (
-            scrollToPosition >= this.rootEl.scrollTop &&
-            scrollToPosition < this.rootEl.scrollTop + containerHeight
-        ) {
-            return;
-        }
-
-        // Scroll to the position of the active file
-        this.rootEl.scrollTop = scrollToPosition - containerHeight / 2 + this.itemHeight / 2;
-    }
-
-    private updateContainerHeight(): void {
-        const totalHeight = this.items.length * this.itemHeight;
-        this.spacerEl.style.height = totalHeight + 'px';
-    }
-
-    private onScroll(): void {
-        this.renderRows();
-    }
-
-    private renderRows(): void {
-        const scrollTop = this.rootEl.scrollTop;
-        const containerHeight = this.rootEl.clientHeight;
-
-        // Calculate visible range
-        const startIndex = Math.max(
-            0,
-            Math.floor(scrollTop / this.itemHeight) - this.buffer
-        );
-        const endIndex = Math.min(
-            this.items.length - 1,
-            Math.floor((scrollTop + containerHeight) / this.itemHeight) + this.buffer
-        );
-
-        // Avoid unnecessary re-renders
-        if (!this.dataChanged && startIndex === this.renderedStart && endIndex === this.renderedEnd) {
-            return;
-        }
-
-        this.renderedStart = startIndex;
-        this.renderedEnd = endIndex;
-        this.dataChanged = false;
-
-        // Clear out old rows
-        this.itemsEl.empty();
-
-        // Render the rows for the visible range
-        for (let i = startIndex; i <= endIndex; i++) {
-            const note = this.items[i];
-            const top = i * this.itemHeight;
-
-            const rowEl = this.itemsEl.createEl('div');
-            rowEl.addClass('note-id-item');
-            rowEl.style.top = `${top}px`;
-            rowEl.style.height = `${this.itemHeight}px`;
-
-            const titleItem = rowEl.createEl('div');
-            titleItem.addClasses(['tree-item-self', 'is-clickable']);
-            titleItem.setAttr('data-file-path', note.file.path);
-
-            const iconItem = titleItem.createEl('div');
-            setIcon(iconItem, note.id != null ? 'file' : 'file-question');
-            iconItem.addClass('tree-item-icon');
-
-            const nameItem = titleItem.createEl('div');
-            nameItem.addClass('tree-item-inner');
-
-            setTooltip(rowEl, note.title)
-            
-            if (note.id != null) {
-                nameItem.createEl('span', { text: `${note.id}: ` }).addClass('note-id');
-            }
-            nameItem.createEl('span', { text: note.title });
-
-            // Highlight the active file
-            if (this.activeFilePath === note.file.path) {
-                titleItem.addClass('is-active');
-            }
-
-            rowEl.addEventListener('click', () => {
-                const leaf = this.app.workspace.getLeaf();
-                leaf.openFile(note.file);
-            });
-        }
-    }
-
-    private updateActiveHighlight(): void {
-        // Highlight the active file in the rendered range
-        Array.from(this.itemsEl.children).forEach((rowEl) => {
-            const titleItem = rowEl.querySelector('.tree-item-self');
-            const filePath = titleItem?.getAttribute('data-file-path');
-            if (filePath === this.activeFilePath) {
-                titleItem?.addClass('is-active');
-            } else {
-                titleItem?.removeClass('is-active');
-            }
-        });
     }
 }
