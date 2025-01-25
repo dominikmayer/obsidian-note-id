@@ -468,7 +468,6 @@ viewRow model index note =
             [ Html.Attributes.id note.filePath
             , Html.Attributes.class "note-id-item"
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
-            , Html.Attributes.style "height" ("height: " ++ toString height ++ "px")
             , onClick (NoteClicked note.filePath)
             ]
             [ div
