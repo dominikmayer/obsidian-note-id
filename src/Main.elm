@@ -23,6 +23,7 @@ type alias Model =
     , containerHeight : Float
     , buffer : Int
     , visibleRange : ( Int, Int )
+    , fileOpenedByPlugin : Bool
     }
 
 
@@ -52,6 +53,7 @@ defaultModel =
     , containerHeight = 500
     , buffer = 5
     , visibleRange = ( 0, 20 )
+    , fileOpenedByPlugin = False
     }
 
 
@@ -118,7 +120,7 @@ update msg model =
             fileOpened model filePath
 
         NoteClicked filePath ->
-            ( model, Ports.openFile filePath )
+            ( { model | fileOpenedByPlugin = True }, Ports.openFile filePath )
 
         NotesProvided notes ->
             updateNotes model notes
@@ -180,39 +182,40 @@ fileOpened model filePath =
     case filePath of
         Just path ->
             let
-                scrollCmd =
+                ( updatedModel, scrollCmd ) =
                     scrollTo model path
             in
-                ( { model | currentFile = Just path }, scrollCmd )
+                ( { updatedModel | currentFile = Just path }, scrollCmd )
 
         Nothing ->
             ( model, Cmd.none )
 
 
-scrollTo : Model -> String -> Cmd Msg
+scrollTo : Model -> String -> ( Model, Cmd Msg )
 scrollTo model path =
-    let
-        index =
-            Maybe.withDefault 0 (findIndexByFilePath path model.notes)
+    if model.fileOpenedByPlugin then
+        ( { model | fileOpenedByPlugin = False }, Cmd.none )
+    else
+        case findIndexByFilePath path model.notes of
+            Just index ->
+                let
+                    elementStart =
+                        Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
 
-        elementStart =
-            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+                    position =
+                        elementStart - 0.5 * model.containerHeight
 
-        position =
-            elementStart - 0.5 * model.containerHeight
-    in
-        Browser.Dom.setViewportOf "virtual-list" 0 position
-            |> Task.attempt handleScrollResult
+                    updatedModel =
+                        { model | fileOpenedByPlugin = False }
+                in
+                    ( updatedModel
+                    , Browser.Dom.setViewportOf "virtual-list" 0 position
+                        |> Task.attempt (\_ -> NoOp)
+                    )
 
-
-handleScrollResult : Result Browser.Dom.Error x -> Msg
-handleScrollResult result =
-    case result of
-        Ok _ ->
-            Debug.log "Scroll succeeded" NoOp
-
-        Err err ->
-            Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
+            Nothing ->
+                Debug.log "Item not found" path
+                    |> (\_ -> ( model, Cmd.none ))
 
 
 handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
@@ -250,14 +253,11 @@ handleViewportUpdateSucceeded model viewport =
                             Just (Default _) ->
                                 True
 
-                            -- Include rows with default value
                             Just (Measured _) ->
                                 False
 
-                            -- Exclude rows with measured value
                             Nothing ->
                                 True
-                     -- Include rows not yet in the dictionary
                     )
 
         measureCmds =
