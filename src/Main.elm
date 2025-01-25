@@ -102,46 +102,42 @@ init _ =
 
 
 type Msg
-    = NotesProvided (List NoteMeta)
-    | NotesUpdated
+    = FileOpened (Maybe String)
     | NoteClicked String
-    | FileOpened (Maybe String)
+    | NotesProvided (List NoteMeta)
+    | NotesUpdated
     | NoOp
+    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
-    | MeasureRowHeight String Int
-    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        FileOpened filePath ->
+            fileOpened model filePath
+
+        NoteClicked filePath ->
+            ( model, Ports.openFile filePath )
+
         NotesProvided notes ->
             updateNotes model notes
 
         NotesUpdated ->
             ( model, measureViewport )
 
-        NoteClicked filePath ->
-            ( model, Ports.openFile filePath )
-
-        FileOpened filePath ->
-            fileOpened model filePath
-
         NoOp ->
             ( model, Cmd.none )
+
+        RowHeightMeasured index result ->
+            handleRowHeightMeasurementResult model index result
 
         Scrolled ->
             ( model, measureViewport )
 
         ViewportUpdated result ->
             handleViewportUpdate model result
-
-        RowHeightMeasured index result ->
-            handleRowHeightMeasurementResult model index result
-
-        MeasureRowHeight rowId index ->
-            ( model, Browser.Dom.getElement rowId |> Task.attempt (RowHeightMeasured index) )
 
 
 updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
@@ -177,21 +173,23 @@ fileOpened model filePath =
         Just path ->
             let
                 scrollCmd =
-                    Scroll.scrollElementY "note-id-list" path 0.5 0.5
-                        |> Task.attempt
-                            (\result ->
-                                case result of
-                                    Ok _ ->
-                                        Debug.log "Scroll succeeded" NoOp
-
-                                    Err err ->
-                                        Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
-                            )
+                    Scroll.scrollElementY "virtual-list" path 0.5 0.5
+                        |> Task.attempt handleScrollResult
             in
                 ( { model | currentFile = Just path }, scrollCmd )
 
         Nothing ->
             ( model, Cmd.none )
+
+
+handleScrollResult : Result Browser.Dom.Error x -> Msg
+handleScrollResult result =
+    case result of
+        Ok _ ->
+            Debug.log "Scroll succeeded" NoOp
+
+        Err err ->
+            Debug.log ("Scroll failed with error: " ++ Debug.toString err) NoOp
 
 
 handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
@@ -386,7 +384,6 @@ view model =
             , Html.Attributes.id "virtual-list"
               -- Height needs to be in the element for fast measurement
             , Html.Attributes.style "height" "100%"
-              -- , Html.Attributes.style "overflow" "auto"
             , onScroll Scrolled
             ]
             [ div
