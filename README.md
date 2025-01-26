@@ -16,6 +16,8 @@ Clusters form when related notes branch off from an initial idea, creating a web
 ```
 1.1 Initial idea
 1.1a Related thought branching from 1.1
+1.1a1 And another one branching from 1.1a
+1.1a1a And one branching from 1.1a1
 1.2 A new idea in the same theme
 1.2a Further exploration of 1.2
 ```
