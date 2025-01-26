@@ -4,6 +4,9 @@ port module Ports exposing (..)
 port openFile : String -> Cmd msg
 
 
+port openContextMenu : ( Float, Float, String ) -> Cmd msg
+
+
 port receiveNotes : (List NoteMeta -> msg) -> Sub msg
 
 

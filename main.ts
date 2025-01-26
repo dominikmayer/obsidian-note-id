@@ -42,7 +42,7 @@ class IDSidePanelView extends ItemView {
         container.empty();
 
         const elmContainer = container.createDiv();
-        
+
         const elmApp = Elm.Main.init({
             node: elmContainer,
             flag: this.plugin.settings,
@@ -56,7 +56,34 @@ class IDSidePanelView extends ItemView {
                 leaf.openFile(file);
             }
         });
-    
+
+        elmApp.ports.openContextMenu.subscribe(([x, y, filePath]: [number, number, string]) => {
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (!file) return;
+            
+            const menu = new Menu();
+
+            menu.addItem((item) =>
+                item
+                    .setSection('action')
+                    .setTitle("Create new note in sequence")
+                    .setIcon('list-plus')
+                    .onClick(() => {
+                        console.log("click");
+                    }),
+            );
+            menu.addSeparator();
+
+            this.app.workspace.trigger(
+                'file-menu',
+                menu,
+                file,
+                'note-id-context-menu',
+            );
+
+            menu.showAtPosition({ x: x, y: y });
+    });
+
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
                 if ((this as any).elmApp && (this as any).elmApp.ports.receiveFileOpen) {
@@ -139,7 +166,7 @@ export default class IDSidePanelPlugin extends Plugin {
             const normalizedIdField = idField.toLowerCase() || 'id';
             id = frontmatterKeys[normalizedIdField] ?? null;
         }
-    
+
         if (id === null && !showNotesWithoutId) return null;
 
         return { title: file.basename, id, file };
@@ -222,7 +249,7 @@ export default class IDSidePanelPlugin extends Plugin {
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
             const newMeta = await this.extractNoteMeta(file);
-    
+
             if (!newMeta) {
                 // If the file is not relevant but was previously cached, remove it
                 if (this.noteCache.has(file.path)) {
@@ -231,13 +258,13 @@ export default class IDSidePanelPlugin extends Plugin {
                 }
                 return;
             }
-    
+
             const oldMeta = this.noteCache.get(file.path);
-    
-            const metaChanged = !oldMeta || 
-                                newMeta.id !== oldMeta.id || 
-                                newMeta.title !== oldMeta.title;
-    
+
+            const metaChanged = !oldMeta ||
+                newMeta.id !== oldMeta.id ||
+                newMeta.title !== oldMeta.title;
+
             if (metaChanged) {
                 this.noteCache.set(file.path, newMeta);
                 this.queueRefresh();

@@ -6,6 +6,7 @@ import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
+import Html.Events.Extra.Mouse as Mouse
 import List.Extra exposing (..)
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -125,7 +126,8 @@ init flags =
 
 
 type Msg
-    = FileOpened (Maybe String)
+    = ContextMenuTriggered Mouse.Event String
+    | FileOpened (Maybe String)
     | FileRenamed ( String, String )
     | NoteClicked String
     | NotesProvided (List NoteMeta)
@@ -139,6 +141,13 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        ContextMenuTriggered event path ->
+            let
+                ( x, y ) =
+                    event.clientPos
+            in
+                ( model, Ports.openContextMenu ( x, y, path ) )
+
         FileOpened filePath ->
             fileOpened model filePath
 
@@ -499,6 +508,7 @@ viewRow model index note =
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
             , Html.Attributes.attribute "data-path" note.filePath
             , onClick (NoteClicked note.filePath)
+            , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
             ]
             [ div
                 [ Html.Attributes.class "tree-item-inner" ]
