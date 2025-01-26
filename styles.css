@@ -12,7 +12,7 @@
     width: 100%;
 }
 
-.note-id-item {
+.note-id-list-items .tree-item-self {
     position: absolute;
     left: 0;
     right: 0;

@@ -491,30 +491,26 @@ viewRow model index note =
     in
         div
             [ Html.Attributes.id note.filePath
-            , Html.Attributes.class "note-id-item"
+            , Html.Attributes.classList
+                [ ( "tree-item-self", True )
+                , ( "is-clickable", True )
+                , ( "is-active", Just note.filePath == model.currentFile )
+                ]
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
+            , Html.Attributes.attribute "data-path" note.filePath
             , onClick (NoteClicked note.filePath)
             ]
             [ div
-                [ Html.Attributes.classList
-                    [ ( "tree-item-self", True )
-                    , ( "is-clickable", True )
-                    , ( "is-active", Just note.filePath == model.currentFile )
-                    ]
-                , Html.Attributes.attribute "data-file-path" note.filePath
-                ]
-                [ div
-                    [ Html.Attributes.class "tree-item-inner" ]
-                    (case note.id of
-                        Just id ->
-                            [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                            , Html.text note.title
-                            ]
+                [ Html.Attributes.class "tree-item-inner" ]
+                (case note.id of
+                    Just id ->
+                        [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                        , Html.text note.title
+                        ]
 
-                        Nothing ->
-                            [ Html.text note.title ]
-                    )
-                ]
+                    Nothing ->
+                        [ Html.text note.title ]
+                )
             ]
 
 
