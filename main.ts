@@ -57,10 +57,19 @@ class IDSidePanelView extends ItemView {
             }
         });
 
+        elmApp.ports.createNote.subscribe(async ([filePath, content]: [string, string]) => {
+            const uniqueFilePath = this.getUniqueFilePath(normalizePath(filePath));
+            const file = await this.app.vault.create(uniqueFilePath, content);
+            if (file instanceof TFile) {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(file);
+            }
+        });
+
         elmApp.ports.openContextMenu.subscribe(([x, y, filePath]: [number, number, string]) => {
             const file = this.app.vault.getAbstractFileByPath(filePath);
             if (!file) return;
-            
+
             const menu = new Menu();
 
             menu.addItem((item) =>
@@ -69,7 +78,20 @@ class IDSidePanelView extends ItemView {
                     .setTitle("Create new note in sequence")
                     .setIcon('list-plus')
                     .onClick(() => {
-                        console.log("click");
+                        if (elmApp && elmApp.ports.receiveCreateNote) {
+                            elmApp.ports.receiveCreateNote.send([filePath, false]);
+                        }
+                    }),
+            );
+            menu.addItem((item) =>
+                item
+                    .setSection('action')
+                    .setTitle("Create new note in subsequence")
+                    .setIcon('list-tree')
+                    .onClick(() => {
+                        if (elmApp && elmApp.ports.receiveCreateNote) {
+                            elmApp.ports.receiveCreateNote.send([filePath, true]);
+                        }
                     }),
             );
             menu.addSeparator();
@@ -86,13 +108,27 @@ class IDSidePanelView extends ItemView {
 
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                if ((this as any).elmApp && (this as any).elmApp.ports.receiveFileOpen) {
+                if (elmApp && elmApp.ports.receiveFileOpen) {
                     const filePath = file?.path || null;
-                    (this as any).elmApp.ports.receiveFileOpen.send(filePath);
+                    elmApp.ports.receiveFileOpen.send(filePath);
                 }
             })
         );
         this.renderNotes();
+    }
+
+    getUniqueFilePath(path: string) {
+        let counter = 1;
+        const ext = path.includes('.') ? path.substring(path.lastIndexOf('.')) : '';
+        const baseName = path.replace(ext, '');
+        let uniquePath = path;
+
+        while (this.app.vault.getAbstractFileByPath(uniquePath)) {
+            uniquePath = `${baseName} (${counter})${ext}`;
+            counter++;
+        }
+
+        return uniquePath;
     }
 
     getElmApp() {
