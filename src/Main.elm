@@ -13,6 +13,23 @@ import Task
 import Debug exposing (toString)
 
 
+-- MAIN
+
+
+main : Program () Model Msg
+main =
+    Browser.element
+        { init = init
+        , update = update
+        , view = view
+        , subscriptions = subscriptions
+        }
+
+
+
+-- MODEL
+
+
 type alias Model =
     { notes : List NoteMeta
     , currentFile : Maybe String
@@ -86,21 +103,15 @@ defaultItemHeight =
     26
 
 
-main : Program () Model Msg
-main =
-    Browser.element
-        { init = init
-        , update = update
-        , view = view
-        , subscriptions = subscriptions
-        }
-
-
 init : () -> ( Model, Cmd Msg )
 init _ =
     ( defaultModel
     , Cmd.none
     )
+
+
+
+-- UPDATE
 
 
 type Msg
@@ -404,6 +415,10 @@ slice start end list =
     list
         |> List.drop start
         |> List.take (end - start)
+
+
+
+-- VIEW
 
 
 view : Model -> Html Msg
