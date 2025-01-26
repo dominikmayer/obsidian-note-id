@@ -6,15 +6,15 @@ const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 interface IDSidePanelSettings {
     includeFolders: string[];
     excludeFolders: string[];
-    showNotesWithoutID: boolean;
-    customIDField: string;
+    showNotesWithoutId: boolean;
+    idField: string;
 }
 
 const DEFAULT_SETTINGS: IDSidePanelSettings = {
     includeFolders: [],
     excludeFolders: [],
-    showNotesWithoutID: true,
-    customIDField: '',
+    showNotesWithoutId: true,
+    idField: '',
 };
 
 interface NoteMeta {
@@ -45,6 +45,7 @@ class IDSidePanelView extends ItemView {
         
         const elmApp = Elm.Main.init({
             node: elmContainer,
+            flag: this.plugin.settings,
         });
         (this as any).elmApp = elmApp;
 
@@ -72,7 +73,7 @@ class IDSidePanelView extends ItemView {
     }
 
     renderNotes() {
-        const { showNotesWithoutID } = this.plugin.settings;
+        const { showNotesWithoutId } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
 
         const notesWithID = allNotes
@@ -89,7 +90,7 @@ class IDSidePanelView extends ItemView {
 
         let combined: NoteMeta[] = [];
         combined = combined.concat(notesWithID);
-        if (showNotesWithoutID) {
+        if (showNotesWithoutId) {
             combined = combined.concat(notesWithoutID);
         }
 
@@ -113,7 +114,7 @@ export default class IDSidePanelPlugin extends Plugin {
     noteCache: Map<string, NoteMeta> = new Map();
 
     async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
-        const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.settings;
+        const { includeFolders, excludeFolders, showNotesWithoutId, idField } = this.settings;
         const filePath = file.path.toLowerCase();
 
         // Normalize folder paths to remove trailing slashes and lower case them
@@ -135,11 +136,11 @@ export default class IDSidePanelPlugin extends Plugin {
                 acc[key.toLowerCase()] = frontmatter[key];
                 return acc;
             }, {} as Record<string, any>);
-            const idField = customIDField.toLowerCase() || 'id';
-            id = frontmatterKeys[idField] ?? null;
+            const normalizedIdField = idField.toLowerCase() || 'id';
+            id = frontmatterKeys[normalizedIdField] ?? null;
         }
     
-        if (id === null && !showNotesWithoutID) return null;
+        if (id === null && !showNotesWithoutId) return null;
 
         return { title: file.basename, id, file };
     }
@@ -307,10 +308,10 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             .setDesc('Define the frontmatter field used as the ID (case-insensitive).')
             .addText((text) =>
                 text
-                    .setPlaceholder('ID')
-                    .setValue(this.plugin.settings.customIDField)
+                    .setPlaceholder('id')
+                    .setValue(this.plugin.settings.idField)
                     .onChange(async (value) => {
-                        this.plugin.settings.customIDField = value.trim();
+                        this.plugin.settings.idField = value.trim();
                         await this.plugin.saveSettings();
                     })
             );
@@ -351,9 +352,9 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             .setDesc('Toggle the display of notes without IDs.')
             .addToggle((toggle) =>
                 toggle
-                    .setValue(this.plugin.settings.showNotesWithoutID)
+                    .setValue(this.plugin.settings.showNotesWithoutId)
                     .onChange(async (value) => {
-                        this.plugin.settings.showNotesWithoutID = value;
+                        this.plugin.settings.showNotesWithoutId = value;
                         await this.plugin.saveSettings();
                     })
             );

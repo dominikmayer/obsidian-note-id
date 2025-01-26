@@ -8,6 +8,7 @@ import Html.Attributes
 import Html.Events exposing (on, onClick)
 import List.Extra exposing (..)
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Ports exposing (..)
 import Task
 import Debug exposing (toString)
@@ -16,7 +17,7 @@ import Debug exposing (toString)
 -- MAIN
 
 
-main : Program () Model Msg
+main : Program Encode.Value Model Msg
 main =
     Browser.element
         { init = init
@@ -84,8 +85,8 @@ type alias NoteMeta =
 type alias Settings =
     { includeFolders : List String
     , excludeFolders : List String
-    , showNotesWithoutID : Bool
-    , customIDField : String
+    , showNotesWithoutId : Bool
+    , idField : String
     }
 
 
@@ -93,8 +94,8 @@ defaultSettings : Settings
 defaultSettings =
     { includeFolders = [ "Zettel" ]
     , excludeFolders = []
-    , showNotesWithoutID = True
-    , customIDField = "id"
+    , showNotesWithoutId = True
+    , idField = "id"
     }
 
 
@@ -103,11 +104,20 @@ defaultItemHeight =
     26
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( defaultModel
-    , Cmd.none
-    )
+init : Encode.Value -> ( Model, Cmd Msg )
+init flags =
+    let
+        updatedSettings =
+            case Decode.decodeValue partialSettingsDecoder flags of
+                Ok decoded ->
+                    decoded defaultSettings
+
+                Err _ ->
+                    defaultSettings
+    in
+        ( { defaultModel | settings = updatedSettings }
+        , Cmd.none
+        )
 
 
 
@@ -515,3 +525,52 @@ subscriptions _ =
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed
         ]
+
+
+settingsDecoder : Decode.Decoder Settings
+settingsDecoder =
+    Decode.map4
+        (\includeFolders excludeFolders showNotesWithoutId idField ->
+            { includeFolders = includeFolders
+            , excludeFolders = excludeFolders
+            , showNotesWithoutId = showNotesWithoutId
+            , idField = idField
+            }
+        )
+        (Decode.oneOf
+            [ Decode.field "includeFolders" (Decode.list Decode.string)
+            , Decode.succeed defaultSettings.includeFolders
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.field "excludeFolders" (Decode.list Decode.string)
+            , Decode.succeed defaultSettings.excludeFolders
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.field "showNotesWithoutId" Decode.bool
+            , Decode.succeed defaultSettings.showNotesWithoutId
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.field "idField" Decode.string
+            , Decode.succeed defaultSettings.idField
+            ]
+        )
+
+
+partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
+partialSettingsDecoder =
+    Decode.map4
+        (\includeFolders excludeFolders showNotesWithoutId idField settings ->
+            { settings
+                | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
+                , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
+                , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
+                , idField = idField |> Maybe.withDefault settings.idField
+            }
+        )
+        (Decode.field "includeFolders" (Decode.list Decode.string) |> Decode.maybe)
+        (Decode.field "excludeFolders" (Decode.list Decode.string) |> Decode.maybe)
+        (Decode.field "showNotesWithoutId" Decode.bool |> Decode.maybe)
+        (Decode.field "idField" Decode.string |> Decode.maybe)
