@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf, Menu, normalizePath } from 'obsidian';
 import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
@@ -326,7 +326,8 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                         this.plugin.settings.includeFolders = value
                             .split(',')
                             .map((v) => v.trim())
-                            .filter((v) => v !== '');
+                            .filter((v) => v !== '')
+                            .map((v) => normalizePath(v));
                         await this.plugin.saveSettings();
                     })
             );
@@ -342,7 +343,8 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                         this.plugin.settings.excludeFolders = value
                             .split(',')
                             .map((v) => v.trim())
-                            .filter((v) => v !== '');
+                            .filter((v) => v !== '')
+                            .map((v) => normalizePath(v));
                         await this.plugin.saveSettings();
                     })
             );
