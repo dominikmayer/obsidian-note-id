@@ -6,8 +6,10 @@ import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
+import Html.Events.Extra.Mouse as Mouse
 import List.Extra exposing (..)
 import Json.Decode as Decode
+import Json.Encode as Encode
 import Ports exposing (..)
 import Task
 import Debug exposing (toString)
@@ -16,7 +18,7 @@ import Debug exposing (toString)
 -- MAIN
 
 
-main : Program () Model Msg
+main : Program Encode.Value Model Msg
 main =
     Browser.element
         { init = init
@@ -84,8 +86,8 @@ type alias NoteMeta =
 type alias Settings =
     { includeFolders : List String
     , excludeFolders : List String
-    , showNotesWithoutID : Bool
-    , customIDField : String
+    , showNotesWithoutId : Bool
+    , idField : String
     }
 
 
@@ -93,8 +95,8 @@ defaultSettings : Settings
 defaultSettings =
     { includeFolders = [ "Zettel" ]
     , excludeFolders = []
-    , showNotesWithoutID = True
-    , customIDField = "id"
+    , showNotesWithoutId = True
+    , idField = "id"
     }
 
 
@@ -103,11 +105,20 @@ defaultItemHeight =
     26
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
-    ( defaultModel
-    , Cmd.none
-    )
+init : Encode.Value -> ( Model, Cmd Msg )
+init flags =
+    let
+        updatedSettings =
+            case Decode.decodeValue partialSettingsDecoder flags of
+                Ok decoded ->
+                    decoded defaultSettings
+
+                Err _ ->
+                    defaultSettings
+    in
+        ( { defaultModel | settings = updatedSettings }
+        , Cmd.none
+        )
 
 
 
@@ -115,9 +126,11 @@ init _ =
 
 
 type Msg
-    = FileOpened (Maybe String)
+    = ContextMenuTriggered Mouse.Event String
+    | FileOpened (Maybe String)
     | FileRenamed ( String, String )
     | NoteClicked String
+    | NoteCreationRequested ( String, Bool )
     | NotesProvided (List NoteMeta)
     | NotesUpdated
     | NoOp
@@ -129,11 +142,21 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        ContextMenuTriggered event path ->
+            let
+                ( x, y ) =
+                    event.clientPos
+            in
+                ( model, Ports.openContextMenu ( x, y, path ) )
+
         FileOpened filePath ->
             fileOpened model filePath
 
         FileRenamed paths ->
             handleFileRename model paths
+
+        NoteCreationRequested ( filePath, child ) ->
+            createNote model filePath child
 
         NoteClicked filePath ->
             ( { model | fileOpenedByPlugin = True }, Ports.openFile filePath )
@@ -155,6 +178,198 @@ update msg model =
 
         ViewportUpdated result ->
             handleViewportUpdate model result
+
+
+createNote : Model -> String -> Bool -> ( Model, Cmd Msg )
+createNote model path child =
+    let
+        folder =
+            getPathWithoutFileName path
+
+        newPath =
+            folder ++ "/Untitled.md"
+
+        id =
+            getNoteByPath path model.notes
+                |> Maybe.andThen (\note -> note.id)
+
+        newId =
+            if child then
+                Maybe.map getNewChildId id
+            else
+                Maybe.map getNewIdInSequence id
+
+        fileContent =
+            case newId of
+                Just justId ->
+                    createNoteContent model.settings.idField justId
+
+                Nothing ->
+                    ""
+    in
+        ( model, Ports.createNote ( newPath, fileContent ) )
+
+
+createNoteContent : String -> String -> String
+createNoteContent idName id =
+    "---\n" ++ idName ++ ": " ++ id ++ "\n---"
+
+
+getNewIdInSequence : String -> String
+getNewIdInSequence id =
+    let
+        ( start, end ) =
+            incrementLastElement id
+    in
+        start ++ end
+
+
+getNewChildId : String -> String
+getNewChildId input =
+    let
+        ( _, elementType ) =
+            getLastElement input
+
+        newLastElement =
+            case elementType of
+                Digit ->
+                    "a"
+
+                Letter ->
+                    "1"
+
+                Other ->
+                    ""
+    in
+        input ++ newLastElement
+
+
+incrementLastElement : String -> ( String, String )
+incrementLastElement input =
+    let
+        ( lastElement, elementType ) =
+            getLastElement input
+
+        start =
+            String.dropRight (String.length lastElement) input
+
+        incrementedLastElement =
+            incrementElement lastElement elementType
+    in
+        ( start, Maybe.withDefault lastElement incrementedLastElement )
+
+
+incrementElement : String -> CharType -> Maybe String
+incrementElement element elementType =
+    case elementType of
+        Digit ->
+            String.toInt element
+                |> Maybe.andThen (\num -> Just (num + 1))
+                |> Maybe.map String.fromInt
+
+        Letter ->
+            incrementString element
+
+        Other ->
+            Nothing
+
+
+incrementString : String -> Maybe String
+incrementString str =
+    if str == "" then
+        Nothing
+    else
+        str
+            |> String.reverse
+            |> incrementChars
+            |> Maybe.map String.reverse
+
+
+incrementChars : String -> Maybe String
+incrementChars str =
+    case String.toList str of
+        [] ->
+            Nothing
+
+        head :: tail ->
+            let
+                ( nextChar, carry ) =
+                    incrementChar head
+            in
+                if carry then
+                    incrementChars (String.fromList tail)
+                        |> Maybe.map (\incrementedTail -> nextChar ++ incrementedTail)
+                else
+                    Just (nextChar ++ String.fromList tail)
+
+
+incrementChar : Char -> ( String, Bool )
+incrementChar char =
+    if char == 'z' then
+        ( "a", True )
+        -- Overflow to 'a', with carry
+    else
+        ( String.fromChar (Char.fromCode (Char.toCode char + 1)), False )
+
+
+type CharType
+    = Digit
+    | Letter
+    | Other
+
+
+charType : Char -> CharType
+charType c =
+    if Char.isDigit c then
+        Digit
+    else if Char.isAlpha c then
+        Letter
+    else
+        Other
+
+
+getLastElement : String -> ( String, CharType )
+getLastElement string =
+    let
+        ( reversedElement, elementType ) =
+            compareElements [] (string |> String.reverse |> String.toList)
+    in
+        ( String.reverse reversedElement, elementType )
+
+
+compareElements : List Char -> List Char -> ( String, CharType )
+compareElements acc remaining =
+    case remaining of
+        [] ->
+            case acc of
+                [] ->
+                    ( "", Other )
+
+                head :: _ ->
+                    ( String.fromList acc, charType head )
+
+        c :: rest ->
+            case acc of
+                [] ->
+                    compareElements [ c ] rest
+
+                head :: _ ->
+                    if charType head == charType c then
+                        compareElements (c :: acc) rest
+                    else
+                        ( String.fromList acc |> String.reverse, charType head )
+
+
+getPathWithoutFileName : String -> String
+getPathWithoutFileName filePath =
+    let
+        components =
+            String.split "/" filePath
+
+        withoutFileName =
+            List.take (List.length components - 1) components
+    in
+        String.join "/" withoutFileName
 
 
 updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
@@ -225,6 +440,13 @@ findIndexByFilePath targetFilePath notes =
         |> List.filter (\( _, note ) -> note.filePath == targetFilePath)
         |> List.head
         |> Maybe.map Tuple.first
+
+
+getNoteByPath : String -> List NoteMeta -> Maybe NoteMeta
+getNoteByPath path notes =
+    notes
+        |> List.filter (\note -> note.filePath == path)
+        |> List.head
 
 
 fileOpened : Model -> Maybe String -> ( Model, Cmd Msg )
@@ -481,30 +703,27 @@ viewRow model index note =
     in
         div
             [ Html.Attributes.id note.filePath
-            , Html.Attributes.class "note-id-item"
+            , Html.Attributes.classList
+                [ ( "tree-item-self", True )
+                , ( "is-clickable", True )
+                , ( "is-active", Just note.filePath == model.currentFile )
+                ]
             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
+            , Html.Attributes.attribute "data-path" note.filePath
             , onClick (NoteClicked note.filePath)
+            , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
             ]
             [ div
-                [ Html.Attributes.classList
-                    [ ( "tree-item-self", True )
-                    , ( "is-clickable", True )
-                    , ( "is-active", Just note.filePath == model.currentFile )
-                    ]
-                , Html.Attributes.attribute "data-file-path" note.filePath
-                ]
-                [ div
-                    [ Html.Attributes.class "tree-item-inner" ]
-                    (case note.id of
-                        Just id ->
-                            [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                            , Html.text note.title
-                            ]
+                [ Html.Attributes.class "tree-item-inner" ]
+                (case note.id of
+                    Just id ->
+                        [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                        , Html.text note.title
+                        ]
 
-                        Nothing ->
-                            [ Html.text note.title ]
-                    )
-                ]
+                    Nothing ->
+                        [ Html.text note.title ]
+                )
             ]
 
 
@@ -512,6 +731,56 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ Ports.receiveNotes NotesProvided
+        , Ports.receiveCreateNote NoteCreationRequested
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed
         ]
+
+
+settingsDecoder : Decode.Decoder Settings
+settingsDecoder =
+    Decode.map4
+        (\includeFolders excludeFolders showNotesWithoutId idField ->
+            { includeFolders = includeFolders
+            , excludeFolders = excludeFolders
+            , showNotesWithoutId = showNotesWithoutId
+            , idField = idField
+            }
+        )
+        (Decode.oneOf
+            [ Decode.field "includeFolders" (Decode.list Decode.string)
+            , Decode.succeed defaultSettings.includeFolders
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.field "excludeFolders" (Decode.list Decode.string)
+            , Decode.succeed defaultSettings.excludeFolders
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.field "showNotesWithoutId" Decode.bool
+            , Decode.succeed defaultSettings.showNotesWithoutId
+            ]
+        )
+        (Decode.oneOf
+            [ Decode.field "idField" Decode.string
+            , Decode.succeed defaultSettings.idField
+            ]
+        )
+
+
+partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
+partialSettingsDecoder =
+    Decode.map4
+        (\includeFolders excludeFolders showNotesWithoutId idField settings ->
+            { settings
+                | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
+                , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
+                , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
+                , idField = idField |> Maybe.withDefault settings.idField
+            }
+        )
+        (Decode.field "includeFolders" (Decode.list Decode.string) |> Decode.maybe)
+        (Decode.field "excludeFolders" (Decode.list Decode.string) |> Decode.maybe)
+        (Decode.field "showNotesWithoutId" Decode.bool |> Decode.maybe)
+        (Decode.field "idField" Decode.string |> Decode.maybe)

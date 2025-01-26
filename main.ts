@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf } from 'obsidian';
+import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf, Menu, normalizePath } from 'obsidian';
 import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
@@ -6,15 +6,15 @@ const VIEW_TYPE_ID_PANEL = 'id-side-panel';
 interface IDSidePanelSettings {
     includeFolders: string[];
     excludeFolders: string[];
-    showNotesWithoutID: boolean;
-    customIDField: string;
+    showNotesWithoutId: boolean;
+    idField: string;
 }
 
 const DEFAULT_SETTINGS: IDSidePanelSettings = {
     includeFolders: [],
     excludeFolders: [],
-    showNotesWithoutID: true,
-    customIDField: '',
+    showNotesWithoutId: true,
+    idField: '',
 };
 
 interface NoteMeta {
@@ -42,9 +42,10 @@ class IDSidePanelView extends ItemView {
         container.empty();
 
         const elmContainer = container.createDiv();
-        
+
         const elmApp = Elm.Main.init({
             node: elmContainer,
+            flag: this.plugin.settings,
         });
         (this as any).elmApp = elmApp;
 
@@ -55,16 +56,79 @@ class IDSidePanelView extends ItemView {
                 leaf.openFile(file);
             }
         });
-    
+
+        elmApp.ports.createNote.subscribe(async ([filePath, content]: [string, string]) => {
+            const uniqueFilePath = this.getUniqueFilePath(normalizePath(filePath));
+            const file = await this.app.vault.create(uniqueFilePath, content);
+            if (file instanceof TFile) {
+                const leaf = this.app.workspace.getLeaf();
+                leaf.openFile(file);
+            }
+        });
+
+        elmApp.ports.openContextMenu.subscribe(([x, y, filePath]: [number, number, string]) => {
+            const file = this.app.vault.getAbstractFileByPath(filePath);
+            if (!file) return;
+
+            const menu = new Menu();
+
+            menu.addItem((item) =>
+                item
+                    .setSection('action')
+                    .setTitle("Create new note in sequence")
+                    .setIcon('list-plus')
+                    .onClick(() => {
+                        if (elmApp && elmApp.ports.receiveCreateNote) {
+                            elmApp.ports.receiveCreateNote.send([filePath, false]);
+                        }
+                    }),
+            );
+            menu.addItem((item) =>
+                item
+                    .setSection('action')
+                    .setTitle("Create new note in subsequence")
+                    .setIcon('list-tree')
+                    .onClick(() => {
+                        if (elmApp && elmApp.ports.receiveCreateNote) {
+                            elmApp.ports.receiveCreateNote.send([filePath, true]);
+                        }
+                    }),
+            );
+            menu.addSeparator();
+
+            this.app.workspace.trigger(
+                'file-menu',
+                menu,
+                file,
+                'note-id-context-menu',
+            );
+
+            menu.showAtPosition({ x: x, y: y });
+    });
+
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                if ((this as any).elmApp && (this as any).elmApp.ports.receiveFileOpen) {
+                if (elmApp && elmApp.ports.receiveFileOpen) {
                     const filePath = file?.path || null;
-                    (this as any).elmApp.ports.receiveFileOpen.send(filePath);
+                    elmApp.ports.receiveFileOpen.send(filePath);
                 }
             })
         );
         this.renderNotes();
+    }
+
+    getUniqueFilePath(path: string) {
+        let counter = 1;
+        const ext = path.includes('.') ? path.substring(path.lastIndexOf('.')) : '';
+        const baseName = path.replace(ext, '');
+        let uniquePath = path;
+
+        while (this.app.vault.getAbstractFileByPath(uniquePath)) {
+            uniquePath = `${baseName} (${counter})${ext}`;
+            counter++;
+        }
+
+        return uniquePath;
     }
 
     getElmApp() {
@@ -72,7 +136,7 @@ class IDSidePanelView extends ItemView {
     }
 
     renderNotes() {
-        const { showNotesWithoutID } = this.plugin.settings;
+        const { showNotesWithoutId } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
 
         const notesWithID = allNotes
@@ -89,7 +153,7 @@ class IDSidePanelView extends ItemView {
 
         let combined: NoteMeta[] = [];
         combined = combined.concat(notesWithID);
-        if (showNotesWithoutID) {
+        if (showNotesWithoutId) {
             combined = combined.concat(notesWithoutID);
         }
 
@@ -113,7 +177,7 @@ export default class IDSidePanelPlugin extends Plugin {
     noteCache: Map<string, NoteMeta> = new Map();
 
     async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
-        const { includeFolders, excludeFolders, showNotesWithoutID, customIDField } = this.settings;
+        const { includeFolders, excludeFolders, showNotesWithoutId, idField } = this.settings;
         const filePath = file.path.toLowerCase();
 
         // Normalize folder paths to remove trailing slashes and lower case them
@@ -135,11 +199,11 @@ export default class IDSidePanelPlugin extends Plugin {
                 acc[key.toLowerCase()] = frontmatter[key];
                 return acc;
             }, {} as Record<string, any>);
-            const idField = customIDField.toLowerCase() || 'id';
-            id = frontmatterKeys[idField] ?? null;
+            const normalizedIdField = idField.toLowerCase() || 'id';
+            id = frontmatterKeys[normalizedIdField] ?? null;
         }
-    
-        if (id === null && !showNotesWithoutID) return null;
+
+        if (id === null && !showNotesWithoutId) return null;
 
         return { title: file.basename, id, file };
     }
@@ -221,7 +285,7 @@ export default class IDSidePanelPlugin extends Plugin {
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
             const newMeta = await this.extractNoteMeta(file);
-    
+
             if (!newMeta) {
                 // If the file is not relevant but was previously cached, remove it
                 if (this.noteCache.has(file.path)) {
@@ -230,13 +294,13 @@ export default class IDSidePanelPlugin extends Plugin {
                 }
                 return;
             }
-    
+
             const oldMeta = this.noteCache.get(file.path);
-    
-            const metaChanged = !oldMeta || 
-                                newMeta.id !== oldMeta.id || 
-                                newMeta.title !== oldMeta.title;
-    
+
+            const metaChanged = !oldMeta ||
+                newMeta.id !== oldMeta.id ||
+                newMeta.title !== oldMeta.title;
+
             if (metaChanged) {
                 this.noteCache.set(file.path, newMeta);
                 this.queueRefresh();
@@ -307,10 +371,10 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             .setDesc('Define the frontmatter field used as the ID (case-insensitive).')
             .addText((text) =>
                 text
-                    .setPlaceholder('ID')
-                    .setValue(this.plugin.settings.customIDField)
+                    .setPlaceholder('id')
+                    .setValue(this.plugin.settings.idField)
                     .onChange(async (value) => {
-                        this.plugin.settings.customIDField = value.trim();
+                        this.plugin.settings.idField = value.trim();
                         await this.plugin.saveSettings();
                     })
             );
@@ -325,7 +389,8 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                         this.plugin.settings.includeFolders = value
                             .split(',')
                             .map((v) => v.trim())
-                            .filter((v) => v !== '');
+                            .filter((v) => v !== '')
+                            .map((v) => normalizePath(v));
                         await this.plugin.saveSettings();
                     })
             );
@@ -341,7 +406,8 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                         this.plugin.settings.excludeFolders = value
                             .split(',')
                             .map((v) => v.trim())
-                            .filter((v) => v !== '');
+                            .filter((v) => v !== '')
+                            .map((v) => normalizePath(v));
                         await this.plugin.saveSettings();
                     })
             );
@@ -351,9 +417,9 @@ class IDSidePanelSettingTab extends PluginSettingTab {
             .setDesc('Toggle the display of notes without IDs.')
             .addToggle((toggle) =>
                 toggle
-                    .setValue(this.plugin.settings.showNotesWithoutID)
+                    .setValue(this.plugin.settings.showNotesWithoutId)
                     .onChange(async (value) => {
-                        this.plugin.settings.showNotesWithoutID = value;
+                        this.plugin.settings.showNotesWithoutId = value;
                         await this.plugin.saveSettings();
                     })
             );

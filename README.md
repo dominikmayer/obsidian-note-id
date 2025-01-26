@@ -4,9 +4,10 @@ The [Obsidian](https://www.obsidian.md/) Note ID Plugin displays notes by their 
 
 ## Features
 
-- **Note Organization by ID**: Displays notes in alphanumeric order based on the `ID` property.
+- **Note Organization by ID**: Displays notes in alphanumeric order based on the `id` property.
 - **Cluster Identification**: Reveals clusters of related ideas, helping you see how your notes interconnect and where gaps or areas of high activity exist.
 - **Support for Zettelkasten**: Ideal for Zettelkasten practitioners looking to position new notes logically and expand existing threads of thought.
+- **Easily Create New Notes:** Use commands to seamlessly create new notes that continue an existing sequence (e.g., 1.2 → 1.3) or start a subsequence branching from a note (e.g., 1.2 → 1.2a). This makes it simple to extend ideas and maintain logical connections.
 
 ### How Clusters Work
 
