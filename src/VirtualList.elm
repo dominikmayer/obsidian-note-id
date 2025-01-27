@@ -1,7 +1,6 @@
 module VirtualList exposing (Model, init, update, Msg, scrollToItem, view, updateItems)
 
 import Browser.Dom
-import Debug exposing (toString)
 import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
@@ -329,7 +328,7 @@ renderVirtualRow index model renderRow =
     in
         div
             [ Html.Attributes.id (rowId index)
-            , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
+            , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat top ++ "px)")
             , Html.Attributes.style "position" "absolute"
             ]
             [ renderRow
