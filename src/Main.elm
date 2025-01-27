@@ -133,7 +133,6 @@ type Msg
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided (List NoteMeta)
-    | NotesUpdated
     | NoOp
     | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
@@ -164,9 +163,6 @@ update msg model =
 
         NotesProvided notes ->
             updateNotes model notes
-
-        NotesUpdated ->
-            ( model, measureViewport )
 
         NoOp ->
             ( model, Cmd.none )
@@ -262,7 +258,7 @@ updateNotes model newNotes =
             , rowHeights = updatedRowHeights
             , cumulativeHeights = updatedCumulativeHeights
           }
-        , Task.perform (\_ -> NotesUpdated) (Task.succeed ())
+        , measureViewport
         )
 
 
@@ -370,11 +366,8 @@ handleViewportUpdateSucceeded model viewport =
         newContainerHeight =
             viewport.viewport.height
 
-        visibleRange =
+        (( start, end ) as visibleRange) =
             calculateVisibleRange model newScrollTop newContainerHeight
-
-        ( start, end ) =
-            visibleRange
 
         unmeasuredIndices =
             List.range start (end - 1)
