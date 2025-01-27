@@ -1,13 +1,11 @@
-module VirtualList exposing (Model, init, update, Msg(..), RowHeight(..), measureViewport, calculateCumulativeHeights, scrollToItem, view)
-
--- module VirtualList exposing (..)
+module VirtualList exposing (Model, init, update, Msg, scrollToItem, view, updateItems)
 
 import Browser.Dom
 import Debug exposing (toString)
 import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
-import Html.Events exposing (on, onClick)
+import Html.Events exposing (on)
 import Json.Decode as Decode
 import List.Extra exposing (..)
 import Task
@@ -22,6 +20,11 @@ type alias Model a =
     , buffer : Int
     , visibleRange : ( Int, Int )
     }
+
+
+defaultItemHeight : Float
+defaultItemHeight =
+    26
 
 
 type Msg
@@ -62,6 +65,45 @@ update msg model =
 
         ViewportUpdated result ->
             handleViewportUpdate model result
+
+
+updateItems : Model a -> List a -> ( Model a, Cmd Msg )
+updateItems model newNotes =
+    let
+        existingHeights =
+            newNotes
+                |> List.indexedMap
+                    (\index note ->
+                        Dict.get index model.rowHeights
+                            |> Maybe.map (\height -> ( index, height ))
+                    )
+                |> List.filterMap identity
+                |> Dict.fromList
+
+        updatedRowHeights =
+            newNotes
+                |> List.indexedMap
+                    (\i note ->
+                        case Dict.get i existingHeights of
+                            Just height ->
+                                ( i, height )
+
+                            Nothing ->
+                                ( i, Default defaultItemHeight )
+                    )
+                |> Dict.fromList
+
+        updatedCumulativeHeights =
+            calculateCumulativeHeights updatedRowHeights
+    in
+        ( { model
+            | items =
+                newNotes
+            , cumulativeHeights = updatedCumulativeHeights
+            , rowHeights = updatedRowHeights
+          }
+        , measureViewport
+        )
 
 
 rowHeightToFloat : RowHeight -> Float
@@ -209,7 +251,7 @@ scrollToItem model index =
         elementStart =
             Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
     in
-        scrollToPosition "virtual-list" elementStart model.containerHeight
+        scrollToPosition virtualListId elementStart model.containerHeight
 
 
 scrollToPosition : String -> Float -> Float -> Cmd Msg
@@ -255,7 +297,7 @@ view renderRow model toSelf =
     in
         div
             [ Html.Attributes.class "virtual-list"
-            , Html.Attributes.id "virtual-list"
+            , Html.Attributes.id virtualListId
               -- Height needs to be in the element for fast measurement
             , Html.Attributes.style "height" "100%"
             , Html.Attributes.style "overflow" "auto"
@@ -300,4 +342,9 @@ onScroll msg =
 
 measureViewport : Cmd Msg
 measureViewport =
-    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list")
+    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf virtualListId)
+
+
+virtualListId : String
+virtualListId =
+    "virtual-list"

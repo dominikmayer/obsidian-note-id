@@ -1,7 +1,6 @@
 module Main exposing (..)
 
 import Browser
-import Dict
 import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
@@ -10,7 +9,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId
 import Ports exposing (..)
-import Debug exposing (toString)
+import Debug
 import VirtualList
 
 
@@ -74,11 +73,6 @@ defaultSettings =
     }
 
 
-defaultItemHeight : Float
-defaultItemHeight =
-    26
-
-
 init : Encode.Value -> ( Model, Cmd Msg )
 init flags =
     let
@@ -106,7 +100,6 @@ type Msg
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided (List NoteMeta)
-    | NoOp
     | VirtualListMsg VirtualList.Msg
 
 
@@ -135,15 +128,8 @@ update msg model =
         NotesProvided notes ->
             updateNotes model notes
 
-        NoOp ->
-            ( model, Cmd.none )
-
         VirtualListMsg virtualListMsg ->
-            let
-                ( newVirtualList, virtualListCmd ) =
-                    VirtualList.update virtualListMsg model.virtualList
-            in
-                ( { model | virtualList = newVirtualList }, Cmd.map VirtualListMsg virtualListCmd )
+            translate (VirtualList.update virtualListMsg model.virtualList) model
 
 
 translate : ( VirtualList.Model NoteMeta, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
@@ -201,49 +187,14 @@ getPathWithoutFileName filePath =
 updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
 updateNotes model newNotes =
     let
-        existingHeights =
-            newNotes
-                |> List.filterMap
-                    (\note ->
-                        findIndexByFilePath note.filePath model.notes
-                            |> Maybe.andThen (\index -> Dict.get index model.virtualList.rowHeights)
-                            |> Maybe.map (\height -> ( note.filePath, height ))
-                    )
-                |> Dict.fromList
-
-        updatedRowHeights =
-            newNotes
-                |> List.indexedMap
-                    (\i note ->
-                        case Dict.get note.filePath existingHeights of
-                            Just height ->
-                                ( i, height )
-
-                            Nothing ->
-                                ( i, VirtualList.Default defaultItemHeight )
-                    )
-                |> Dict.fromList
-
-        updatedCumulativeHeights =
-            VirtualList.calculateCumulativeHeights updatedRowHeights
-
-        oldVirtualList =
-            model.virtualList
-
-        newVirtualList =
-            { oldVirtualList
-                | items =
-                    newNotes
-                    -- TODO: hand over by message/function?
-                , cumulativeHeights = updatedCumulativeHeights
-                , rowHeights = updatedRowHeights
-            }
+        ( newVirtualList, virtualListCmd ) =
+            VirtualList.updateItems model.virtualList newNotes
     in
         ( { model
             | notes = newNotes
             , virtualList = newVirtualList
           }
-        , Cmd.map VirtualListMsg VirtualList.measureViewport
+        , Cmd.map VirtualListMsg virtualListCmd
         )
 
 
