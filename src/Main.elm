@@ -188,7 +188,7 @@ updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
 updateNotes model newNotes =
     let
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.updateItems model.virtualList newNotes
+            VirtualList.updateItems (\note -> note.filePath) model.virtualList newNotes
     in
         ( { model
             | notes = newNotes

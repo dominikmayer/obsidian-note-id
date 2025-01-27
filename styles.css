@@ -7,3 +7,9 @@
     top: 0;
     width: 100%;
 }
+
+.note-id-list-items > div {
+    left: 0;
+    right: 0;
+    overflow: hidden;
+}

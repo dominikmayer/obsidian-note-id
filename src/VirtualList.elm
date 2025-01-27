@@ -67,24 +67,24 @@ update msg model =
             handleViewportUpdate model result
 
 
-updateItems : Model a -> List a -> ( Model a, Cmd Msg )
-updateItems model newNotes =
+updateItems : (a -> String) -> Model a -> List a -> ( Model a, Cmd Msg )
+updateItems getId model newNotes =
     let
         existingHeights =
             newNotes
-                |> List.indexedMap
-                    (\index note ->
-                        Dict.get index model.rowHeights
-                            |> Maybe.map (\height -> ( index, height ))
+                |> List.filterMap
+                    (\note ->
+                        findIndex (\oldNote -> getId oldNote == getId note) model.items
+                            |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
+                            |> Maybe.map (\height -> ( getId note, height ))
                     )
-                |> List.filterMap identity
                 |> Dict.fromList
 
         updatedRowHeights =
             newNotes
                 |> List.indexedMap
                     (\i note ->
-                        case Dict.get i existingHeights of
+                        case Dict.get (getId note) existingHeights of
                             Just height ->
                                 ( i, height )
 
@@ -97,13 +97,21 @@ updateItems model newNotes =
             calculateCumulativeHeights updatedRowHeights
     in
         ( { model
-            | items =
-                newNotes
+            | items = newNotes
             , cumulativeHeights = updatedCumulativeHeights
             , rowHeights = updatedRowHeights
           }
         , measureViewport
         )
+
+
+findIndex : (a -> Bool) -> List a -> Maybe Int
+findIndex predicate notes =
+    notes
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( _, note ) -> predicate note)
+        |> List.head
+        |> Maybe.map Tuple.first
 
 
 rowHeightToFloat : RowHeight -> Float
