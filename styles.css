@@ -2,23 +2,8 @@
     color: var(--text-faint);
 }
 
-.note-id-list-spacer {
-    position: relative;
-}
-
 .note-id-list-items {
     position: absolute;
     top: 0;
     width: 100%;
-}
-
-.note-id-list-items .tree-item-self {
-    position: absolute;
-    left: 0;
-    right: 0;
-    overflow: hidden;
-}
-
-.virtual-list {
-    overflow: auto;
 }

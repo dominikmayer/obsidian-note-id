@@ -1,18 +1,21 @@
-module VirtualList exposing (Model, init, RowHeight(..), calculateCumulativeHeights, update, Msg(..), handleViewportUpdate, rowId, scrollToItem)
+module VirtualList exposing (Model, init, update, Msg(..), RowHeight(..), measureViewport, calculateCumulativeHeights, scrollToItem, view)
 
 -- module VirtualList exposing (..)
 
 import Browser.Dom
+import Debug exposing (toString)
 import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
+import Json.Decode as Decode
 import List.Extra exposing (..)
 import Task
 
 
-type alias Model =
-    { containerHeight : Float
+type alias Model a =
+    { items : List a
+    , containerHeight : Float
     , cumulativeHeights : Dict Int Float
     , rowHeights : Dict Int RowHeight
     , scrollTop : Float
@@ -23,7 +26,9 @@ type alias Model =
 
 type Msg
     = RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
+    | Scrolled
     | NoOp
+    | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
 
 
 type RowHeight
@@ -31,9 +36,10 @@ type RowHeight
     | Default Float
 
 
-init : Model
+init : Model a
 init =
-    { containerHeight = 500
+    { items = []
+    , containerHeight = 500
     , cumulativeHeights = Dict.empty
     , rowHeights = Dict.empty
     , scrollTop = 0
@@ -42,14 +48,20 @@ init =
     }
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
+update : Msg -> Model a -> ( Model a, Cmd Msg )
 update msg model =
     case msg of
         RowHeightMeasured index result ->
             handleRowHeightMeasurementResult model index result
 
+        Scrolled ->
+            ( model, measureViewport )
+
         NoOp ->
             ( model, Cmd.none )
+
+        ViewportUpdated result ->
+            handleViewportUpdate model result
 
 
 rowHeightToFloat : RowHeight -> Float
@@ -80,7 +92,7 @@ calculateCumulativeHeights heights =
         |> Tuple.first
 
 
-calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
+calculateVisibleRange : Model a -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
         start =
@@ -101,7 +113,7 @@ calculateVisibleRange model scrollTop containerHeight =
         ( (max 0 (start - buffer)), (min (Dict.size model.rowHeights) (end + buffer)) )
 
 
-handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
+handleRowHeightMeasurementResult : Model a -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model a, Cmd Msg )
 handleRowHeightMeasurementResult model index result =
     case result of
         Ok element ->
@@ -111,7 +123,7 @@ handleRowHeightMeasurementResult model index result =
             ( model, Cmd.none )
 
 
-updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
+updateRowHeight : Model a -> Int -> Browser.Dom.Element -> ( Model a, Cmd Msg )
 updateRowHeight model index element =
     let
         height =
@@ -131,7 +143,7 @@ updateRowHeight model index element =
         )
 
 
-handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
+handleViewportUpdate : Model a -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model a, Cmd Msg )
 handleViewportUpdate model result =
     case result of
         Ok viewport ->
@@ -141,7 +153,7 @@ handleViewportUpdate model result =
             ( model, Cmd.none )
 
 
-handleViewportUpdateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
+handleViewportUpdateSucceeded : Model a -> Browser.Dom.Viewport -> ( Model a, Cmd Msg )
 handleViewportUpdateSucceeded model viewport =
     let
         newScrollTop =
@@ -191,7 +203,7 @@ rowId index =
     "virtual-list-row-" ++ String.fromInt index
 
 
-scrollToItem : Model -> Int -> Cmd Msg
+scrollToItem : Model a -> Int -> Cmd Msg
 scrollToItem model index =
     let
         elementStart =
@@ -210,33 +222,82 @@ scrollToPosition targetId elementStart containerHeight =
             |> Task.attempt (\_ -> NoOp)
 
 
+totalHeight : Model a -> Float
+totalHeight model =
+    case Dict.get (Dict.size model.cumulativeHeights - 1) model.cumulativeHeights of
+        Just height ->
+            height
 
--- viewRow : Model -> Int -> NoteMeta -> Html Msg
--- viewRow model index note =
---     let
---         top =
---             Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
---     in
---         div
---             [ Html.Attributes.id note.filePath
---             , Html.Attributes.classList
---                 [ ( "tree-item-self", True )
---                 , ( "is-clickable", True )
---                 , ( "is-active", Just note.filePath == model.currentFile )
---                 ]
---             , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
---             , Html.Attributes.attribute "data-path" note.filePath
---             , onClick (NoteClicked note.filePath)
---             , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
---             ]
---             [ div
---                 [ Html.Attributes.class "tree-item-inner" ]
---                 (case note.id of
---                     Just id ->
---                         [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
---                         , Html.text note.title
---                         ]
---                     Nothing ->
---                         [ Html.text note.title ]
---                 )
---             ]
+        Nothing ->
+            0
+
+
+view : (a -> Int -> Html msg) -> Model a -> (Msg -> msg) -> Html msg
+view renderRow model toSelf =
+    let
+        ( start, end ) =
+            model.visibleRange
+
+        visibleItems =
+            slice start end model.items
+
+        rows =
+            List.indexedMap
+                (\localIndex item ->
+                    let
+                        globalIndex =
+                            start + localIndex
+                    in
+                        -- viewRow model globalIndex item
+                        renderVirtualRow globalIndex model (renderRow item globalIndex)
+                )
+                visibleItems
+    in
+        div
+            [ Html.Attributes.class "virtual-list"
+            , Html.Attributes.id "virtual-list"
+              -- Height needs to be in the element for fast measurement
+            , Html.Attributes.style "height" "100%"
+            , Html.Attributes.style "overflow" "auto"
+            , onScroll (toSelf Scrolled)
+            ]
+            [ div
+                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px")
+                , Html.Attributes.style "position" "relative"
+                ]
+                [ div [ Html.Attributes.class "note-id-list-items" ]
+                    rows
+                ]
+            ]
+
+
+renderVirtualRow : Int -> Model a -> Html msg -> Html msg
+renderVirtualRow index model renderRow =
+    let
+        top =
+            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+    in
+        div
+            [ Html.Attributes.id (rowId index)
+            , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
+            , Html.Attributes.style "position" "absolute"
+            ]
+            [ renderRow
+            ]
+
+
+slice : Int -> Int -> List a -> List a
+slice start end list =
+    list
+        |> List.drop start
+        |> List.take (end - start)
+
+
+onScroll : msg -> Html.Attribute msg
+onScroll msg =
+    on "scroll" (Decode.succeed msg)
+
+
+measureViewport : Cmd Msg
+measureViewport =
+    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list")

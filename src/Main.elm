@@ -1,9 +1,8 @@
 module Main exposing (..)
 
 import Browser
-import Browser.Dom
 import Dict
-import Html exposing (Html, div)
+import Html exposing (Html, div, text)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
 import Html.Events.Extra.Mouse as Mouse
@@ -11,7 +10,6 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId
 import Ports exposing (..)
-import Task
 import Debug exposing (toString)
 import VirtualList
 
@@ -38,7 +36,7 @@ type alias Model =
     , currentFile : Maybe String
     , settings : Settings
     , fileOpenedByPlugin : Bool
-    , virtualList : VirtualList.Model
+    , virtualList : VirtualList.Model NoteMeta
     }
 
 
@@ -109,8 +107,6 @@ type Msg
     | NoteCreationRequested ( String, Bool )
     | NotesProvided (List NoteMeta)
     | NoOp
-    | Scrolled
-    | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
     | VirtualListMsg VirtualList.Msg
 
 
@@ -142,23 +138,17 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        Scrolled ->
-            ( model, measureViewport )
-
-        ViewportUpdated result ->
-            translate (VirtualList.handleViewportUpdate model.virtualList result) model
-
         VirtualListMsg virtualListMsg ->
             let
                 ( newVirtualList, virtualListCmd ) =
                     VirtualList.update virtualListMsg model.virtualList
             in
-                ( { model | virtualList = newVirtualList }, Cmd.none )
+                ( { model | virtualList = newVirtualList }, Cmd.map VirtualListMsg virtualListCmd )
 
 
-translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
-translate ( virtualListModel, virtualListMsg ) model =
-    ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListMsg )
+translate : ( VirtualList.Model NoteMeta, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+translate ( virtualListModel, virtualListCmd ) model =
+    ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
 
 createNote : Model -> String -> Bool -> ( Model, Cmd Msg )
@@ -242,7 +232,10 @@ updateNotes model newNotes =
 
         newVirtualList =
             { oldVirtualList
-                | cumulativeHeights = updatedCumulativeHeights
+                | items =
+                    newNotes
+                    -- TODO: hand over by message/function?
+                , cumulativeHeights = updatedCumulativeHeights
                 , rowHeights = updatedRowHeights
             }
     in
@@ -250,7 +243,7 @@ updateNotes model newNotes =
             | notes = newNotes
             , virtualList = newVirtualList
           }
-        , measureViewport
+        , Cmd.map VirtualListMsg VirtualList.measureViewport
         )
 
 
@@ -270,11 +263,6 @@ handleFileRename model ( oldPath, newPath ) =
                 Cmd.none
     in
         ( { model | currentFile = updatedCurrentFile }, cmd )
-
-
-measureViewport : Cmd Msg
-measureViewport =
-    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list")
 
 
 findIndexByFilePath : String -> List NoteMeta -> Maybe Int
@@ -338,86 +326,33 @@ slice start end list =
 
 view : Model -> Html Msg
 view model =
-    let
-        ( start, end ) =
-            model.virtualList.visibleRange
+    VirtualList.view (renderRow model) model.virtualList VirtualListMsg
 
-        visibleItems =
-            slice start end model.notes
 
-        rows =
-            List.indexedMap
-                (\localIndex item ->
-                    let
-                        globalIndex =
-                            start + localIndex
-                    in
-                        viewRow model globalIndex item
-                )
-                visibleItems
-    in
-        div
-            [ Html.Attributes.class "virtual-list"
-            , Html.Attributes.id "virtual-list"
-              -- Height needs to be in the element for fast measurement
-            , Html.Attributes.style "height" "100%"
-            , onScroll Scrolled
+renderRow : Model -> NoteMeta -> Int -> Html Msg
+renderRow model note index =
+    div
+        [ Html.Attributes.classList
+            [ ( "tree-item-self", True )
+            , ( "is-clickable", True )
+            , ( "is-active", Just note.filePath == model.currentFile )
             ]
-            [ div
-                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px")
-                , Html.Attributes.class "note-id-list-spacer"
-                ]
-                [ div [ Html.Attributes.class "note-id-list-items" ]
-                    rows
-                ]
-            ]
+        , Html.Attributes.attribute "data-path" note.filePath
+        , onClick (NoteClicked note.filePath)
+        , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
+        ]
+        [ div
+            [ Html.Attributes.class "tree-item-inner" ]
+            (case note.id of
+                Just id ->
+                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                    , Html.text note.title
+                    ]
 
-
-onScroll : msg -> Html.Attribute msg
-onScroll msg =
-    on "scroll" (Decode.succeed msg)
-
-
-totalHeight : Model -> Float
-totalHeight model =
-    case Dict.get (List.length model.notes - 1) model.virtualList.cumulativeHeights of
-        Just height ->
-            height
-
-        Nothing ->
-            0
-
-
-viewRow : Model -> Int -> NoteMeta -> Html Msg
-viewRow model index note =
-    let
-        top =
-            Maybe.withDefault 0 (Dict.get (index - 1) model.virtualList.cumulativeHeights)
-    in
-        div
-            [ Html.Attributes.id (VirtualList.rowId index)
-            , Html.Attributes.classList
-                [ ( "tree-item-self", True )
-                , ( "is-clickable", True )
-                , ( "is-active", Just note.filePath == model.currentFile )
-                ]
-            , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
-            , Html.Attributes.attribute "data-path" note.filePath
-            , onClick (NoteClicked note.filePath)
-            , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
-            ]
-            [ div
-                [ Html.Attributes.class "tree-item-inner" ]
-                (case note.id of
-                    Just id ->
-                        [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                        , Html.text note.title
-                        ]
-
-                    Nothing ->
-                        [ Html.text note.title ]
-                )
-            ]
+                Nothing ->
+                    [ Html.text note.title ]
+            )
+        ]
 
 
 subscriptions : Model -> Sub Msg
