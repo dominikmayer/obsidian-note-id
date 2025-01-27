@@ -2,7 +2,7 @@ module Main exposing (..)
 
 import Browser
 import Browser.Dom
-import Dict exposing (Dict, foldl)
+import Dict
 import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on, onClick)
@@ -319,24 +319,10 @@ scrollToNote : Model -> String -> Cmd Msg
 scrollToNote model path =
     case findIndexByFilePath path model.notes of
         Just index ->
-            let
-                elementStart =
-                    Maybe.withDefault 0 (Dict.get (index - 1) model.virtualList.cumulativeHeights)
-            in
-                scrollToPosition "virtual-list" elementStart model.virtualList.containerHeight
+            Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index)
 
         Nothing ->
             Cmd.none
-
-
-scrollToPosition : String -> Float -> Float -> Cmd Msg
-scrollToPosition targetId elementStart containerHeight =
-    let
-        position =
-            elementStart - 0.5 * containerHeight
-    in
-        Browser.Dom.setViewportOf targetId 0 position
-            |> Task.attempt (\_ -> NoOp)
 
 
 slice : Int -> Int -> List a -> List a

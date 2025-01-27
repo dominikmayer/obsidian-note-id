@@ -1,4 +1,4 @@
-module VirtualList exposing (Model, init, RowHeight(..), calculateCumulativeHeights, update, Msg(..), handleViewportUpdate, rowId)
+module VirtualList exposing (Model, init, RowHeight(..), calculateCumulativeHeights, update, Msg(..), handleViewportUpdate, rowId, scrollToItem)
 
 -- module VirtualList exposing (..)
 
@@ -23,6 +23,7 @@ type alias Model =
 
 type Msg
     = RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
+    | NoOp
 
 
 type RowHeight
@@ -46,6 +47,9 @@ update msg model =
     case msg of
         RowHeightMeasured index result ->
             handleRowHeightMeasurementResult model index result
+
+        NoOp ->
+            ( model, Cmd.none )
 
 
 rowHeightToFloat : RowHeight -> Float
@@ -185,6 +189,25 @@ handleViewportUpdateSucceeded model viewport =
 rowId : Int -> String
 rowId index =
     "virtual-list-row-" ++ String.fromInt index
+
+
+scrollToItem : Model -> Int -> Cmd Msg
+scrollToItem model index =
+    let
+        elementStart =
+            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+    in
+        scrollToPosition "virtual-list" elementStart model.containerHeight
+
+
+scrollToPosition : String -> Float -> Float -> Cmd Msg
+scrollToPosition targetId elementStart containerHeight =
+    let
+        position =
+            elementStart - 0.5 * containerHeight
+    in
+        Browser.Dom.setViewportOf targetId 0 position
+            |> Task.attempt (\_ -> NoOp)
 
 
 
