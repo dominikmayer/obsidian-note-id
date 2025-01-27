@@ -9,11 +9,11 @@ import Html.Events exposing (on, onClick)
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
 import Json.Encode as Encode
-import List.Extra exposing (..)
 import NoteId
 import Ports exposing (..)
 import Task
 import Debug exposing (toString)
+import VirtualList
 
 
 -- MAIN
@@ -37,29 +37,9 @@ type alias Model =
     { notes : List NoteMeta
     , currentFile : Maybe String
     , settings : Settings
-    , cumulativeHeights : Dict Int Float
-    , rowHeights : Dict Int RowHeight
-    , scrollTop : Float
-    , containerHeight : Float
-    , buffer : Int
-    , visibleRange : ( Int, Int )
     , fileOpenedByPlugin : Bool
+    , virtualList : VirtualList.Model
     }
-
-
-type RowHeight
-    = Measured Float
-    | Default Float
-
-
-rowHeightToFloat : RowHeight -> Float
-rowHeightToFloat rowHeight =
-    case rowHeight of
-        Measured value ->
-            value
-
-        Default value ->
-            value
 
 
 defaultModel : Model
@@ -67,13 +47,8 @@ defaultModel =
     { notes = []
     , currentFile = Nothing
     , settings = defaultSettings
-    , cumulativeHeights = Dict.empty
-    , rowHeights = Dict.empty
-    , scrollTop = 0
-    , containerHeight = 500
-    , buffer = 5
-    , visibleRange = ( 0, 20 )
     , fileOpenedByPlugin = False
+    , virtualList = VirtualList.init
     }
 
 
@@ -134,9 +109,9 @@ type Msg
     | NoteCreationRequested ( String, Bool )
     | NotesProvided (List NoteMeta)
     | NoOp
-    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
+    | VirtualListMsg VirtualList.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -167,14 +142,23 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        RowHeightMeasured index result ->
-            handleRowHeightMeasurementResult model index result
-
         Scrolled ->
             ( model, measureViewport )
 
         ViewportUpdated result ->
-            handleViewportUpdate model result
+            translate (VirtualList.handleViewportUpdate model.virtualList result) model
+
+        VirtualListMsg virtualListMsg ->
+            let
+                ( newVirtualList, virtualListCmd ) =
+                    VirtualList.update virtualListMsg model.virtualList
+            in
+                ( { model | virtualList = newVirtualList }, Cmd.none )
+
+
+translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+translate ( virtualListModel, virtualListMsg ) model =
+    ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListMsg )
 
 
 createNote : Model -> String -> Bool -> ( Model, Cmd Msg )
@@ -232,7 +216,7 @@ updateNotes model newNotes =
                 |> List.filterMap
                     (\note ->
                         findIndexByFilePath note.filePath model.notes
-                            |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
+                            |> Maybe.andThen (\index -> Dict.get index model.virtualList.rowHeights)
                             |> Maybe.map (\height -> ( note.filePath, height ))
                     )
                 |> Dict.fromList
@@ -246,17 +230,25 @@ updateNotes model newNotes =
                                 ( i, height )
 
                             Nothing ->
-                                ( i, Default defaultItemHeight )
+                                ( i, VirtualList.Default defaultItemHeight )
                     )
                 |> Dict.fromList
 
         updatedCumulativeHeights =
-            calculateCumulativeHeights updatedRowHeights
+            VirtualList.calculateCumulativeHeights updatedRowHeights
+
+        oldVirtualList =
+            model.virtualList
+
+        newVirtualList =
+            { oldVirtualList
+                | cumulativeHeights = updatedCumulativeHeights
+                , rowHeights = updatedRowHeights
+            }
     in
         ( { model
             | notes = newNotes
-            , rowHeights = updatedRowHeights
-            , cumulativeHeights = updatedCumulativeHeights
+            , virtualList = newVirtualList
           }
         , measureViewport
         )
@@ -329,9 +321,9 @@ scrollToNote model path =
         Just index ->
             let
                 elementStart =
-                    Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+                    Maybe.withDefault 0 (Dict.get (index - 1) model.virtualList.cumulativeHeights)
             in
-                scrollToPosition "virtual-list" elementStart model.containerHeight
+                scrollToPosition "virtual-list" elementStart model.virtualList.containerHeight
 
         Nothing ->
             Cmd.none
@@ -345,140 +337,6 @@ scrollToPosition targetId elementStart containerHeight =
     in
         Browser.Dom.setViewportOf targetId 0 position
             |> Task.attempt (\_ -> NoOp)
-
-
-handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUpdate model result =
-    case result of
-        Ok viewport ->
-            handleViewportUpdateSucceeded model viewport
-
-        Err _ ->
-            ( model, Cmd.none )
-
-
-handleViewportUpdateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUpdateSucceeded model viewport =
-    let
-        newScrollTop =
-            viewport.viewport.y
-
-        newContainerHeight =
-            viewport.viewport.height
-
-        (( start, end ) as visibleRange) =
-            calculateVisibleRange model newScrollTop newContainerHeight
-
-        unmeasuredIndices =
-            List.range start (end - 1)
-                |> List.filter
-                    (\index ->
-                        case Dict.get index model.rowHeights of
-                            Just (Default _) ->
-                                True
-
-                            Just (Measured _) ->
-                                False
-
-                            Nothing ->
-                                True
-                    )
-
-        measureCmds =
-            unmeasuredIndices
-                |> List.filterMap
-                    (\index ->
-                        noteFilePath model index
-                            |> Maybe.map
-                                (\filePath ->
-                                    Browser.Dom.getElement filePath
-                                        |> Task.attempt (RowHeightMeasured index)
-                                )
-                    )
-                |> Cmd.batch
-    in
-        ( { model
-            | scrollTop = newScrollTop
-            , containerHeight = newContainerHeight
-            , visibleRange = visibleRange
-          }
-        , measureCmds
-        )
-
-
-handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
-handleRowHeightMeasurementResult model index result =
-    case result of
-        Ok element ->
-            updateRowHeight model index element
-
-        Err _ ->
-            ( model, Cmd.none )
-
-
-updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
-updateRowHeight model index element =
-    let
-        height =
-            element.element.height
-
-        updatedRowHeights =
-            Dict.insert index (Measured height) model.rowHeights
-
-        updatedCumulativeHeights =
-            calculateCumulativeHeights updatedRowHeights
-    in
-        ( { model
-            | rowHeights = updatedRowHeights
-            , cumulativeHeights = updatedCumulativeHeights
-          }
-        , Cmd.none
-        )
-
-
-noteFilePath : Model -> Int -> Maybe String
-noteFilePath model index =
-    List.Extra.getAt index model.notes
-        |> Maybe.map .filePath
-
-
-calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
-calculateCumulativeHeights heights =
-    foldl
-        (\index rowHeight ( accumHeights, cumulative ) ->
-            let
-                height =
-                    rowHeightToFloat rowHeight
-
-                cumulativeHeight =
-                    cumulative + height
-            in
-                ( Dict.insert index cumulativeHeight accumHeights, cumulativeHeight )
-        )
-        ( Dict.empty, 0 )
-        heights
-        |> Tuple.first
-
-
-calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
-calculateVisibleRange model scrollTop containerHeight =
-    let
-        start =
-            Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) >= scrollTop)
-                |> List.head
-                |> Maybe.withDefault 0
-
-        end =
-            Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < scrollTop + containerHeight)
-                |> last
-                |> Maybe.withDefault (List.length model.notes - 1)
-
-        buffer =
-            model.buffer
-    in
-        ( (max 0 (start - buffer)), (min (List.length model.notes) (end + buffer)) )
 
 
 slice : Int -> Int -> List a -> List a
@@ -496,7 +354,7 @@ view : Model -> Html Msg
 view model =
     let
         ( start, end ) =
-            model.visibleRange
+            model.virtualList.visibleRange
 
         visibleItems =
             slice start end model.notes
@@ -536,7 +394,7 @@ onScroll msg =
 
 totalHeight : Model -> Float
 totalHeight model =
-    case Dict.get (List.length model.notes - 1) model.cumulativeHeights of
+    case Dict.get (List.length model.notes - 1) model.virtualList.cumulativeHeights of
         Just height ->
             height
 
@@ -548,10 +406,10 @@ viewRow : Model -> Int -> NoteMeta -> Html Msg
 viewRow model index note =
     let
         top =
-            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+            Maybe.withDefault 0 (Dict.get (index - 1) model.virtualList.cumulativeHeights)
     in
         div
-            [ Html.Attributes.id note.filePath
+            [ Html.Attributes.id (VirtualList.rowId index)
             , Html.Attributes.classList
                 [ ( "tree-item-self", True )
                 , ( "is-clickable", True )
