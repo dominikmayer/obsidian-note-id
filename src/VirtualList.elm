@@ -16,6 +16,7 @@ type alias Model a =
     , cumulativeHeights : Dict Int Float
     , rowHeights : Dict Int RowHeight
     , scrollTop : Float
+    , previousScrollTop : Float
     , buffer : Int
     , visibleRange : ( Int, Int )
     }
@@ -45,6 +46,7 @@ init =
     , cumulativeHeights = Dict.empty
     , rowHeights = Dict.empty
     , scrollTop = 0
+    , previousScrollTop = 0
     , buffer = 5
     , visibleRange = ( 0, 20 )
     }
@@ -57,7 +59,21 @@ update msg model =
             handleRowHeightMeasurementResult model index result
 
         Scrolled ->
-            ( model, measureViewport )
+            let
+                scrollSpeed =
+                    abs (model.scrollTop - model.previousScrollTop)
+
+                newBuffer =
+                    if scrollSpeed > 200 then
+                        30
+                    else if scrollSpeed > 100 then
+                        20
+                    else if scrollSpeed > 50 then
+                        10
+                    else
+                        5
+            in
+                ( { model | buffer = newBuffer }, measureViewport )
 
         NoOp ->
             ( model, Cmd.none )
@@ -241,6 +257,7 @@ handleViewportUpdateSucceeded model viewport =
         ( { model
             | containerHeight = newContainerHeight
             , scrollTop = newScrollTop
+            , previousScrollTop = model.scrollTop
             , visibleRange = visibleRange
           }
         , measureCmds
