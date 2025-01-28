@@ -41,12 +41,19 @@ type alias Model =
 
 defaultModel : Model
 defaultModel =
-    { notes = []
-    , currentFile = Nothing
-    , settings = defaultSettings
-    , fileOpenedByPlugin = False
-    , virtualList = VirtualList.init
-    }
+    let
+        default =
+            VirtualList.defaultConfig
+
+        config =
+            { default | buffer = 10 }
+    in
+        { notes = []
+        , currentFile = Nothing
+        , settings = defaultSettings
+        , fileOpenedByPlugin = False
+        , virtualList = VirtualList.init config
+        }
 
 
 type alias NoteMeta =
@@ -66,7 +73,7 @@ type alias Settings =
 
 defaultSettings : Settings
 defaultSettings =
-    { includeFolders = [ "Zettel" ]
+    { includeFolders = []
     , excludeFolders = []
     , showNotesWithoutId = True
     , idField = "id"
@@ -262,13 +269,6 @@ scrollToNote model path =
 
         Nothing ->
             Cmd.none
-
-
-slice : Int -> Int -> List a -> List a
-slice start end list =
-    list
-        |> List.drop start
-        |> List.take (end - start)
 
 
 

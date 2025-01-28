@@ -1,4 +1,14 @@
-module VirtualList exposing (Model, init, update, Msg, scrollToItem, view, updateItems)
+module VirtualList
+    exposing
+        ( init
+        , defaultConfig
+        , update
+        , view
+        , updateItems
+        , scrollToItem
+        , Model
+        , Msg
+        )
 
 import Browser.Dom
 import Dict exposing (Dict, foldl)
@@ -10,21 +20,32 @@ import List.Extra exposing (..)
 import Task
 
 
-type alias Model a =
-    { items : List a
-    , containerHeight : Float
-    , cumulativeHeights : Dict Int Float
-    , rowHeights : Dict Int RowHeight
-    , scrollTop : Float
-    , previousScrollTop : Float
-    , buffer : Int
-    , visibleRange : ( Int, Int )
+type alias Config =
+    { buffer : Int
+    , height : Float
+    , defaultItemHeight : Float
     }
 
 
-defaultItemHeight : Float
-defaultItemHeight =
-    26
+defaultConfig : Config
+defaultConfig =
+    { buffer = 5
+    , height = 500
+    , defaultItemHeight = 26
+    }
+
+
+type alias Model a =
+    { items : List a
+    , height : Float
+    , defaultItemHeight : Float
+    , buffer : Int
+    , visibleRange : ( Int, Int )
+    , rowHeights : Dict Int RowHeight
+    , cumulativeHeights : Dict Int Float
+    , scrollTop : Float
+    , previousScrollTop : Float
+    }
 
 
 type Msg
@@ -39,16 +60,17 @@ type RowHeight
     | Default Float
 
 
-init : Model a
-init =
+init : Config -> Model a
+init options =
     { items = []
-    , containerHeight = 500
-    , cumulativeHeights = Dict.empty
+    , height = options.height
+    , buffer = options.buffer
+    , defaultItemHeight = options.defaultItemHeight
+    , visibleRange = ( 0, 20 )
     , rowHeights = Dict.empty
+    , cumulativeHeights = Dict.empty
     , scrollTop = 0
     , previousScrollTop = 0
-    , buffer = 5
-    , visibleRange = ( 0, 20 )
     }
 
 
@@ -83,36 +105,40 @@ update msg model =
 
 
 updateItems : (a -> String) -> Model a -> List a -> ( Model a, Cmd Msg )
-updateItems getId model newNotes =
+updateItems getId model newItems =
     let
+        heightKnown =
+            (\item ->
+                findIndex (\oldItem -> getId oldItem == getId item) model.items
+                    |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
+                    |> Maybe.map (\height -> ( getId item, height ))
+            )
+
         existingHeights =
-            newNotes
-                |> List.filterMap
-                    (\note ->
-                        findIndex (\oldNote -> getId oldNote == getId note) model.items
-                            |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
-                            |> Maybe.map (\height -> ( getId note, height ))
-                    )
+            newItems
+                |> List.filterMap heightKnown
                 |> Dict.fromList
 
-        updatedRowHeights =
-            newNotes
-                |> List.indexedMap
-                    (\i note ->
-                        case Dict.get (getId note) existingHeights of
-                            Just height ->
-                                ( i, height )
+        knownOrDefaultHeight =
+            (\index item ->
+                case Dict.get (getId item) existingHeights of
+                    Just height ->
+                        ( index, height )
 
-                            Nothing ->
-                                ( i, Default defaultItemHeight )
-                    )
+                    Nothing ->
+                        ( index, Default model.defaultItemHeight )
+            )
+
+        updatedRowHeights =
+            newItems
+                |> List.indexedMap knownOrDefaultHeight
                 |> Dict.fromList
 
         updatedCumulativeHeights =
             calculateCumulativeHeights updatedRowHeights
     in
         ( { model
-            | items = newNotes
+            | items = newItems
             , cumulativeHeights = updatedCumulativeHeights
             , rowHeights = updatedRowHeights
           }
@@ -121,12 +147,30 @@ updateItems getId model newNotes =
 
 
 findIndex : (a -> Bool) -> List a -> Maybe Int
-findIndex predicate notes =
-    notes
+findIndex predicate items =
+    items
         |> List.indexedMap Tuple.pair
-        |> List.filter (\( _, note ) -> predicate note)
+        |> List.filter (\( _, item ) -> predicate item)
         |> List.head
         |> Maybe.map Tuple.first
+
+
+calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
+calculateCumulativeHeights heights =
+    foldl insertCumulativeHeight ( Dict.empty, 0 ) heights
+        |> Tuple.first
+
+
+insertCumulativeHeight : comparable -> RowHeight -> ( Dict comparable Float, Float ) -> ( Dict comparable Float, Float )
+insertCumulativeHeight index rowHeight ( cumulativeHeights, cumulative ) =
+    let
+        height =
+            rowHeightToFloat rowHeight
+
+        cumulativeHeight =
+            cumulative + height
+    in
+        ( Dict.insert index cumulativeHeight cumulativeHeights, cumulativeHeight )
 
 
 rowHeightToFloat : RowHeight -> Float
@@ -139,36 +183,21 @@ rowHeightToFloat rowHeight =
             value
 
 
-calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
-calculateCumulativeHeights heights =
-    foldl
-        (\index rowHeight ( accumHeights, cumulative ) ->
-            let
-                height =
-                    rowHeightToFloat rowHeight
-
-                cumulativeHeight =
-                    cumulative + height
-            in
-                ( Dict.insert index cumulativeHeight accumHeights, cumulativeHeight )
-        )
-        ( Dict.empty, 0 )
-        heights
-        |> Tuple.first
-
-
 calculateVisibleRange : Model a -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
+        height =
+            (\index -> Maybe.withDefault 0 (Dict.get index model.cumulativeHeights))
+
         start =
             Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) >= scrollTop)
+                |> List.filter (\index -> height index >= scrollTop)
                 |> List.head
                 |> Maybe.withDefault 0
 
         end =
             Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < scrollTop + containerHeight)
+                |> List.filter (\index -> height index < scrollTop + containerHeight)
                 |> last
                 |> Maybe.withDefault (Dict.size model.rowHeights - 1)
 
@@ -212,14 +241,14 @@ handleViewportUpdate : Model a -> Result Browser.Dom.Error Browser.Dom.Viewport 
 handleViewportUpdate model result =
     case result of
         Ok viewport ->
-            handleViewportUpdateSucceeded model viewport
+            handleSuccessfulViewportUpdate model viewport
 
         Err _ ->
             ( model, Cmd.none )
 
 
-handleViewportUpdateSucceeded : Model a -> Browser.Dom.Viewport -> ( Model a, Cmd Msg )
-handleViewportUpdateSucceeded model viewport =
+handleSuccessfulViewportUpdate : Model a -> Browser.Dom.Viewport -> ( Model a, Cmd Msg )
+handleSuccessfulViewportUpdate model viewport =
     let
         newScrollTop =
             viewport.viewport.y
@@ -232,36 +261,40 @@ handleViewportUpdateSucceeded model viewport =
 
         unmeasuredIndices =
             List.range start (end - 1)
-                |> List.filter
-                    (\index ->
-                        case Dict.get index model.rowHeights of
-                            Just (Default _) ->
-                                True
-
-                            Just (Measured _) ->
-                                False
-
-                            Nothing ->
-                                True
-                    )
+                |> List.filter (isUnmeasured model.rowHeights)
 
         measureCmds =
             unmeasuredIndices
-                |> List.map
-                    (\index ->
-                        Browser.Dom.getElement (rowId index)
-                            |> Task.attempt (RowHeightMeasured index)
-                    )
+                |> List.map measureRow
                 |> Cmd.batch
     in
         ( { model
-            | containerHeight = newContainerHeight
+            | height = newContainerHeight
             , scrollTop = newScrollTop
             , previousScrollTop = model.scrollTop
             , visibleRange = visibleRange
           }
         , measureCmds
         )
+
+
+isUnmeasured : Dict comparable RowHeight -> comparable -> Bool
+isUnmeasured rowHeights index =
+    case Dict.get index rowHeights of
+        Just (Default _) ->
+            True
+
+        Just (Measured _) ->
+            False
+
+        Nothing ->
+            True
+
+
+measureRow : Int -> Cmd Msg
+measureRow index =
+    Browser.Dom.getElement (rowId index)
+        |> Task.attempt (RowHeightMeasured index)
 
 
 rowId : Int -> String
@@ -275,7 +308,7 @@ scrollToItem model index =
         elementStart =
             Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
     in
-        scrollToPosition virtualListId elementStart model.containerHeight
+        scrollToPosition virtualListId elementStart model.height
 
 
 scrollToPosition : String -> Float -> Float -> Cmd Msg
@@ -288,16 +321,6 @@ scrollToPosition targetId elementStart containerHeight =
             |> Task.attempt (\_ -> NoOp)
 
 
-totalHeight : Model a -> Float
-totalHeight model =
-    case Dict.get (Dict.size model.cumulativeHeights - 1) model.cumulativeHeights of
-        Just height ->
-            height
-
-        Nothing ->
-            0
-
-
 view : (a -> Int -> Html msg) -> Model a -> (Msg -> msg) -> Html msg
 view renderRow model toSelf =
     let
@@ -307,6 +330,9 @@ view renderRow model toSelf =
         visibleItems =
             slice start end model.items
 
+        height =
+            String.fromFloat (totalHeight model.cumulativeHeights)
+
         rows =
             List.indexedMap
                 (\localIndex item ->
@@ -314,8 +340,8 @@ view renderRow model toSelf =
                         globalIndex =
                             start + localIndex
                     in
-                        -- viewRow model globalIndex item
-                        renderVirtualRow globalIndex model (renderRow item globalIndex)
+                        renderRow item globalIndex
+                            |> renderVirtualRow globalIndex model.cumulativeHeights
                 )
                 visibleItems
     in
@@ -327,29 +353,46 @@ view renderRow model toSelf =
             , Html.Attributes.style "overflow" "auto"
             , onScroll (toSelf Scrolled)
             ]
-            [ div
-                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px")
-                , Html.Attributes.style "position" "relative"
-                ]
-                [ div [ Html.Attributes.class "note-id-list-items" ]
-                    rows
-                ]
-            ]
+            [ renderSpacer height rows ]
 
 
-renderVirtualRow : Int -> Model a -> Html msg -> Html msg
-renderVirtualRow index model renderRow =
+totalHeight : Dict Int Float -> Float
+totalHeight cumulativeHeights =
+    let
+        lastItemIndex =
+            Dict.size cumulativeHeights - 1
+    in
+        case Dict.get lastItemIndex cumulativeHeights of
+            Just height ->
+                height
+
+            Nothing ->
+                0
+
+
+renderSpacer : String -> List (Html msg) -> Html msg
+renderSpacer height rows =
+    div
+        [ Html.Attributes.style "height" (height ++ "px")
+        , Html.Attributes.style "position" "relative"
+        ]
+        [ div [ Html.Attributes.class "note-id-list-items" ]
+            rows
+        ]
+
+
+renderVirtualRow : Int -> Dict Int Float -> Html msg -> Html msg
+renderVirtualRow index cumulativeHeights renderRow =
     let
         top =
-            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+            Maybe.withDefault 0 (Dict.get (index - 1) cumulativeHeights)
     in
         div
             [ Html.Attributes.id (rowId index)
             , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat top ++ "px)")
             , Html.Attributes.style "position" "absolute"
             ]
-            [ renderRow
-            ]
+            [ renderRow ]
 
 
 slice : Int -> Int -> List a -> List a
