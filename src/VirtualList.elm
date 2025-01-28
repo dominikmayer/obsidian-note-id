@@ -5,6 +5,7 @@ module VirtualList
         , update
         , view
         , updateItems
+        , updateItemsAndRemeasure
         , scrollToItem
         , Model
         , Msg
@@ -40,6 +41,8 @@ To use virtual list you need to connect it to your `model`, `view` and `update` 
                 in
                     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
             -- other cases
+
+TODO: core concepts. id
 
 # Initializing
 
@@ -196,8 +199,26 @@ dynamicBuffer base scrollSpeed =
         base
 
 
+
+{- Update the items in the virtual list. For each item you provide one stable id.
+
+    VirtualList.updateItems model.virtualList ids
+
+   **Note:** For performance reasons we only measure the height of items when they are first rendered. If you need to remeasure, use `updateItemsAndRemeasure`.
+-}
+
+
 updateItems : Model -> List String -> ( Model, Cmd Msg )
 updateItems model newIds =
+    updateItemsAndRemeasure model newIds []
+
+
+
+{- Same as `updateItems` but lets you specify which items should be remeasured. -}
+
+
+updateItemsAndRemeasure : Model -> List String -> List String -> ( Model, Cmd Msg )
+updateItemsAndRemeasure model ids idsToRemeasure =
     let
         heightKnown =
             (\id ->
@@ -207,22 +228,25 @@ updateItems model newIds =
             )
 
         existingHeights =
-            newIds
+            ids
                 |> List.filterMap heightKnown
                 |> Dict.fromList
 
         knownOrDefaultHeight =
             (\index id ->
-                case Dict.get id existingHeights of
-                    Just height ->
-                        ( index, height )
+                if List.member id idsToRemeasure then
+                    ( index, Default model.defaultItemHeight )
+                else
+                    case Dict.get id existingHeights of
+                        Just height ->
+                            ( index, height )
 
-                    Nothing ->
-                        ( index, Default model.defaultItemHeight )
+                        Nothing ->
+                            ( index, Default model.defaultItemHeight )
             )
 
         updatedRowHeights =
-            newIds
+            ids
                 |> List.indexedMap knownOrDefaultHeight
                 |> Dict.fromList
 
@@ -230,7 +254,7 @@ updateItems model newIds =
             calculateCumulativeHeights updatedRowHeights
     in
         ( { model
-            | ids = newIds
+            | ids = ids
             , cumulativeHeights = updatedCumulativeHeights
             , rowHeights = updatedRowHeights
           }
