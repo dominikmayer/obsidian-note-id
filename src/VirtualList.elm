@@ -76,7 +76,7 @@ import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on)
 import Json.Decode as Decode
-import List.Extra exposing (..)
+import List.Extra exposing (last)
 import Task
 
 
