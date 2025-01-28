@@ -53,9 +53,9 @@ type alias Model a =
 
 
 type Msg
-    = RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
+    = NoOp
+    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
-    | NoOp
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
 
 
@@ -83,27 +83,32 @@ init options =
 update : Msg -> Model a -> ( Model a, Cmd Msg )
 update msg model =
     case msg of
+        NoOp ->
+            ( model, Cmd.none )
+
         RowHeightMeasured index result ->
             handleRowHeightMeasurementResult model index result
 
         Scrolled ->
-            let
-                scrollSpeed =
-                    abs (model.scrollTop - model.previousScrollTop)
-
-                newBuffer =
-                    if model.dynamicBuffer then
-                        dynamicBuffer model.baseBuffer scrollSpeed
-                    else
-                        model.buffer
-            in
-                ( { model | buffer = newBuffer }, measureViewport )
-
-        NoOp ->
-            ( model, Cmd.none )
+            handleScroll model
 
         ViewportUpdated result ->
             handleViewportUpdate model result
+
+
+handleScroll : Model a -> ( Model a, Cmd Msg )
+handleScroll model =
+    let
+        scrollSpeed =
+            abs (model.scrollTop - model.previousScrollTop)
+
+        newBuffer =
+            if model.dynamicBuffer then
+                dynamicBuffer model.baseBuffer scrollSpeed
+            else
+                model.buffer
+    in
+        ( { model | buffer = newBuffer }, measureViewport )
 
 
 dynamicBuffer : Int -> Float -> Int
