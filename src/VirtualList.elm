@@ -376,9 +376,7 @@ renderSpacer height rows =
         [ Html.Attributes.style "height" (height ++ "px")
         , Html.Attributes.style "position" "relative"
         ]
-        [ div [ Html.Attributes.class "note-id-list-items" ]
-            rows
-        ]
+        [ div [] rows ]
 
 
 renderVirtualRow : Int -> Dict Int Float -> Html msg -> Html msg
@@ -391,6 +389,7 @@ renderVirtualRow index cumulativeHeights renderRow =
             [ Html.Attributes.id (rowId index)
             , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat top ++ "px)")
             , Html.Attributes.style "position" "absolute"
+            , Html.Attributes.class "virtual-list-item"
             ]
             [ renderRow ]
 
