@@ -75,6 +75,7 @@ import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (on)
+import Html.Lazy exposing (lazy2)
 import Json.Decode as Decode
 import List.Extra exposing (last)
 import Task
@@ -610,13 +611,18 @@ renderVirtualRow index cumulativeHeights renderRow =
         top =
             Maybe.withDefault 0 (Dict.get (index - 1) cumulativeHeights)
     in
-        div
-            [ Html.Attributes.id (rowId index)
-            , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat top ++ "px)")
-            , Html.Attributes.style "position" "absolute"
-            , Html.Attributes.class "virtual-list-item"
-            ]
-            [ renderRow ]
+        lazy2
+            (\lazyIndex lazyTop ->
+                div
+                    [ Html.Attributes.id (rowId lazyIndex)
+                    , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat lazyTop ++ "px)")
+                    , Html.Attributes.style "position" "absolute"
+                    , Html.Attributes.class "virtual-list-item"
+                    ]
+                    [ renderRow ]
+            )
+            index
+            top
 
 
 slice : Int -> Int -> List a -> List a
