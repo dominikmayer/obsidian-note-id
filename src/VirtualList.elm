@@ -67,11 +67,7 @@ To use a virtual list you need to connect it to your `model`, `view` and `update
 
 # Scrolling
 
-@docs scrollToItem
-
-# Models
-
-@docs Alignment(..)
+@docs scrollToItem, Alignment(..)
 -}
 
 import Browser.Dom
@@ -253,7 +249,7 @@ dynamicBuffer base scrollSpeed =
 
 {- Sets the items in the virtual list. For each item you provide one stable id.
 
-    VirtualList.setItems model.virtualList ids
+       VirtualList.setItems model.virtualList ids
 
    **Note:** For performance reasons we only measure the height of items when they are first rendered. If you need to remeasure, use `setItemsAndRemeasure`.
 -}
