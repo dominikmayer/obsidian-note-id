@@ -21,10 +21,8 @@ In case you know the heights in advance you might get a better performance by us
 
 To use virtual list you need to connect it to your `model`, `view` and `update` functions.
 
-The model takes
-
     type alias Model =
-        { virtualList : VirtualList.Model YourItemType
+        { virtualList : VirtualList.Model
         -- other fields
         }
 
@@ -99,8 +97,8 @@ defaultConfig =
 {- The `Model` of the virtual list. You create one with the `init` function. -}
 
 
-type alias Model a =
-    { items : List a
+type alias Model =
+    { ids : List String
     , height : Float
     , defaultItemHeight : Float
     , baseBuffer : Int
@@ -123,9 +121,9 @@ You can modify the default configuration:
     { defaultConfig | buffer = 10 }
 
 -}
-init : Config -> Model a
+init : Config -> Model
 init options =
-    { items = []
+    { ids = []
     , height = options.initialHeight
     , baseBuffer = options.buffer
     , dynamicBuffer = options.dynamicBuffer
@@ -155,7 +153,7 @@ type Msg
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
 
 
-update : Msg -> Model a -> ( Model a, Cmd Msg )
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         NoOp ->
@@ -171,7 +169,7 @@ update msg model =
             handleViewportUpdate model result
 
 
-handleScroll : Model a -> ( Model a, Cmd Msg )
+handleScroll : Model -> ( Model, Cmd Msg )
 handleScroll model =
     let
         scrollSpeed =
@@ -198,24 +196,24 @@ dynamicBuffer base scrollSpeed =
         base
 
 
-updateItems : (a -> String) -> Model a -> List a -> ( Model a, Cmd Msg )
-updateItems getId model newItems =
+updateItems : Model -> List String -> ( Model, Cmd Msg )
+updateItems model newIds =
     let
         heightKnown =
-            (\item ->
-                findIndex (\oldItem -> getId oldItem == getId item) model.items
+            (\id ->
+                findIndex (\oldId -> oldId == id) model.ids
                     |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
-                    |> Maybe.map (\height -> ( getId item, height ))
+                    |> Maybe.map (\height -> ( id, height ))
             )
 
         existingHeights =
-            newItems
+            newIds
                 |> List.filterMap heightKnown
                 |> Dict.fromList
 
         knownOrDefaultHeight =
-            (\index item ->
-                case Dict.get (getId item) existingHeights of
+            (\index id ->
+                case Dict.get id existingHeights of
                     Just height ->
                         ( index, height )
 
@@ -224,7 +222,7 @@ updateItems getId model newItems =
             )
 
         updatedRowHeights =
-            newItems
+            newIds
                 |> List.indexedMap knownOrDefaultHeight
                 |> Dict.fromList
 
@@ -232,7 +230,7 @@ updateItems getId model newItems =
             calculateCumulativeHeights updatedRowHeights
     in
         ( { model
-            | items = newItems
+            | ids = newIds
             , cumulativeHeights = updatedCumulativeHeights
             , rowHeights = updatedRowHeights
           }
@@ -277,7 +275,7 @@ rowHeightToFloat rowHeight =
             value
 
 
-calculateVisibleRange : Model a -> Float -> Float -> ( Int, Int )
+calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
         height =
@@ -301,7 +299,7 @@ calculateVisibleRange model scrollTop containerHeight =
         ( (max 0 (start - buffer)), (min (Dict.size model.rowHeights) (end + buffer)) )
 
 
-handleRowHeightMeasurementResult : Model a -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model a, Cmd Msg )
+handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
 handleRowHeightMeasurementResult model index result =
     case result of
         Ok element ->
@@ -311,7 +309,7 @@ handleRowHeightMeasurementResult model index result =
             ( model, Cmd.none )
 
 
-updateRowHeight : Model a -> Int -> Browser.Dom.Element -> ( Model a, Cmd Msg )
+updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
 updateRowHeight model index element =
     let
         height =
@@ -331,7 +329,7 @@ updateRowHeight model index element =
         )
 
 
-handleViewportUpdate : Model a -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model a, Cmd Msg )
+handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
 handleViewportUpdate model result =
     case result of
         Ok viewport ->
@@ -341,7 +339,7 @@ handleViewportUpdate model result =
             ( model, Cmd.none )
 
 
-handleSuccessfulViewportUpdate : Model a -> Browser.Dom.Viewport -> ( Model a, Cmd Msg )
+handleSuccessfulViewportUpdate : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
 handleSuccessfulViewportUpdate model viewport =
     let
         newScrollTop =
@@ -409,7 +407,7 @@ type Alignment
     | Bottom
 
 
-scrollToItem : Model a -> Int -> Alignment -> Cmd Msg
+scrollToItem : Model -> Int -> Alignment -> Cmd Msg
 scrollToItem model index alignment =
     let
         elementStart =
@@ -444,26 +442,26 @@ scrollToPosition targetId elementStart containerHeight nextElementStart alignmen
             |> Task.attempt (\_ -> NoOp)
 
 
-view : (a -> Int -> Html msg) -> Model a -> (Msg -> msg) -> Html msg
+view : (String -> Html msg) -> Model -> (Msg -> msg) -> Html msg
 view renderRow model toSelf =
     let
         ( start, end ) =
             model.visibleRange
 
         visibleItems =
-            slice start end model.items
+            slice start end model.ids
 
         height =
             String.fromFloat (totalHeight model.cumulativeHeights)
 
         rows =
             List.indexedMap
-                (\localIndex item ->
+                (\localIndex id ->
                     let
                         globalIndex =
                             start + localIndex
                     in
-                        renderRow item globalIndex
+                        renderRow id
                             |> renderVirtualRow globalIndex model.cumulativeHeights
                 )
                 visibleItems

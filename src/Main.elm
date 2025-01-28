@@ -35,7 +35,7 @@ type alias Model =
     , currentFile : Maybe String
     , settings : Settings
     , fileOpenedByPlugin : Bool
-    , virtualList : VirtualList.Model NoteMeta
+    , virtualList : VirtualList.Model
     }
 
 
@@ -139,7 +139,7 @@ update msg model =
             translate (VirtualList.update virtualListMsg model.virtualList) model
 
 
-translate : ( VirtualList.Model NoteMeta, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
 translate ( virtualListModel, virtualListCmd ) model =
     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
@@ -194,8 +194,11 @@ getPathWithoutFileName filePath =
 updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
 updateNotes model newNotes =
     let
+        ids =
+            List.map .filePath newNotes
+
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.updateItems (\note -> note.filePath) model.virtualList newNotes
+            VirtualList.updateItems model.virtualList ids
     in
         ( { model
             | notes = newNotes
@@ -280,8 +283,18 @@ view model =
     VirtualList.view (renderRow model) model.virtualList VirtualListMsg
 
 
-renderRow : Model -> NoteMeta -> Int -> Html Msg
-renderRow model note index =
+renderRow : Model -> String -> Html Msg
+renderRow model filePath =
+    case getNoteByPath filePath model.notes of
+        Just note ->
+            renderNote model note
+
+        Nothing ->
+            div [] []
+
+
+renderNote : Model -> NoteMeta -> Html Msg
+renderNote model note =
     div
         [ Html.Attributes.classList
             [ ( "tree-item-self", True )
