@@ -21,9 +21,10 @@ import Task
 
 
 type alias Config =
-    { buffer : Int
-    , height : Float
+    { height : Float
     , defaultItemHeight : Float
+    , buffer : Int
+    , dynamicBuffer : Bool
     }
 
 
@@ -32,6 +33,7 @@ defaultConfig =
     { buffer = 5
     , height = 500
     , defaultItemHeight = 26
+    , dynamicBuffer = True
     }
 
 
@@ -39,6 +41,8 @@ type alias Model a =
     { items : List a
     , height : Float
     , defaultItemHeight : Float
+    , baseBuffer : Int
+    , dynamicBuffer : Bool
     , buffer : Int
     , visibleRange : ( Int, Int )
     , rowHeights : Dict Int RowHeight
@@ -64,6 +68,8 @@ init : Config -> Model a
 init options =
     { items = []
     , height = options.height
+    , baseBuffer = options.buffer
+    , dynamicBuffer = options.dynamicBuffer
     , buffer = options.buffer
     , defaultItemHeight = options.defaultItemHeight
     , visibleRange = ( 0, 20 )
@@ -86,14 +92,10 @@ update msg model =
                     abs (model.scrollTop - model.previousScrollTop)
 
                 newBuffer =
-                    if scrollSpeed > 200 then
-                        30
-                    else if scrollSpeed > 100 then
-                        20
-                    else if scrollSpeed > 50 then
-                        10
+                    if model.dynamicBuffer then
+                        dynamicBuffer model.baseBuffer scrollSpeed
                     else
-                        5
+                        model.buffer
             in
                 ( { model | buffer = newBuffer }, measureViewport )
 
@@ -102,6 +104,18 @@ update msg model =
 
         ViewportUpdated result ->
             handleViewportUpdate model result
+
+
+dynamicBuffer : Int -> Float -> Int
+dynamicBuffer base scrollSpeed =
+    if scrollSpeed > 200 then
+        base * 6
+    else if scrollSpeed > 100 then
+        base * 4
+    else if scrollSpeed > 50 then
+        base * 2
+    else
+        base
 
 
 updateItems : (a -> String) -> Model a -> List a -> ( Model a, Cmd Msg )
