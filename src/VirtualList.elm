@@ -11,6 +11,46 @@ module VirtualList
         , Alignment(..)
         )
 
+{-| Efficiently renders large lists by only rendering the visible items in the viewport plus a configurable buffer.
+
+It does so by measuring the height of the displayed elements.
+
+In case you know the heights in advance you might get a better performance by using [`FabienHenon/elm-infinite-list-view`](https://package.elm-lang.org/packages/FabienHenon/elm-infinite-list-view/latest/InfiniteList).
+
+# Set up
+
+To use virtual list you need to connect it to your `model`, `view` and `update` functions.
+
+The model takes
+
+    type alias Model =
+        { virtualList : VirtualList.Model YourItemType
+        -- other fields
+        }
+
+    type Msg
+        = VirtualListMsg VirtualList.Msg
+        -- other messages
+
+    update : Msg -> Model -> ( Model, Cmd Msg )
+    update msg model =
+        case msg of
+            VirtualListMsg virtualListMsg ->
+                let
+                    ( virtualListModel, virtualListCmd ) =
+                        VirtualList.update virtualListMsg model.virtualList
+                in
+                    ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
+            -- other cases
+
+# Initializing
+
+@docs defaultConfig, init
+
+# Exposed Types and Values
+@docs Model, Msg, Alignment, Config, init, defaultConfig, update, view, updateItems, scrollToItem
+-}
+
 import Browser.Dom
 import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
@@ -22,20 +62,41 @@ import Task
 
 
 type alias Config =
-    { height : Float
+    { initialHeight : Float
     , defaultItemHeight : Float
     , buffer : Int
     , dynamicBuffer : Bool
     }
 
 
-defaultConfig : Config
-defaultConfig =
-    { buffer = 5
-    , height = 500
+{-| A default configuration for initializing the virtual list model.
+
+This configuration provides sensible defaults that work for most use cases. You can customize
+it to better suit your needs by creating a new `Config` record with adjusted values.
+
+    defaultConfig : Config
+    defaultConfig =
+    -- The height of the list before the viewport is first measured
+    { initialHeight = 500
+    -- The height of items before they are first measured
     , defaultItemHeight = 26
+    -- The number of items that are loaded outside the visual range
+    , buffer = 5
+    -- Whether the buffer should be increased on high scroll speeds
     , dynamicBuffer = True
     }
+-}
+defaultConfig : Config
+defaultConfig =
+    { initialHeight = 500
+    , defaultItemHeight = 26
+    , buffer = 5
+    , dynamicBuffer = True
+    }
+
+
+
+{- The `Model` of the virtual list. You create one with the `init` function. -}
 
 
 type alias Model a =
@@ -53,22 +114,19 @@ type alias Model a =
     }
 
 
-type Msg
-    = NoOp
-    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
-    | Scrolled
-    | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
+{-| Initialize the model of the virtual list.
 
+    init defaultConfig
 
-type RowHeight
-    = Measured Float
-    | Default Float
+You can modify the default configuration:
 
+    { defaultConfig | buffer = 10 }
 
+-}
 init : Config -> Model a
 init options =
     { items = []
-    , height = options.height
+    , height = options.initialHeight
     , baseBuffer = options.buffer
     , dynamicBuffer = options.dynamicBuffer
     , buffer = options.buffer
@@ -79,6 +137,22 @@ init options =
     , scrollTop = 0
     , previousScrollTop = 0
     }
+
+
+type RowHeight
+    = Measured Float
+    | Default Float
+
+
+
+{- The `Msg` of the virtual list. You need to make sure it will be processed. -}
+
+
+type Msg
+    = NoOp
+    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
+    | Scrolled
+    | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
 
 
 update : Msg -> Model a -> ( Model a, Cmd Msg )
@@ -322,6 +396,13 @@ rowId index =
     "virtual-list-item-" ++ String.fromInt index
 
 
+{-| Defines where in the viewport an item should be shown when scrolling to it.
+
+    type Alignment
+        = Top
+        | Center
+        | Bottom
+-}
 type Alignment
     = Top
     | Center
