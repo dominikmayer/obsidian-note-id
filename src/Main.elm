@@ -1,9 +1,9 @@
 module Main exposing (..)
 
 import Browser
-import Html exposing (Html, div, text)
+import Html exposing (Html, div)
 import Html.Attributes
-import Html.Events exposing (on, onClick)
+import Html.Events exposing (onClick)
 import Html.Events.Extra.Mouse as Mouse
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -265,7 +265,7 @@ scrollToNote : Model -> String -> Cmd Msg
 scrollToNote model path =
     case findIndexByFilePath path model.notes of
         Just index ->
-            Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index)
+            Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index VirtualList.Center)
 
         Nothing ->
             Cmd.none

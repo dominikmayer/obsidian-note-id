@@ -8,6 +8,7 @@ module VirtualList
         , scrollToItem
         , Model
         , Msg
+        , Alignment(..)
         )
 
 import Browser.Dom
@@ -318,23 +319,45 @@ measureRow index =
 
 rowId : Int -> String
 rowId index =
-    "virtual-list-row-" ++ String.fromInt index
+    "virtual-list-item-" ++ String.fromInt index
 
 
-scrollToItem : Model a -> Int -> Cmd Msg
-scrollToItem model index =
+type Alignment
+    = Top
+    | Center
+    | Bottom
+
+
+scrollToItem : Model a -> Int -> Alignment -> Cmd Msg
+scrollToItem model index alignment =
     let
         elementStart =
             Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+
+        nextElementStart =
+            Dict.get index model.cumulativeHeights
     in
-        scrollToPosition virtualListId elementStart model.height
+        scrollToPosition virtualListId elementStart model.height nextElementStart alignment
 
 
-scrollToPosition : String -> Float -> Float -> Cmd Msg
-scrollToPosition targetId elementStart containerHeight =
+scrollToPosition : String -> Float -> Float -> Maybe Float -> Alignment -> Cmd Msg
+scrollToPosition targetId elementStart containerHeight nextElementStart alignment =
     let
         position =
-            elementStart - 0.5 * containerHeight
+            case alignment of
+                Top ->
+                    elementStart
+
+                Center ->
+                    elementStart - 0.5 * containerHeight
+
+                Bottom ->
+                    case nextElementStart of
+                        Just nextStart ->
+                            nextStart - containerHeight
+
+                        Nothing ->
+                            elementStart - containerHeight
     in
         Browser.Dom.setViewportOf targetId 0 position
             |> Task.attempt (\_ -> NoOp)
