@@ -18,9 +18,14 @@ It does so by measuring the height of the displayed elements.
 
 In case you know the heights in advance you might get a better performance by using [`FabienHenon/elm-infinite-list-view`](https://package.elm-lang.org/packages/FabienHenon/elm-infinite-list-view/latest/InfiniteList).
 
-# Set up
+# How it works
 
-To use virtual list you need to connect it to your `model`, `view` and `update` functions.
+To use a virtual list you need to connect it to your `model`, `view` and `update` functions.
+
+    module Main exposing (..)
+
+    import Html exposing (Html, div, text)
+    import VirtualList
 
     type alias Model =
         { virtualList : VirtualList.Model
@@ -42,14 +47,31 @@ To use virtual list you need to connect it to your `model`, `view` and `update` 
                     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
             -- other cases
 
-TODO: core concepts. id
+    view : Model -> Html Msg
+    view model =
+        VirtualList.view (renderRow model) model.virtualList VirtualListMsg
 
-# Initializing
+    renderRow : Model -> String -> Html Msg
+    renderRow model id =
+        div [] [text id]
 
-@docs defaultConfig, init
+@docs Model, defaultConfig, init, Msg, update
 
-# Exposed Types and Values
-@docs Model, Msg, Alignment, Config, init, defaultConfig, update, view, updateItems, scrollToItem
+# Rendering
+
+@docs view
+
+# Updating the Items
+
+@docs updateItems, updateItemsAndRemeasure
+
+# Scrolling
+
+@docs scrollToItem
+
+# Models
+
+@docs Alignment(..)
 -}
 
 import Browser.Dom
@@ -97,7 +119,15 @@ defaultConfig =
 
 
 
-{- The `Model` of the virtual list. You create one with the `init` function. -}
+{- The `Model` of the virtual list. You need to include it in your model:
+
+       type alias Model =
+           { virtualList : VirtualList.Model
+           -- other fields
+           }
+
+   You create one with the `init` function.
+-}
 
 
 type alias Model =
@@ -146,7 +176,12 @@ type RowHeight
 
 
 
-{- The `Msg` of the virtual list. You need to make sure it will be processed. -}
+{- The `Msg` of the virtual list. You need to include it in your `Msg` and make sure it will be processed.
+
+   type Msg
+       = VirtualListMsg VirtualList.Msg
+       -- other messages
+-}
 
 
 type Msg
@@ -154,6 +189,22 @@ type Msg
     | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
+
+
+
+{- The virtual list `update` function. You need to make sure this is called from your code.
+
+   update : Msg -> Model -> ( Model, Cmd Msg )
+   update msg model =
+       case msg of
+           VirtualListMsg virtualListMsg ->
+               let
+                   ( virtualListModel, virtualListCmd ) =
+                       VirtualList.update virtualListMsg model.virtualList
+               in
+                   ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
+           -- other cases
+-}
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -431,6 +482,15 @@ type Alignment
     | Bottom
 
 
+
+{- Scroll the item with the given unique id into the viewport, either at the top, center or bottom.
+
+   You need to make sure that you map the returned `VirtualList.Msg` back to your own `Msg`:
+
+       Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index VirtualList.Center)
+-}
+
+
 scrollToItem : Model -> Int -> Alignment -> Cmd Msg
 scrollToItem model index alignment =
     let
@@ -464,6 +524,27 @@ scrollToPosition targetId elementStart containerHeight nextElementStart alignmen
     in
         Browser.Dom.setViewportOf targetId 0 position
             |> Task.attempt (\_ -> NoOp)
+
+
+
+{- Display the virtual list.
+
+   You provide it with
+
+   - a function that returns the `Html` for a given unique id,
+   - the `Model` and
+   - the virtual list message type on your side.
+
+   In your code this would look like this:
+
+       view : Model -> Html Msg
+       view model =
+           VirtualList.view (renderRow model) model.virtualList VirtualListMsg
+
+       renderRow : Model -> String -> Html Msg
+       renderRow model id =
+           div [] [text id]
+-}
 
 
 view : (String -> Html msg) -> Model -> (Msg -> msg) -> Html msg
