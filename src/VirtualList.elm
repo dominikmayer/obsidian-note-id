@@ -610,19 +610,22 @@ renderVirtualRow index cumulativeHeights renderRow =
     let
         top =
             Maybe.withDefault 0 (Dict.get (index - 1) cumulativeHeights)
+
+        id =
+            rowId index
     in
-        lazy2
-            (\lazyIndex lazyTop ->
-                div
-                    [ Html.Attributes.id (rowId lazyIndex)
-                    , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat lazyTop ++ "px)")
-                    , Html.Attributes.style "position" "absolute"
-                    , Html.Attributes.class "virtual-list-item"
-                    ]
-                    [ renderRow ]
-            )
-            index
-            top
+        lazy2 (renderKeyedVirtualRow renderRow) id top
+
+
+renderKeyedVirtualRow : Html msg -> String -> Float -> Html msg
+renderKeyedVirtualRow renderRow id top =
+    div
+        [ Html.Attributes.id id
+        , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat top ++ "px)")
+        , Html.Attributes.style "position" "absolute"
+        , Html.Attributes.class "virtual-list-item"
+        ]
+        [ renderRow ]
 
 
 slice : Int -> Int -> List a -> List a
