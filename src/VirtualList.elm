@@ -4,8 +4,8 @@ module VirtualList
         , defaultConfig
         , update
         , view
-        , updateItems
-        , updateItemsAndRemeasure
+        , setItems
+        , setItemsAndRemeasure
         , scrollToItem
         , Model
         , Msg
@@ -63,7 +63,7 @@ To use a virtual list you need to connect it to your `model`, `view` and `update
 
 # Updating the Items
 
-@docs updateItems, updateItemsAndRemeasure
+@docs setItems, setItemsAndRemeasure
 
 # Scrolling
 
@@ -251,25 +251,25 @@ dynamicBuffer base scrollSpeed =
 
 
 
-{- Update the items in the virtual list. For each item you provide one stable id.
+{- Sets the items in the virtual list. For each item you provide one stable id.
 
-    VirtualList.updateItems model.virtualList ids
+    VirtualList.setItems model.virtualList ids
 
-   **Note:** For performance reasons we only measure the height of items when they are first rendered. If you need to remeasure, use `updateItemsAndRemeasure`.
+   **Note:** For performance reasons we only measure the height of items when they are first rendered. If you need to remeasure, use `setItemsAndRemeasure`.
 -}
 
 
-updateItems : Model -> List String -> ( Model, Cmd Msg )
-updateItems model newIds =
-    updateItemsAndRemeasure model newIds []
+setItems : Model -> List String -> ( Model, Cmd Msg )
+setItems model newIds =
+    setItemsAndRemeasure model newIds []
 
 
 
 {- Same as `updateItems` but lets you specify which items should be remeasured. -}
 
 
-updateItemsAndRemeasure : Model -> List String -> List String -> ( Model, Cmd Msg )
-updateItemsAndRemeasure model ids idsToRemeasure =
+setItemsAndRemeasure : Model -> List String -> List String -> ( Model, Cmd Msg )
+setItemsAndRemeasure model ids idsToRemeasure =
     let
         heightKnown =
             (\id ->
@@ -353,6 +353,9 @@ rowHeightToFloat rowHeight =
 calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
+        itemCount =
+            List.length model.ids
+
         height =
             (\index -> Maybe.withDefault 0 (Dict.get index model.cumulativeHeights))
 
@@ -366,12 +369,12 @@ calculateVisibleRange model scrollTop containerHeight =
             Dict.keys model.cumulativeHeights
                 |> List.filter (\index -> height index < scrollTop + containerHeight)
                 |> last
-                |> Maybe.withDefault (Dict.size model.rowHeights - 1)
+                |> Maybe.withDefault (itemCount - 1)
 
         buffer =
             model.buffer
     in
-        ( (max 0 (start - buffer)), (min (Dict.size model.rowHeights) (end + buffer)) )
+        ( (max 0 (start - buffer)), (min itemCount (end + buffer)) )
 
 
 handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
@@ -532,7 +535,7 @@ scrollToPosition targetId elementStart containerHeight nextElementStart alignmen
    You provide it with
 
    - a function that returns the `Html` for a given unique id,
-   - the `Model` and
+   - the virtual list `Model` and
    - the virtual list message type on your side.
 
    In your code this would look like this:

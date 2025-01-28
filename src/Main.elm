@@ -198,7 +198,7 @@ updateNotes model newNotes =
             List.map .filePath newNotes
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.updateItems model.virtualList ids
+            VirtualList.setItems model.virtualList ids
     in
         ( { model
             | notes = newNotes
