@@ -567,7 +567,7 @@ view renderRow model toSelf =
                             start + localIndex
                     in
                         renderRow id
-                            |> renderVirtualRow globalIndex model.cumulativeHeights
+                            |> renderLazyVirtualRow globalIndex model.cumulativeHeights
                 )
                 visibleItems
     in
@@ -605,8 +605,8 @@ renderSpacer height rows =
         [ div [] rows ]
 
 
-renderVirtualRow : Int -> Dict Int Float -> Html msg -> Html msg
-renderVirtualRow index cumulativeHeights renderRow =
+renderLazyVirtualRow : Int -> Dict Int Float -> Html msg -> Html msg
+renderLazyVirtualRow index cumulativeHeights renderRow =
     let
         top =
             Maybe.withDefault 0 (Dict.get (index - 1) cumulativeHeights)
@@ -614,11 +614,11 @@ renderVirtualRow index cumulativeHeights renderRow =
         id =
             rowId index
     in
-        lazy2 (renderKeyedVirtualRow renderRow) id top
+        lazy2 (renderVirtualRow renderRow) id top
 
 
-renderKeyedVirtualRow : Html msg -> String -> Float -> Html msg
-renderKeyedVirtualRow renderRow id top =
+renderVirtualRow : Html msg -> String -> Float -> Html msg
+renderVirtualRow renderRow id top =
     div
         [ Html.Attributes.id id
         , Html.Attributes.style "transform" ("translateY(" ++ String.fromFloat top ++ "px)")
