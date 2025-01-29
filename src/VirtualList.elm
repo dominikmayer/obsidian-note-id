@@ -161,21 +161,40 @@ You can modify the default configuration:
 -}
 init : Config -> Model
 init options =
-    { ids = []
-    , height = options.initialHeight
-    , baseBuffer = options.buffer
-    , dynamicBuffer = options.dynamicBuffer
-    , buffer = options.buffer
-    , showList = options.showListDuringInitialMeasure
-    , defaultItemHeight = options.defaultItemHeight
-    , visibleRange = ( 0, 20 )
-    , firstRender = True
-    , unmeasuredRows = Set.empty
-    , rowHeights = Dict.empty
-    , cumulativeHeights = Dict.empty
-    , scrollTop = 0
-    , previousScrollTop = 0
-    }
+    let
+        validHeight =
+            if options.initialHeight >= 0 then
+                options.initialHeight
+            else
+                defaultConfig.initialHeight
+
+        validBuffer =
+            if options.buffer >= 0 then
+                options.buffer
+            else
+                0
+
+        validDefaultItemHeight =
+            if options.defaultItemHeight >= 0 then
+                options.defaultItemHeight
+            else
+                defaultConfig.defaultItemHeight
+    in
+        { ids = []
+        , height = validHeight
+        , baseBuffer = validBuffer
+        , dynamicBuffer = options.dynamicBuffer
+        , buffer = validBuffer
+        , showList = options.showListDuringInitialMeasure
+        , defaultItemHeight = validDefaultItemHeight
+        , visibleRange = ( 0, 20 )
+        , firstRender = True
+        , unmeasuredRows = Set.empty
+        , rowHeights = Dict.empty
+        , cumulativeHeights = Dict.empty
+        , scrollTop = 0
+        , previousScrollTop = 0
+        }
 
 
 type RowHeight
