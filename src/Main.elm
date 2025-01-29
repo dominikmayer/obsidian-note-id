@@ -52,7 +52,7 @@ defaultModel =
         , currentFile = Nothing
         , settings = defaultSettings
         , fileOpenedByPlugin = False
-        , virtualList = VirtualList.init config
+        , virtualList = VirtualList.initWithConfig config
         }
 
 
