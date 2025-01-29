@@ -183,7 +183,7 @@ type RowHeight
 
 type Msg
     = NoOp
-    | RowElementSelected Int (Result Browser.Dom.Error Browser.Dom.Element)
+    | RowElementReceived Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
 
@@ -210,7 +210,7 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        RowElementSelected index result ->
+        RowElementReceived index result ->
             measureRow model index result
 
         Scrolled ->
@@ -461,7 +461,7 @@ isUnmeasured rowHeights index =
 getRowElement : Int -> Cmd Msg
 getRowElement index =
     Browser.Dom.getElement (rowId index)
-        |> Task.attempt (RowElementSelected index)
+        |> Task.attempt (RowElementReceived index)
 
 
 rowId : Int -> String
