@@ -78,12 +78,14 @@ import Html.Events exposing (on)
 import Html.Lazy exposing (lazy2)
 import Json.Decode as Decode
 import List.Extra exposing (last)
+import Set exposing (Set)
 import Task
 
 
 type alias Config =
     { initialHeight : Float
     , defaultItemHeight : Float
+    , showListDuringInitialMeasure : Bool
     , buffer : Int
     , dynamicBuffer : Bool
     }
@@ -98,8 +100,10 @@ it to better suit your needs by creating a new `Config` record with adjusted val
     defaultConfig =
     -- The height of the list before the viewport is first measured
     { initialHeight = 500
-    -- The height of items before they are first measured
+    -- The height of items before they are first being measured
     , defaultItemHeight = 26
+    -- Show the list while loading even if this means items are oddly spaced
+    , showListDuringInitialMeasure = False
     -- The number of items that are loaded outside the visual range
     , buffer = 5
     -- Whether the buffer should be increased on high scroll speeds
@@ -110,6 +114,7 @@ defaultConfig : Config
 defaultConfig =
     { initialHeight = 500
     , defaultItemHeight = 26
+    , showListDuringInitialMeasure = False
     , buffer = 5
     , dynamicBuffer = True
     }
@@ -134,7 +139,10 @@ type alias Model =
     , baseBuffer : Int
     , dynamicBuffer : Bool
     , buffer : Int
+    , showList : Bool
     , visibleRange : ( Int, Int )
+    , firstRender : Bool
+    , unmeasuredRows : Set Int
     , rowHeights : Dict Int RowHeight
     , cumulativeHeights : Dict Int Float
     , scrollTop : Float
@@ -158,8 +166,11 @@ init options =
     , baseBuffer = options.buffer
     , dynamicBuffer = options.dynamicBuffer
     , buffer = options.buffer
+    , showList = options.showListDuringInitialMeasure
     , defaultItemHeight = options.defaultItemHeight
     , visibleRange = ( 0, 20 )
+    , firstRender = True
+    , unmeasuredRows = Set.empty
     , rowHeights = Dict.empty
     , cumulativeHeights = Dict.empty
     , scrollTop = 0
@@ -395,9 +406,20 @@ updateRowHeight model index element =
 
         updatedCumulativeHeights =
             calculateCumulativeHeights updatedRowHeights
+
+        remainingUnmeasured =
+            Set.remove index model.unmeasuredRows
+
+        showList =
+            if Set.isEmpty remainingUnmeasured then
+                True
+            else
+                model.showList
     in
         ( { model
-            | cumulativeHeights = updatedCumulativeHeights
+            | showList = showList
+            , unmeasuredRows = remainingUnmeasured
+            , cumulativeHeights = updatedCumulativeHeights
             , rowHeights = updatedRowHeights
           }
         , Cmd.none
@@ -440,6 +462,7 @@ handleSuccessfulViewportUpdate model viewport =
             , scrollTop = newScrollTop
             , previousScrollTop = model.scrollTop
             , visibleRange = visibleRange
+            , unmeasuredRows = Set.fromList unmeasuredIndices
           }
         , measureCmds
         )
@@ -572,14 +595,23 @@ view renderRow model toSelf =
                 visibleItems
     in
         div
-            [ Html.Attributes.class "virtual-list"
-            , Html.Attributes.id virtualListId
-              -- Height needs to be in the element for fast measurement
-            , Html.Attributes.style "height" "100%"
-            , Html.Attributes.style "overflow" "auto"
-            , onScroll (toSelf Scrolled)
-            ]
+            (listAttributes model.showList toSelf)
             [ renderSpacer height rows ]
+
+
+listAttributes : Bool -> (Msg -> msg) -> List (Html.Attribute msg)
+listAttributes showList toSelf =
+    [ Html.Attributes.class "virtual-list"
+    , Html.Attributes.id virtualListId
+      -- Height needs to be in the element for fast measurement
+    , Html.Attributes.style "height" "100%"
+    , Html.Attributes.style "overflow" "auto"
+    , onScroll (toSelf Scrolled)
+    ]
+        ++ if not showList then
+            [ Html.Attributes.style "visibility" "hidden" ]
+           else
+            []
 
 
 totalHeight : Dict Int Float -> Float
