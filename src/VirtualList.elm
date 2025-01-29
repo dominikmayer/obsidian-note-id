@@ -183,7 +183,7 @@ type RowHeight
 
 type Msg
     = NoOp
-    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
+    | RowElementSelected Int (Result Browser.Dom.Error Browser.Dom.Element)
     | Scrolled
     | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
 
@@ -210,8 +210,8 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        RowHeightMeasured index result ->
-            handleRowHeightMeasurementResult model index result
+        RowElementSelected index result ->
+            measureRow model index result
 
         Scrolled ->
             handleScroll model
@@ -374,8 +374,8 @@ calculateVisibleRange model scrollTop containerHeight =
         ( (max 0 (start - buffer)), (min itemCount (end + buffer)) )
 
 
-handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
-handleRowHeightMeasurementResult model index result =
+measureRow : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
+measureRow model index result =
     case result of
         Ok element ->
             updateRowHeight model index element
@@ -432,7 +432,7 @@ handleSuccessfulViewportUpdate model viewport =
 
         measureCmds =
             unmeasuredIndices
-                |> List.map measureRow
+                |> List.map getRowElement
                 |> Cmd.batch
     in
         ( { model
@@ -458,10 +458,10 @@ isUnmeasured rowHeights index =
             True
 
 
-measureRow : Int -> Cmd Msg
-measureRow index =
+getRowElement : Int -> Cmd Msg
+getRowElement index =
     Browser.Dom.getElement (rowId index)
-        |> Task.attempt (RowHeightMeasured index)
+        |> Task.attempt (RowElementSelected index)
 
 
 rowId : Int -> String
