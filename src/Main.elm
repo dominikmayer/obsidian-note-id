@@ -159,7 +159,7 @@ createNote model path child =
 
         newId =
             if child then
-                Maybe.map NoteId.getNewChildId id
+                Maybe.map NoteId.getNewIdInSubsequence id
             else
                 Maybe.map NoteId.getNewIdInSequence id
 

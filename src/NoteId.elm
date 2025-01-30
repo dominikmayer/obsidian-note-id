@@ -1,4 +1,4 @@
-module NoteId exposing (getNewIdInSequence, getNewChildId)
+module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence)
 
 
 getNewIdInSequence : String -> String
@@ -10,8 +10,8 @@ getNewIdInSequence id =
         start ++ end
 
 
-getNewChildId : String -> String
-getNewChildId input =
+getNewIdInSubsequence : String -> String
+getNewIdInSubsequence input =
     let
         ( _, elementType ) =
             getLastElement input

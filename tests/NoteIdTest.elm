@@ -2,7 +2,7 @@ module NoteIdTest exposing (all)
 
 import Test exposing (Test, describe, test)
 import Expect
-import NoteId exposing (getNewIdInSequence, getNewChildId)
+import NoteId exposing (getNewIdInSequence, getNewIdInSubsequence)
 
 
 all : Test
@@ -16,31 +16,14 @@ all =
             , ( "abca", "abcb" )
             , ( "1.27ag7f9zz", "1.27ag7f9aaa" )
             ]
-
-
-
--- ++ [ test "getNewIdInSequence increments the last number" <|
---         \_ ->
---             Expect.equal "abc2" (getNewIdInSequence "abc1")
---    , test "getNewChildId appends 'a' if last element is a number" <|
---         \_ ->
---             Expect.equal "abc1a" (getNewChildId "abc1")
---    , test "getNewChildId appends '1' if last element is a letter" <|
---         \_ ->
---             Expect.equal "abca1" (getNewChildId "abca")
---    , test "getNewChildId does nothing if last element is neither a number nor letter" <|
---         \_ ->
---             Expect.equal "abc!" (getNewChildId "abc!")
--- , test "getLastElement extracts last number" <|
---     \_ ->
---         Expect.equal ("123", Digit) (getLastElement "abc123")
--- , test "getLastElement extracts last letter" <|
---     \_ ->
---         Expect.equal ("xyz", Letter) (getLastElement "abcxyz")
--- , test "getLastElement extracts last special character" <|
---     \_ ->
---         Expect.equal ("!", Other) (getLastElement "abc123!")
---    ]
+            ++ testGetNewIdsInSubsequence
+                [ ( "abc1", "abc1a" )
+                , ( "abc1da", "abc1da1" )
+                , ( "12abc2db27e", "12abc2db27e1" )
+                , ( "1.2a8f9", "1.2a8f9a" )
+                , ( "abca", "abca1" )
+                , ( "1.27ag7f9zz", "1.27ag7f9zz1" )
+                ]
 
 
 testGetNewIdsInSequence : List ( String, String ) -> List Test
@@ -53,3 +36,15 @@ testGetNewIdInSequence ( id, expectedIncrementedId ) =
     test (id ++ " should be incremented to " ++ expectedIncrementedId) <|
         \_ ->
             Expect.equal expectedIncrementedId (getNewIdInSequence id)
+
+
+testGetNewIdsInSubsequence : List ( String, String ) -> List Test
+testGetNewIdsInSubsequence cases =
+    List.map testGetNewIdInSubsequence cases
+
+
+testGetNewIdInSubsequence : ( String, String ) -> Test
+testGetNewIdInSubsequence ( id, expectedIncrementedId ) =
+    test (id ++ " should get a subsequence of " ++ expectedIncrementedId) <|
+        \_ ->
+            Expect.equal expectedIncrementedId (getNewIdInSubsequence id)
