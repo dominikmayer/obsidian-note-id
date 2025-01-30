@@ -77,16 +77,36 @@ incrementChars str =
         [] ->
             Nothing
 
+        chars ->
+            let
+                ( reversedNewString, carry ) =
+                    propagateCarry chars
+            in
+                if carry then
+                    Just ("a" ++ reversedNewString)
+                else
+                    Just reversedNewString
+
+
+propagateCarry : List Char -> ( String, Bool )
+propagateCarry chars =
+    case chars of
+        [] ->
+            ( "", True )
+
         head :: tail ->
             let
                 ( nextChar, carry ) =
                     incrementChar head
             in
                 if carry then
-                    incrementChars (String.fromList tail)
-                        |> Maybe.map (\incrementedTail -> nextChar ++ incrementedTail)
+                    let
+                        ( incrementedTail, nextCarry ) =
+                            propagateCarry tail
+                    in
+                        ( nextChar ++ incrementedTail, nextCarry )
                 else
-                    Just (nextChar ++ String.fromList tail)
+                    ( nextChar ++ String.fromList tail, False )
 
 
 incrementChar : Char -> ( String, Bool )
