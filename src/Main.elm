@@ -178,8 +178,16 @@ createNote model path child =
 
 getUniqueId : List NoteMeta -> String -> String
 getUniqueId notes id =
-    if isNoteIdTaken notes id then
-        getUniqueId notes (NoteId.getNewIdInSequence id)
+    -- Prevents infinite loops
+    getUniqueIdHelper notes id 25
+
+
+getUniqueIdHelper : List NoteMeta -> String -> Int -> String
+getUniqueIdHelper notes id remainingAttempts =
+    if remainingAttempts <= 0 then
+        id
+    else if isNoteIdTaken notes id then
+        getUniqueIdHelper notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
     else
         id
 
@@ -248,10 +256,7 @@ handleFileRename : Model -> ( String, String ) -> ( Model, Cmd Msg )
 handleFileRename model ( oldPath, newPath ) =
     let
         updatedCurrentFile =
-            if model.currentFile == Just oldPath then
-                Just newPath
-            else
-                model.currentFile
+            updateCurrentFile model.currentFile oldPath newPath
 
         cmd =
             if model.currentFile == Just oldPath then
@@ -260,6 +265,14 @@ handleFileRename model ( oldPath, newPath ) =
                 Cmd.none
     in
         ( { model | currentFile = updatedCurrentFile }, cmd )
+
+
+updateCurrentFile : Maybe String -> String -> String -> Maybe String
+updateCurrentFile current oldPath newPath =
+    if current == Just oldPath then
+        Just newPath
+    else
+        current
 
 
 findIndexByFilePath : String -> List NoteMeta -> Maybe Int
