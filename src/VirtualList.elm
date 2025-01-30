@@ -562,8 +562,11 @@ scrollToItem model id alignment =
 
 
 scrollToPosition : String -> Float -> Float -> Maybe Float -> Alignment -> Cmd Msg
-scrollToPosition targetId elementStart containerHeight nextElementStart alignment =
+scrollToPosition targetId elementStart containerHeight maybeNextElementStart alignment =
     let
+        nextElementStart =
+            Maybe.withDefault elementStart maybeNextElementStart
+
         position =
             case alignment of
                 Top ->
@@ -573,12 +576,7 @@ scrollToPosition targetId elementStart containerHeight nextElementStart alignmen
                     elementStart - 0.5 * containerHeight
 
                 Bottom ->
-                    case nextElementStart of
-                        Just nextStart ->
-                            nextStart - containerHeight
-
-                        Nothing ->
-                            elementStart - containerHeight
+                    nextElementStart - containerHeight
     in
         Browser.Dom.setViewportOf targetId 0 position
             |> Task.attempt (\_ -> NoOp)
