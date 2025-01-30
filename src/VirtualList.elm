@@ -390,7 +390,7 @@ calculateVisibleRange model scrollTop containerHeight =
             List.length model.ids
 
         height =
-            (\index -> Maybe.withDefault 0 (Dict.get index model.cumulativeHeights))
+            (\index -> Maybe.withDefault model.defaultItemHeight (Dict.get index model.cumulativeHeights))
 
         start =
             Dict.keys model.cumulativeHeights
