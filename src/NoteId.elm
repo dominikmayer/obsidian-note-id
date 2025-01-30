@@ -132,7 +132,7 @@ compareElements acc remaining =
                     ( "", Other )
 
                 head :: _ ->
-                    ( String.fromList acc, charType head )
+                    ( String.fromList (List.reverse acc), charType head )
 
         c :: rest ->
             case acc of
@@ -143,4 +143,4 @@ compareElements acc remaining =
                     if charType head == charType c then
                         compareElements (c :: acc) rest
                     else
-                        ( String.fromList acc |> String.reverse, charType head )
+                        ( String.fromList (List.reverse acc), charType head )
