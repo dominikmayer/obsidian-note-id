@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf, Menu, normalizePath } from 'obsidian';
+import { App, ItemView, Plugin, Notice, TAbstractFile, TFile, WorkspaceLeaf, Menu, normalizePath } from 'obsidian';
 import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
@@ -248,24 +248,12 @@ export default class IDSidePanelPlugin extends Plugin {
         this.addCommand({
             id: 'create-note-in-sequence',
             name: 'Create new note in sequence',
-            callback: () => {
-                const elmApp = this.getElmApp();
-                const currentNote = this.app.workspace.getActiveFile();
-                if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
-                    elmApp.ports.receiveCreateNote.send([currentNote.path, false]);
-                }
-            }
+            callback: () => this.createNoteFromCommand(false),
         });
         this.addCommand({
             id: 'create-note-in-subsequence',
             name: 'Create new note in subsequence',
-            callback: () => {
-                const elmApp = this.getElmApp();
-                const currentNote = this.app.workspace.getActiveFile();
-                if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
-                    elmApp.ports.receiveCreateNote.send([currentNote.path, true]);
-                }
-            }
+            callback: () => this.createNoteFromCommand(true),
         });
 
         this.registerEvent(
@@ -302,6 +290,20 @@ export default class IDSidePanelPlugin extends Plugin {
                 await this.handleFileChange(file);
             })
         );
+    }
+
+    private createNoteFromCommand(subsequence: boolean) {
+        const elmApp = this.getElmApp();
+        const currentNote = this.app.workspace.getActiveFile();
+        if (!currentNote) {
+            new Notice("No active file");
+            return;
+        }
+        if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
+            elmApp.ports.receiveCreateNote.send([currentNote.path, subsequence]);
+        } else {
+            new Notice("Please open the side panel first");
+        }
     }
 
     async handleFileChange(file: TAbstractFile) {
