@@ -1,4 +1,6 @@
-module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence)
+module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString)
+
+import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
 
 
 getNewIdInSequence : String -> String
@@ -164,3 +166,93 @@ compareElements acc remaining =
                         compareElements (c :: acc) rest
                     else
                         ( String.fromList (List.reverse acc), charType head )
+
+
+type IdPart
+    = Number Int
+    | Letters String
+    | Delimiter String
+
+
+parts : String -> List IdPart
+parts id =
+    case Parser.run idParser id of
+        Ok result ->
+            result
+
+        Err _ ->
+            []
+
+
+idParser : Parser (List IdPart)
+idParser =
+    Parser.loop [] parseParts
+
+
+parseParts : List IdPart -> Parser (Parser.Step (List IdPart) (List IdPart))
+parseParts parsed =
+    oneOf
+        [ parseNumber
+            |> map (\p -> Parser.Loop (parsed ++ [ p ]))
+        , parseLetters
+            |> map (\p -> Parser.Loop (parsed ++ [ p ]))
+        , parseDelimiter
+            |> map (\p -> Parser.Loop (parsed ++ [ p ]))
+        , succeed (Parser.Done parsed)
+        ]
+
+
+parseNumber : Parser IdPart
+parseNumber =
+    getChompedString (chompWhile Char.isDigit)
+        |> andThen
+            (\s ->
+                case String.toInt s of
+                    Just n ->
+                        succeed (Number n)
+
+                    Nothing ->
+                        problem "Invalid number"
+            )
+
+
+parseLetters : Parser IdPart
+parseLetters =
+    getChompedString (chompWhile Char.isAlpha)
+        |> andThen
+            (\s ->
+                if s == "" then
+                    problem "Expected letters"
+                else
+                    succeed (Letters s)
+            )
+
+
+parseDelimiter : Parser IdPart
+parseDelimiter =
+    getChompedString (chompWhile (\c -> not (Char.isAlpha c || Char.isDigit c)))
+        |> andThen
+            (\s ->
+                if s == "" then
+                    problem "Expected delimiter"
+                else
+                    succeed (Delimiter s)
+            )
+
+
+toString : List IdPart -> String
+toString idParts =
+    idParts
+        |> List.map
+            (\part ->
+                case part of
+                    Number n ->
+                        String.fromInt n
+
+                    Letters s ->
+                        s
+
+                    Delimiter s ->
+                        s
+            )
+        |> String.concat

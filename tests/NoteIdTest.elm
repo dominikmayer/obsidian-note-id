@@ -3,6 +3,7 @@ module NoteIdTest exposing (all)
 import Test exposing (Test, describe, test)
 import Expect
 import NoteId exposing (getNewIdInSequence, getNewIdInSubsequence)
+import NoteId exposing (IdPart(..), parts)
 
 
 all : Test
@@ -23,6 +24,27 @@ all =
                 , ( "1.2a8f9", "1.2a8f9a" )
                 , ( "abca", "abca1" )
                 , ( "1.27ag7f9zz", "1.27ag7f9zz1" )
+                ]
+            ++ testParts
+                [ ( "abc1a", [ Letters "abc", Number 1, Letters "a" ] )
+                , ( "abc1da21", [ Letters "abc", Number 1, Letters "da", Number 21 ] )
+                , ( "12abc2db27e", [ Number 12, Letters "abc", Number 2, Letters "db", Number 27, Letters "e" ] )
+                , ( "1.2a8f9", [ Number 1, Delimiter ".", Number 2, Letters "a", Number 8, Letters "f", Number 9 ] )
+                , ( "abca", [ Letters "abca" ] )
+                , ( "41as3.27ag.7f9zz"
+                  , [ Number 41
+                    , Letters "as"
+                    , Number 3
+                    , Delimiter "."
+                    , Number 27
+                    , Letters "ag"
+                    , Delimiter "."
+                    , Number 7
+                    , Letters "f"
+                    , Number 9
+                    , Letters "zz"
+                    ]
+                  )
                 ]
 
 
@@ -48,3 +70,23 @@ testGetNewIdInSubsequence ( id, expectedIncrementedId ) =
     test (id ++ " should get a subsequence of " ++ expectedIncrementedId) <|
         \_ ->
             Expect.equal expectedIncrementedId (getNewIdInSubsequence id)
+
+
+testParts : List ( String, List IdPart ) -> List Test
+testParts cases =
+    List.concatMap testSingleParts cases
+
+
+testSingleParts : ( String, List IdPart ) -> List Test
+testSingleParts ( id, expectedSplit ) =
+    let
+        idParts =
+            parts id
+    in
+        [ test (id ++ " split incorrectly") <|
+            \_ ->
+                Expect.equal expectedSplit idParts
+        , test (id ++ " not being put together correctly") <|
+            \_ ->
+                Expect.equal id (NoteId.toString idParts)
+        ]
