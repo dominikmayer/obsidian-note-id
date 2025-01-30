@@ -296,7 +296,7 @@ setItemsAndRemeasure model ids idsToRemeasure =
     let
         heightKnown =
             (\id ->
-                findIndex (\oldId -> oldId == id) model.ids
+                findIndexForId model.ids id
                     |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
                     |> Maybe.map (\height -> ( id, height ))
             )
@@ -343,6 +343,11 @@ findIndex predicate items =
         |> List.filter (\( _, item ) -> predicate item)
         |> List.head
         |> Maybe.map Tuple.first
+
+
+findIndexForId : List String -> String -> Maybe Int
+findIndexForId ids id =
+    findIndex (\listItem -> listItem == id) ids
 
 
 calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
@@ -526,16 +531,21 @@ You need to make sure that you map the returned `VirtualList.Msg` back to your o
 
     Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index VirtualList.Center)
 -}
-scrollToItem : Model -> Int -> Alignment -> Cmd Msg
-scrollToItem model index alignment =
-    let
-        elementStart =
-            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
+scrollToItem : Model -> String -> Alignment -> Cmd Msg
+scrollToItem model id alignment =
+    case findIndexForId model.ids id of
+        Just index ->
+            let
+                elementStart =
+                    Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
 
-        nextElementStart =
-            Dict.get index model.cumulativeHeights
-    in
-        scrollToPosition virtualListId elementStart model.height nextElementStart alignment
+                nextElementStart =
+                    Dict.get index model.cumulativeHeights
+            in
+                scrollToPosition virtualListId elementStart model.height nextElementStart alignment
+
+        Nothing ->
+            Cmd.none
 
 
 scrollToPosition : String -> Float -> Float -> Maybe Float -> Alignment -> Cmd Msg

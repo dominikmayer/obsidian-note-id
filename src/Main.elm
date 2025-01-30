@@ -275,15 +275,6 @@ updateCurrentFile current oldPath newPath =
         current
 
 
-findIndexByFilePath : String -> List NoteMeta -> Maybe Int
-findIndexByFilePath targetFilePath notes =
-    notes
-        |> List.indexedMap Tuple.pair
-        |> List.filter (\( _, note ) -> note.filePath == targetFilePath)
-        |> List.head
-        |> Maybe.map Tuple.first
-
-
 getNoteByPath : String -> List NoteMeta -> Maybe NoteMeta
 getNoteByPath path notes =
     notes
@@ -315,12 +306,7 @@ scrollToExternallyOpenedNote model path =
 
 scrollToNote : Model -> String -> Cmd Msg
 scrollToNote model path =
-    case findIndexByFilePath path model.notes of
-        Just index ->
-            Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index VirtualList.Center)
-
-        Nothing ->
-            Cmd.none
+    Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList path VirtualList.Center)
 
 
 
