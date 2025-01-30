@@ -161,10 +161,13 @@ createNote model path child =
             if child then
                 Maybe.map NoteId.getNewIdInSubsequence id
             else
-                Maybe.map (getUniqueIdInSequence model.notes NoteId.getNewIdInSequence) id
+                Maybe.map NoteId.getNewIdInSequence id
+
+        newUniqueId =
+            Maybe.map (getUniqueId model.notes) newId
 
         fileContent =
-            case newId of
+            case newUniqueId of
                 Just justId ->
                     createNoteContent model.settings.idField justId
 
@@ -174,16 +177,12 @@ createNote model path child =
         ( model, Ports.createNote ( newPath, fileContent ) )
 
 
-getUniqueIdInSequence : List NoteMeta -> (String -> String) -> String -> String
-getUniqueIdInSequence notes createId id =
-    let
-        incrementedId =
-            createId id
-    in
-        if isNoteIdTaken notes incrementedId then
-            getUniqueIdInSequence notes createId incrementedId
-        else
-            incrementedId
+getUniqueId : List NoteMeta -> String -> String
+getUniqueId notes id =
+    if isNoteIdTaken notes id then
+        getUniqueId notes (NoteId.getNewIdInSequence id)
+    else
+        id
 
 
 isNoteIdTaken : List NoteMeta -> String -> Bool
