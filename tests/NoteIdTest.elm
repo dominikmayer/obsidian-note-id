@@ -95,7 +95,12 @@ testSingleParts : ( String, List IdPart ) -> List Test
 testSingleParts ( id, expectedSplit ) =
     let
         idParts =
-            parts id
+            case parts id of
+                Ok partsList ->
+                    partsList
+
+                Err _ ->
+                    []
     in
         [ test (id ++ " split incorrectly") <|
             \_ ->

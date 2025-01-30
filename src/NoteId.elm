@@ -1,55 +1,55 @@
 module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId)
 
-import List.Extra exposing (last)
+import List.Extra
 import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
 
 
 getNewIdInSequence : String -> String
 getNewIdInSequence id =
-    let
-        idParts =
-            parts id
-
-        updatedParts =
+    case parts id of
+        Ok idParts ->
             case List.reverse idParts of
                 (Number n) :: rest ->
-                    List.reverse (Number (n + 1) :: rest)
+                    toString (List.reverse (Number (n + 1) :: rest))
 
                 (Letters s) :: rest ->
                     case incrementString s of
                         Just newLetters ->
-                            List.reverse (Letters newLetters :: rest)
+                            toString (List.reverse (Letters newLetters :: rest))
 
                         Nothing ->
-                            idParts
+                            id
 
-                _ ->
-                    idParts
-    in
-        toString updatedParts
+                (Delimiter _) :: _ ->
+                    id
+
+                [] ->
+                    id
+
+        Err _ ->
+            id
 
 
 getNewIdInSubsequence : String -> String
 getNewIdInSubsequence id =
-    let
-        idParts =
-            parts id
+    case parts id of
+        Ok idParts ->
+            let
+                updatedParts =
+                    case List.Extra.last idParts of
+                        Just (Number _) ->
+                            idParts ++ [ Letters "a" ]
 
-        updatedParts =
-            case last idParts of
-                Just (Number _) ->
-                    idParts ++ [ Letters "a" ]
+                        Just (Letters _) ->
+                            idParts ++ [ Number 1 ]
 
-                Just (Letters _) ->
-                    idParts ++ [ Number 1 ]
+                        _ ->
+                            idParts
+            in
+                toString updatedParts
 
-                Just (Delimiter _) ->
-                    idParts
-
-                Nothing ->
-                    idParts
-    in
-        toString updatedParts
+        Err _ ->
+            id
 
 
 incrementString : String -> Maybe String
@@ -116,14 +116,14 @@ type IdPart
     | Delimiter String
 
 
-parts : String -> List IdPart
+parts : String -> Result String (List IdPart)
 parts id =
     case Parser.run idParser id of
         Ok result ->
-            result
+            Ok result
 
         Err _ ->
-            []
+            Err "Failed to parse ID"
 
 
 idParser : Parser (List IdPart)
@@ -134,13 +134,10 @@ idParser =
 parseParts : List IdPart -> Parser (Parser.Step (List IdPart) (List IdPart))
 parseParts parsed =
     oneOf
-        [ parseNumber
-            |> map (\p -> Parser.Loop (parsed ++ [ p ]))
-        , parseLetters
-            |> map (\p -> Parser.Loop (parsed ++ [ p ]))
-        , parseDelimiter
-            |> map (\p -> Parser.Loop (parsed ++ [ p ]))
-        , succeed (Parser.Done parsed)
+        [ parseNumber |> map (\p -> Parser.Loop (p :: parsed))
+        , parseLetters |> map (\p -> Parser.Loop (p :: parsed))
+        , parseDelimiter |> map (\p -> Parser.Loop (p :: parsed))
+        , succeed (Parser.Done (List.reverse parsed))
         ]
 
 
@@ -185,45 +182,54 @@ parseDelimiter =
 toString : List IdPart -> String
 toString idParts =
     idParts
-        |> List.map
-            (\part ->
-                case part of
-                    Number n ->
-                        String.fromInt n
-
-                    Letters s ->
-                        s
-
-                    Delimiter s ->
-                        s
-            )
+        |> List.map idPartToString
         |> String.concat
+
+
+idPartToString : IdPart -> String
+idPartToString part =
+    case part of
+        Number n ->
+            String.fromInt n
+
+        Letters s ->
+            s
+
+        Delimiter s ->
+            s
 
 
 compareId : String -> String -> Order
 compareId a b =
-    compareIdParts (parts a) (parts b)
+    case ( parts a, parts b ) of
+        ( Ok partsA, Ok partsB ) ->
+            compareIdParts partsA partsB
+
+        ( Err _, Ok _ ) ->
+            LT
+
+        ( Ok _, Err _ ) ->
+            GT
+
+        ( Err _, Err _ ) ->
+            EQ
 
 
 compareIdParts : List IdPart -> List IdPart -> Order
 compareIdParts id1 id2 =
-    case ( id1, id2 ) of
-        ( [], [] ) ->
-            EQ
-
-        ( [], _ ) ->
-            LT
-
-        ( _, [] ) ->
-            GT
-
-        ( part1 :: rest1, part2 :: rest2 ) ->
-            case compareIdPart part1 part2 of
-                EQ ->
-                    compareIdParts rest1 rest2
-
-                order ->
-                    order
+    List.Extra.findMap
+        (\( p1, p2 ) ->
+            let
+                order =
+                    compareIdPart p1 p2
+            in
+                if order == EQ then
+                    Nothing
+                else
+                    Just order
+        )
+        (List.Extra.zip id1 id2)
+        |> Maybe.withDefault (compare (List.length id1) (List.length id2))
 
 
 compareIdPart : IdPart -> IdPart -> Order
