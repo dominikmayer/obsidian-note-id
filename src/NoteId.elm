@@ -7,10 +7,26 @@ import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, get
 getNewIdInSequence : String -> String
 getNewIdInSequence id =
     let
-        ( start, end ) =
-            incrementLastElement id
+        idParts =
+            parts id
+
+        updatedParts =
+            case List.reverse idParts of
+                (Number n) :: rest ->
+                    List.reverse (Number (n + 1) :: rest)
+
+                (Letters s) :: rest ->
+                    case incrementString s of
+                        Just newLetters ->
+                            List.reverse (Letters newLetters :: rest)
+
+                        Nothing ->
+                            idParts
+
+                _ ->
+                    idParts
     in
-        start ++ end
+        toString updatedParts
 
 
 getNewIdInSubsequence : String -> String
@@ -34,36 +50,6 @@ getNewIdInSubsequence id =
                     idParts
     in
         toString updatedParts
-
-
-incrementLastElement : String -> ( String, String )
-incrementLastElement input =
-    let
-        ( lastElement, elementType ) =
-            getLastElement input
-
-        start =
-            String.dropRight (String.length lastElement) input
-
-        incrementedLastElement =
-            incrementElement lastElement elementType
-    in
-        ( start, Maybe.withDefault lastElement incrementedLastElement )
-
-
-incrementElement : String -> CharType -> Maybe String
-incrementElement element elementType =
-    case elementType of
-        Digit ->
-            String.toInt element
-                |> Maybe.andThen (\num -> Just (num + 1))
-                |> Maybe.map String.fromInt
-
-        Letter ->
-            incrementString element
-
-        Other ->
-            Nothing
 
 
 incrementString : String -> Maybe String
@@ -122,54 +108,6 @@ incrementChar char =
         -- Overflow to 'a', with carry
     else
         ( String.fromChar (Char.fromCode (Char.toCode char + 1)), False )
-
-
-type CharType
-    = Digit
-    | Letter
-    | Other
-
-
-charType : Char -> CharType
-charType c =
-    if Char.isDigit c then
-        Digit
-    else if Char.isAlpha c then
-        Letter
-    else
-        Other
-
-
-getLastElement : String -> ( String, CharType )
-getLastElement string =
-    let
-        ( reversedElement, elementType ) =
-            compareElements [] (string |> String.reverse |> String.toList)
-    in
-        ( String.reverse reversedElement, elementType )
-
-
-compareElements : List Char -> List Char -> ( String, CharType )
-compareElements acc remaining =
-    case remaining of
-        [] ->
-            case acc of
-                [] ->
-                    ( "", Other )
-
-                head :: _ ->
-                    ( String.fromList (List.reverse acc), charType head )
-
-        c :: rest ->
-            case acc of
-                [] ->
-                    compareElements [ c ] rest
-
-                head :: _ ->
-                    if charType head == charType c then
-                        compareElements (c :: acc) rest
-                    else
-                        ( String.fromList (List.reverse acc), charType head )
 
 
 type IdPart
