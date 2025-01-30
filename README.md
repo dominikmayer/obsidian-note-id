@@ -7,7 +7,7 @@ The [Obsidian](https://www.obsidian.md/) Note ID Plugin displays notes by their 
 - **Note Organization by ID**: Displays notes in alphanumeric order based on the `id` property.
 - **Cluster Identification**: Reveals clusters of related ideas, helping you see how your notes interconnect and where gaps or areas of high activity exist.
 - **Support for Zettelkasten**: Ideal for Zettelkasten practitioners looking to position new notes logically and expand existing threads of thought.
-- **Easily Create New Notes:** Use commands to seamlessly create new notes that continue an existing sequence (e.g., 1.2 → 1.3) or start a subsequence branching from a note (e.g., 1.2 → 1.2a). This makes it simple to extend ideas and maintain logical connections.
+- **Easily Create New Notes:** Use the context menu or a command to seamlessly create new notes that continue an existing sequence (e.g., 1.2 → 1.3) or start a subsequence branching from a note (e.g., 1.2 → 1.2a). This makes it simple to extend ideas and maintain logical connections.
 
 ### How Clusters Work
 
@@ -18,6 +18,7 @@ Clusters form when related notes branch off from an initial idea, creating a web
 1.1a Related thought branching from 1.1
 1.1a1 And another one branching from 1.1a
 1.1a1a And one branching from 1.1a1
+1.1a2 This one relates to 1.1a again
 1.2 A new idea in the same theme
 1.2a Further exploration of 1.2
 ```
@@ -32,7 +33,7 @@ For a more in-depth introduction check out _[How to Use Folgezettel in Your Zett
 
 ### Benefits over Filename-Based Sequences
 
-Some users prepend sequence numbers to file names (e.g., 1.1 Note Title), but this approach can make notes harder to manage. Notes appear cluttered, and the numbers show up in links, reducing readability. Using the `ID` property avoids these issues, keeping filenames clean while maintaining a structured sequence in the sidebar view.
+Some users prepend sequence numbers to file names (e.g., 1.1 Note Title), but this approach can make notes harder to manage. Notes appear cluttered, and the numbers show up in links, reducing readability. Using the `id` property avoids these issues, keeping filenames clean while maintaining a structured sequence in the sidebar view.
 
 ## Installation
 
@@ -43,7 +44,7 @@ Some users prepend sequence numbers to file names (e.g., 1.1 Note Title), but th
 
 ## Usage
 
-1. Add an `ID` property to the frontmatter of your notes (e.g., `ID: 1.1`).
+1. Add an `id` property to the frontmatter of your notes (e.g., `id: 1.1`).
 2. Open the sidebar panel to view notes ordered by their IDs.
 3. Use the panel to explore note clusters and expand your thinking systematically.
 
