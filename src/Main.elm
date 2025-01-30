@@ -210,7 +210,8 @@ updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
 updateNotes model newNotes changedNotes =
     let
         ids =
-            List.map .filePath newNotes
+            sortNotes newNotes
+                |> List.map .filePath
 
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasure model.virtualList ids changedNotes
@@ -221,6 +222,26 @@ updateNotes model newNotes changedNotes =
           }
         , Cmd.map VirtualListMsg virtualListCmd
         )
+
+
+sortNotes : List NoteMeta -> List NoteMeta
+sortNotes notes =
+    List.sortWith
+        (\a b ->
+            case ( a.id, b.id ) of
+                ( Nothing, Nothing ) ->
+                    compare a.title b.title
+
+                ( Nothing, Just _ ) ->
+                    GT
+
+                ( Just _, Nothing ) ->
+                    LT
+
+                ( Just idA, Just idB ) ->
+                    compare idA idB
+        )
+        notes
 
 
 handleFileRename : Model -> ( String, String ) -> ( Model, Cmd Msg )
