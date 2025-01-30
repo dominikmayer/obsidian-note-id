@@ -245,6 +245,28 @@ export default class IDSidePanelPlugin extends Plugin {
             name: 'Open side panel',
             callback: () => this.activateView(),
         });
+        this.addCommand({
+            id: 'create-note-in-sequence',
+            name: 'Create new note in sequence',
+            callback: () => {
+                const elmApp = this.getElmApp();
+                const currentNote = this.app.workspace.getActiveFile();
+                if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
+                    elmApp.ports.receiveCreateNote.send([currentNote.path, false]);
+                }
+            }
+        });
+        this.addCommand({
+            id: 'create-note-in-subsequence',
+            name: 'Create new note in subsequence',
+            callback: () => {
+                const elmApp = this.getElmApp();
+                const currentNote = this.app.workspace.getActiveFile();
+                if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
+                    elmApp.ports.receiveCreateNote.send([currentNote.path, true]);
+                }
+            }
+        });
 
         this.registerEvent(
             this.app.vault.on('modify', async (file) => {

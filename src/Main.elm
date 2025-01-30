@@ -9,7 +9,6 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId
 import Ports exposing (..)
-import Debug
 import VirtualList
 
 
