@@ -1,5 +1,6 @@
 module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString)
 
+import List.Extra exposing (last)
 import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
 
 
@@ -13,23 +14,26 @@ getNewIdInSequence id =
 
 
 getNewIdInSubsequence : String -> String
-getNewIdInSubsequence input =
+getNewIdInSubsequence id =
     let
-        ( _, elementType ) =
-            getLastElement input
+        idParts =
+            parts id
 
-        newLastElement =
-            case elementType of
-                Digit ->
-                    "a"
+        updatedParts =
+            case last idParts of
+                Just (Number _) ->
+                    idParts ++ [ Letters "a" ]
 
-                Letter ->
-                    "1"
+                Just (Letters _) ->
+                    idParts ++ [ Number 1 ]
 
-                Other ->
-                    ""
+                Just (Delimiter _) ->
+                    idParts
+
+                Nothing ->
+                    idParts
     in
-        input ++ newLastElement
+        toString updatedParts
 
 
 incrementLastElement : String -> ( String, String )
