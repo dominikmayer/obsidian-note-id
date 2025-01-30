@@ -226,7 +226,7 @@ export default class IDSidePanelPlugin extends Plugin {
     async onload() {
 
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-        await this.initializeCache();
+
         this.addSettingTab(new IDSidePanelSettingTab(this.app, this));
 
         this.registerView(
@@ -240,6 +240,12 @@ export default class IDSidePanelPlugin extends Plugin {
         );
 
         this.addRibbonIcon('file-digit', 'Open side panel', () => this.activateView());
+
+        this.app.workspace.onLayoutReady(async () => {
+            await this.initializeCache();
+            this.refreshView();
+        });
+
         this.addCommand({
             id: 'open-id-side-panel',
             name: 'Open side panel',
