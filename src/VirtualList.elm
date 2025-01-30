@@ -84,7 +84,8 @@ import Task
 
 
 type alias Config =
-    { initialHeight : Float
+    { listId : String
+    , initialHeight : Float
     , defaultItemHeight : Float
     , showListDuringInitialMeasure : Bool
     , buffer : Int
@@ -99,23 +100,26 @@ it to better suit your needs by creating a new `Config` record with adjusted val
 
     defaultConfig : Config
     defaultConfig =
-    -- The height of the list before the viewport is first measured
-    { initialHeight = 500
-    -- The height of items before they are first being measured
-    , defaultItemHeight = 26
-    -- Show the list while loading even if this means items are oddly spaced
-    , showListDuringInitialMeasure = False
-    -- The number of items that are loaded outside the visual range
-    , buffer = 5
-    -- Whether the buffer should be increased on high scroll speeds
-    , dynamicBuffer = True
-    }
+        -- The id of the virtual list DOM element
+        { listId = "virtual-list"
+        -- The height of the list before the viewport is first measured
+        , initialHeight = 500
+        -- The height of items before they are first being measured
+        , defaultItemHeight = 26
+        -- Show the list while loading even if this means items are oddly spaced
+        , showListDuringInitialMeasure = False
+        -- The number of items that are loaded outside the visual range
+        , buffer = 5
+        -- Whether the buffer should be increased on high scroll speeds
+        , dynamicBuffer = True
+        }
 
 If you set the buffer to `0` then elements get measured while they are already in view. This might not look good.
 -}
 defaultConfig : Config
 defaultConfig =
-    { initialHeight = 500
+    { listId = "virtual-list"
+    , initialHeight = 500
     , defaultItemHeight = 26
     , showListDuringInitialMeasure = False
     , buffer = 5
@@ -133,7 +137,8 @@ defaultConfig =
 You create one with the `init` function.
 -}
 type alias Model =
-    { ids : List String
+    { listId : String
+    , ids : List String
     , height : Float
     , defaultItemHeight : Float
     , baseBuffer : Int
@@ -169,6 +174,12 @@ You can modify the default configuration:
 initWithConfig : Config -> Model
 initWithConfig options =
     let
+        validListId =
+            if String.isEmpty options.listId then
+                defaultConfig.listId
+            else
+                options.listId
+
         validHeight =
             if options.initialHeight >= 0 then
                 options.initialHeight
@@ -187,7 +198,8 @@ initWithConfig options =
             else
                 defaultConfig.defaultItemHeight
     in
-        { ids = []
+        { listId = validListId
+        , ids = []
         , height = validHeight
         , baseBuffer = validBuffer
         , dynamicBuffer = options.dynamicBuffer
@@ -263,7 +275,7 @@ handleScroll model =
             else
                 model.buffer
     in
-        ( { model | buffer = newBuffer }, measureViewport )
+        ( { model | buffer = newBuffer }, measureViewport model.listId )
 
 
 dynamicBuffer : Int -> Float -> Int
@@ -325,7 +337,7 @@ setItemsAndRemeasure model ids idsToRemeasure =
             , cumulativeHeights = updatedCumulativeHeights
             , rowHeights = updatedRowHeights
           }
-        , measureViewport
+        , measureViewport model.listId
         )
 
 
@@ -541,7 +553,7 @@ scrollToItem model id alignment =
                     abs (model.scrollTop - elementStart) > 1
             in
                 if needsScroll then
-                    scrollToPosition virtualListId elementStart model.height nextElementStart alignment
+                    scrollToPosition model.listId elementStart model.height nextElementStart alignment
                 else
                     Cmd.none
 
@@ -615,14 +627,14 @@ view renderRow model toSelf =
                 visibleItems
     in
         div
-            (listAttributes model.showList toSelf)
+            (listAttributes model.showList model.listId toSelf)
             [ renderSpacer height rows ]
 
 
-listAttributes : Bool -> (Msg -> msg) -> List (Html.Attribute msg)
-listAttributes showList toSelf =
+listAttributes : Bool -> String -> (Msg -> msg) -> List (Html.Attribute msg)
+listAttributes showList listId toSelf =
     [ Html.Attributes.class "virtual-list"
-    , Html.Attributes.id virtualListId
+    , Html.Attributes.id listId
       -- Height needs to be in the element for fast measurement
     , Html.Attributes.style "height" "100%"
     , Html.Attributes.style "overflow" "auto"
@@ -692,11 +704,6 @@ onScroll msg =
     on "scroll" (Decode.succeed msg)
 
 
-measureViewport : Cmd Msg
-measureViewport =
-    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf virtualListId)
-
-
-virtualListId : String
-virtualListId =
-    "virtual-list"
+measureViewport : String -> Cmd Msg
+measureViewport listId =
+    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf listId)
