@@ -239,7 +239,7 @@ sortNotes notes =
                     LT
 
                 ( Just idA, Just idB ) ->
-                    compare idA idB
+                    NoteId.compareId idA idB
         )
         notes
 

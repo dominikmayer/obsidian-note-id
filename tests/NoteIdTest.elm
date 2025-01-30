@@ -16,6 +16,8 @@ all =
             , ( "1.2a8f9", "1.2a8f10" )
             , ( "abca", "abcb" )
             , ( "1.27ag7f9zz", "1.27ag7f9aaa" )
+            , ( "1.2.8", "1.2.9" )
+            , ( "7.9", "7.10" )
             ]
             ++ testGetNewIdsInSubsequence
                 [ ( "abc1", "abc1a" )
@@ -24,6 +26,8 @@ all =
                 , ( "1.2a8f9", "1.2a8f9a" )
                 , ( "abca", "abca1" )
                 , ( "1.27ag7f9zz", "1.27ag7f9zz1" )
+                , ( "1.2.8", "1.2.8a" )
+                , ( "7.9", "7.9a" )
                 ]
             ++ testParts
                 [ ( "abc1a", [ Letters "abc", Number 1, Letters "a" ] )
@@ -45,6 +49,14 @@ all =
                     , Letters "zz"
                     ]
                   )
+                ]
+            ++ testCompare
+                [ ( "1.1a", "1.1a", EQ )
+                , ( "1.1a", "1.1ab", LT )
+                , ( "1.1ab", "1.1ab1", LT )
+                , ( "1.1ab1", "1.1ab12", LT )
+                , ( "1.1ab12", "1.1ab12", EQ )
+                , ( "", "", EQ )
                 ]
 
 
@@ -90,3 +102,16 @@ testSingleParts ( id, expectedSplit ) =
             \_ ->
                 Expect.equal id (NoteId.toString idParts)
         ]
+
+
+testCompare : List ( String, String, Order ) -> List Test
+testCompare cases =
+    List.concatMap testSingleCompare cases
+
+
+testSingleCompare : ( String, String, Order ) -> List Test
+testSingleCompare ( a, b, order ) =
+    [ test (a ++ " and " ++ b ++ " ordered incorrectly") <|
+        \_ ->
+            Expect.equal (NoteId.compareId a b) order
+    ]

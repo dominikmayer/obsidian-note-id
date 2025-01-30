@@ -1,4 +1,4 @@
-module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString)
+module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId)
 
 import List.Extra exposing (last)
 import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
@@ -198,3 +198,59 @@ toString idParts =
                         s
             )
         |> String.concat
+
+
+compareId : String -> String -> Order
+compareId a b =
+    compareIdParts (parts a) (parts b)
+
+
+compareIdParts : List IdPart -> List IdPart -> Order
+compareIdParts id1 id2 =
+    case ( id1, id2 ) of
+        ( [], [] ) ->
+            EQ
+
+        ( [], _ ) ->
+            LT
+
+        ( _, [] ) ->
+            GT
+
+        ( part1 :: rest1, part2 :: rest2 ) ->
+            case compareIdPart part1 part2 of
+                EQ ->
+                    compareIdParts rest1 rest2
+
+                order ->
+                    order
+
+
+compareIdPart : IdPart -> IdPart -> Order
+compareIdPart a b =
+    case ( a, b ) of
+        ( Number n1, Number n2 ) ->
+            compare n1 n2
+
+        ( Number _, Letters _ ) ->
+            LT
+
+        ( Letters _, Number _ ) ->
+            GT
+
+        ( Letters s1, Letters s2 ) ->
+            case compare (String.length s1) (String.length s2) of
+                EQ ->
+                    compare s1 s2
+
+                order ->
+                    order
+
+        ( Delimiter delimiterA, Delimiter delimiterB ) ->
+            compare delimiterA delimiterB
+
+        ( Delimiter _, _ ) ->
+            LT
+
+        ( _, Delimiter _ ) ->
+            GT
