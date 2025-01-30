@@ -135,7 +135,7 @@ class IDSidePanelView extends ItemView {
         return (this as any).elmApp;
     }
 
-    renderNotes() {
+    renderNotes(changedFiles: string[] = []) {
         const { showNotesWithoutId } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
 
@@ -159,13 +159,13 @@ class IDSidePanelView extends ItemView {
 
         const elmApp = (this as any).elmApp;
         if (elmApp && elmApp.ports && elmApp.ports.receiveNotes) {
-            elmApp.ports.receiveNotes.send(
-                combined.map((note, index) => ({
-                    title: note.title,
-                    id: note.id ? note.id.toString() : null, // Convert Maybe to a string
-                    filePath: note.file.path
-                }))
-            );
+            const notes = combined.map(note => ({
+                title: note.title,
+                id: note.id ? note.id.toString() : null, // Convert Maybe to a string
+                filePath: note.file.path
+            }))
+
+            elmApp.ports.receiveNotes.send([notes, changedFiles]);
         }
     }
 }
@@ -327,19 +327,19 @@ export default class IDSidePanelPlugin extends Plugin {
 
             if (metaChanged) {
                 this.noteCache.set(file.path, newMeta);
-                this.queueRefresh();
+                this.queueRefresh([file.path]);
             }
         }
     }
 
-    private queueRefresh(): void {
+    private queueRefresh(changedFiles: string[] = []): void {
         if (this.scheduleRefreshTimeout) {
             clearTimeout(this.scheduleRefreshTimeout);
         }
         this.scheduleRefreshTimeout = window.setTimeout(() => {
             this.scheduleRefreshTimeout = null;
             if (this.activePanelView)
-                this.activePanelView.renderNotes();
+                this.activePanelView.renderNotes(changedFiles);
         }, 50);
     }
 

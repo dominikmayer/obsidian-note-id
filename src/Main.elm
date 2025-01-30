@@ -105,7 +105,7 @@ type Msg
     | FileRenamed ( String, String )
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
-    | NotesProvided (List NoteMeta)
+    | NotesProvided ( List NoteMeta, List String )
     | VirtualListMsg VirtualList.Msg
 
 
@@ -131,8 +131,8 @@ update msg model =
         NoteClicked filePath ->
             ( { model | fileOpenedByPlugin = True }, Ports.openFile filePath )
 
-        NotesProvided notes ->
-            updateNotes model notes
+        NotesProvided ( notes, changedNotes ) ->
+            updateNotes model notes changedNotes
 
         VirtualListMsg virtualListMsg ->
             translate (VirtualList.update virtualListMsg model.virtualList) model
@@ -206,14 +206,14 @@ getPathWithoutFileName filePath =
         String.join "/" withoutFileName
 
 
-updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
-updateNotes model newNotes =
+updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
+updateNotes model newNotes changedNotes =
     let
         ids =
             List.map .filePath newNotes
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItems model.virtualList ids
+            VirtualList.setItemsAndRemeasure model.virtualList ids changedNotes
     in
         ( { model
             | notes = newNotes

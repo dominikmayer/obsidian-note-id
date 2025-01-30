@@ -10,7 +10,7 @@ port openFile : String -> Cmd msg
 port openContextMenu : ( Float, Float, String ) -> Cmd msg
 
 
-port receiveNotes : (List NoteMeta -> msg) -> Sub msg
+port receiveNotes : (( List NoteMeta, List String ) -> msg) -> Sub msg
 
 
 port receiveFileOpen : (Maybe String -> msg) -> Sub msg
