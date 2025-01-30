@@ -520,6 +520,8 @@ type Alignment
 
 {-| Scroll the item with the given unique id into the viewport, either at the top, center or bottom.
 
+We won't scroll if the item is already in the viewport.
+
 You need to make sure that you map the returned `VirtualList.Msg` back to your own `Msg`:
 
     Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList index VirtualList.Center)
@@ -534,8 +536,14 @@ scrollToItem model id alignment =
 
                 nextElementStart =
                     Dict.get index model.cumulativeHeights
+
+                needsScroll =
+                    abs (model.scrollTop - elementStart) > 1
             in
-                scrollToPosition virtualListId elementStart model.height nextElementStart alignment
+                if needsScroll then
+                    scrollToPosition virtualListId elementStart model.height nextElementStart alignment
+                else
+                    Cmd.none
 
         Nothing ->
             Cmd.none
