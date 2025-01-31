@@ -280,7 +280,7 @@ handleScroll model =
 
 dynamicBuffer : Int -> Float -> Int
 dynamicBuffer base scrollSpeed =
-    base * (1 + round (scrollSpeed / 50))
+    base * min 4 (1 + round (scrollSpeed / 100))
 
 
 {-| Sets the items in the virtual list. For each item you provide one stable id.
