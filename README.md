@@ -1,4 +1,4 @@
-# Obsidian Note ID
+# Note ID
 
 The [Obsidian](https://www.obsidian.md/) Note ID Plugin displays notes by their ID, enabling structured sequences in a Zettelkasten ("Folgezettel").
 
