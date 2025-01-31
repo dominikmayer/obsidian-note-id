@@ -386,22 +386,24 @@ rowHeightToFloat rowHeight =
 calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
 calculateVisibleRange model scrollTop containerHeight =
     let
+        keys =
+            Dict.keys model.cumulativeHeights
+
         itemCount =
             List.length model.ids
 
-        height =
-            (\index -> Maybe.withDefault model.defaultItemHeight (Dict.get index model.cumulativeHeights))
+        height index =
+            Maybe.withDefault model.defaultItemHeight (Dict.get index model.cumulativeHeights)
 
         start =
-            Dict.keys model.cumulativeHeights
-                |> List.filter (\index -> height index >= scrollTop)
-                |> List.head
+            keys
+                |> List.Extra.find (\index -> height index >= scrollTop)
                 |> Maybe.withDefault 0
 
         end =
-            Dict.keys model.cumulativeHeights
-                |> List.filter (\index -> height index < scrollTop + containerHeight)
-                |> last
+            keys
+                |> List.reverse
+                |> List.Extra.find (\index -> height index < scrollTop + containerHeight)
                 |> Maybe.withDefault (itemCount - 1)
 
         buffer =
