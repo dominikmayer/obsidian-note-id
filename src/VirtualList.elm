@@ -666,7 +666,7 @@ renderSpacer height rows =
         [ Html.Attributes.style "height" (height ++ "px")
         , Html.Attributes.style "position" "relative"
         ]
-        [ div [] rows ]
+        rows
 
 
 renderLazyVirtualRow : Int -> Dict Int Float -> Html msg -> Html msg
