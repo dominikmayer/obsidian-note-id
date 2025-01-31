@@ -78,7 +78,7 @@ import Html.Attributes
 import Html.Events exposing (on)
 import Html.Lazy exposing (lazy2)
 import Json.Decode as Decode
-import List.Extra exposing (last)
+import List.Extra
 import Set exposing (Set)
 import Task
 
