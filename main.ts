@@ -1,4 +1,4 @@
-import { App, ItemView, Plugin, setIcon, setTooltip, TAbstractFile, TFile, Vault, WorkspaceLeaf, Menu, normalizePath } from 'obsidian';
+import { App, ItemView, Plugin, Notice, TAbstractFile, TFile, WorkspaceLeaf, Menu, normalizePath } from 'obsidian';
 import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = 'id-side-panel';
@@ -34,6 +34,8 @@ class IDSidePanelView extends ItemView {
         this.plugin = plugin;
     }
 
+    private elmApp: any | null = null;
+
     getViewType() { return VIEW_TYPE_ID_PANEL; }
     getDisplayText() { return 'Notes by ID'; }
 
@@ -43,21 +45,20 @@ class IDSidePanelView extends ItemView {
 
         const elmContainer = container.createDiv();
 
-        const elmApp = Elm.Main.init({
+        this.elmApp = Elm.Main.init({
             node: elmContainer,
             flag: this.plugin.settings,
         });
-        (this as any).elmApp = elmApp;
 
-        elmApp.ports.openFile.subscribe((filePath: string) => {
-            const file = this.app.vault.getAbstractFileByPath(filePath);
+        this.elmApp.ports.openFile.subscribe((filePath: string) => {
+            const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
             if (file instanceof TFile) {
                 const leaf = this.app.workspace.getLeaf();
                 leaf.openFile(file);
             }
         });
 
-        elmApp.ports.createNote.subscribe(async ([filePath, content]: [string, string]) => {
+        this.elmApp.ports.createNote.subscribe(async ([filePath, content]: [string, string]) => {
             const uniqueFilePath = this.getUniqueFilePath(normalizePath(filePath));
             const file = await this.app.vault.create(uniqueFilePath, content);
             if (file instanceof TFile) {
@@ -66,8 +67,8 @@ class IDSidePanelView extends ItemView {
             }
         });
 
-        elmApp.ports.openContextMenu.subscribe(([x, y, filePath]: [number, number, string]) => {
-            const file = this.app.vault.getAbstractFileByPath(filePath);
+        this.elmApp.ports.openContextMenu.subscribe(([x, y, filePath]: [number, number, string]) => {
+            const file = this.app.vault.getAbstractFileByPath(normalizePath(filePath));
             if (!file) return;
 
             const menu = new Menu();
@@ -78,8 +79,8 @@ class IDSidePanelView extends ItemView {
                     .setTitle("Create new note in sequence")
                     .setIcon('list-plus')
                     .onClick(() => {
-                        if (elmApp && elmApp.ports.receiveCreateNote) {
-                            elmApp.ports.receiveCreateNote.send([filePath, false]);
+                        if (this.elmApp && this.elmApp.ports.receiveCreateNote) {
+                            this.elmApp.ports.receiveCreateNote.send([filePath, false]);
                         }
                     }),
             );
@@ -89,8 +90,8 @@ class IDSidePanelView extends ItemView {
                     .setTitle("Create new note in subsequence")
                     .setIcon('list-tree')
                     .onClick(() => {
-                        if (elmApp && elmApp.ports.receiveCreateNote) {
-                            elmApp.ports.receiveCreateNote.send([filePath, true]);
+                        if (this.elmApp && this.elmApp.ports.receiveCreateNote) {
+                            this.elmApp.ports.receiveCreateNote.send([filePath, true]);
                         }
                     }),
             );
@@ -104,13 +105,13 @@ class IDSidePanelView extends ItemView {
             );
 
             menu.showAtPosition({ x: x, y: y });
-    });
+        });
 
         this.registerEvent(
             this.app.workspace.on('file-open', (file) => {
-                if (elmApp && elmApp.ports.receiveFileOpen) {
+                if (this.elmApp && this.elmApp.ports.receiveFileOpen) {
                     const filePath = file?.path || null;
-                    elmApp.ports.receiveFileOpen.send(filePath);
+                    this.elmApp.ports.receiveFileOpen.send(filePath);
                 }
             })
         );
@@ -123,7 +124,7 @@ class IDSidePanelView extends ItemView {
         const baseName = path.replace(ext, '');
         let uniquePath = path;
 
-        while (this.app.vault.getAbstractFileByPath(uniquePath)) {
+        while (this.app.vault.getAbstractFileByPath(normalizePath(uniquePath))) {
             uniquePath = `${baseName} (${counter})${ext}`;
             counter++;
         }
@@ -132,10 +133,10 @@ class IDSidePanelView extends ItemView {
     }
 
     getElmApp() {
-        return (this as any).elmApp;
+        return this.elmApp;
     }
 
-    renderNotes() {
+    renderNotes(changedFiles: string[] = []) {
         const { showNotesWithoutId } = this.plugin.settings;
         const allNotes = Array.from(this.plugin.noteCache.values());
 
@@ -157,15 +158,14 @@ class IDSidePanelView extends ItemView {
             combined = combined.concat(notesWithoutID);
         }
 
-        const elmApp = (this as any).elmApp;
-        if (elmApp && elmApp.ports && elmApp.ports.receiveNotes) {
-            elmApp.ports.receiveNotes.send(
-                combined.map((note, index) => ({
-                    title: note.title,
-                    id: note.id ? note.id.toString() : null, // Convert Maybe to a string
-                    filePath: note.file.path
-                }))
-            );
+        if (this.elmApp && this.elmApp.ports && this.elmApp.ports.receiveNotes) {
+            const notes = combined.map(note => ({
+                title: note.title,
+                id: note.id ? note.id.toString() : null, // Convert Maybe to a string
+                filePath: note.file.path
+            }))
+
+            this.elmApp.ports.receiveNotes.send([notes, changedFiles]);
         }
     }
 }
@@ -194,7 +194,7 @@ export default class IDSidePanelPlugin extends Plugin {
         const cache = this.app.metadataCache.getFileCache(file);
         let id = null;
         if (cache?.frontmatter && typeof cache.frontmatter === 'object') {
-            const frontmatter = cache.frontmatter as Record<string, any>;
+            const frontmatter: Record<string, string | number | boolean | null> = cache?.frontmatter ?? {};
             const frontmatterKeys = Object.keys(frontmatter).reduce((acc, key) => {
                 acc[key.toLowerCase()] = frontmatter[key];
                 return acc;
@@ -211,12 +211,13 @@ export default class IDSidePanelPlugin extends Plugin {
     async initializeCache() {
         this.noteCache.clear();
         const markdownFiles = this.app.vault.getMarkdownFiles();
-        for (const file of markdownFiles) {
-            const meta = await this.extractNoteMeta(file);
-            if (meta) {
-                this.noteCache.set(file.path, meta);
-            }
-        }
+    
+        const metaPromises = markdownFiles.map(file => this.extractNoteMeta(file));
+        const metaResults = await Promise.all(metaPromises); // Parallel processing
+    
+        metaResults.forEach((meta, index) => {
+            if (meta) this.noteCache.set(markdownFiles[index].path, meta);
+        });
     }
 
     private getElmApp() {
@@ -226,7 +227,7 @@ export default class IDSidePanelPlugin extends Plugin {
     async onload() {
 
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-        await this.initializeCache();
+
         this.addSettingTab(new IDSidePanelSettingTab(this.app, this));
 
         this.registerView(
@@ -240,10 +241,26 @@ export default class IDSidePanelPlugin extends Plugin {
         );
 
         this.addRibbonIcon('file-digit', 'Open side panel', () => this.activateView());
+
+        this.app.workspace.onLayoutReady(async () => {
+            await this.initializeCache();
+            this.refreshView();
+        });
+
         this.addCommand({
             id: 'open-id-side-panel',
             name: 'Open side panel',
             callback: () => this.activateView(),
+        });
+        this.addCommand({
+            id: 'create-note-in-sequence',
+            name: 'Create new note in sequence',
+            callback: () => this.createNoteFromCommand(false),
+        });
+        this.addCommand({
+            id: 'create-note-in-subsequence',
+            name: 'Create new note in subsequence',
+            callback: () => this.createNoteFromCommand(true),
         });
 
         this.registerEvent(
@@ -282,6 +299,20 @@ export default class IDSidePanelPlugin extends Plugin {
         );
     }
 
+    private createNoteFromCommand(subsequence: boolean) {
+        const elmApp = this.getElmApp();
+        const currentNote = this.app.workspace.getActiveFile();
+        if (!currentNote) {
+            new Notice("No active file");
+            return;
+        }
+        if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
+            elmApp.ports.receiveCreateNote.send([currentNote.path, subsequence]);
+        } else {
+            new Notice("Please open the side panel first");
+        }
+    }
+
     async handleFileChange(file: TAbstractFile) {
         if (file instanceof TFile && file.extension === 'md') {
             const newMeta = await this.extractNoteMeta(file);
@@ -303,19 +334,19 @@ export default class IDSidePanelPlugin extends Plugin {
 
             if (metaChanged) {
                 this.noteCache.set(file.path, newMeta);
-                this.queueRefresh();
+                this.queueRefresh([file.path]);
             }
         }
     }
 
-    private queueRefresh(): void {
+    private queueRefresh(changedFiles: string[] = []): void {
         if (this.scheduleRefreshTimeout) {
             clearTimeout(this.scheduleRefreshTimeout);
         }
         this.scheduleRefreshTimeout = window.setTimeout(() => {
             this.scheduleRefreshTimeout = null;
             if (this.activePanelView)
-                this.activePanelView.renderNotes();
+                this.activePanelView.renderNotes(changedFiles);
         }, 50);
     }
 

@@ -1,18 +1,15 @@
 module Main exposing (..)
 
 import Browser
-import Browser.Dom
-import Dict exposing (Dict, foldl)
 import Html exposing (Html, div)
 import Html.Attributes
-import Html.Events exposing (on, onClick)
+import Html.Events exposing (onClick)
 import Html.Events.Extra.Mouse as Mouse
-import List.Extra exposing (..)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import NoteId
 import Ports exposing (..)
-import Task
-import Debug exposing (toString)
+import VirtualList
 
 
 -- MAIN
@@ -36,44 +33,26 @@ type alias Model =
     { notes : List NoteMeta
     , currentFile : Maybe String
     , settings : Settings
-    , cumulativeHeights : Dict Int Float
-    , rowHeights : Dict Int RowHeight
-    , scrollTop : Float
-    , containerHeight : Float
-    , buffer : Int
-    , visibleRange : ( Int, Int )
     , fileOpenedByPlugin : Bool
+    , virtualList : VirtualList.Model
     }
-
-
-type RowHeight
-    = Measured Float
-    | Default Float
-
-
-rowHeightToFloat : RowHeight -> Float
-rowHeightToFloat rowHeight =
-    case rowHeight of
-        Measured value ->
-            value
-
-        Default value ->
-            value
 
 
 defaultModel : Model
 defaultModel =
-    { notes = []
-    , currentFile = Nothing
-    , settings = defaultSettings
-    , cumulativeHeights = Dict.empty
-    , rowHeights = Dict.empty
-    , scrollTop = 0
-    , containerHeight = 500
-    , buffer = 5
-    , visibleRange = ( 0, 20 )
-    , fileOpenedByPlugin = False
-    }
+    let
+        default =
+            VirtualList.defaultConfig
+
+        config =
+            { default | buffer = 10 }
+    in
+        { notes = []
+        , currentFile = Nothing
+        , settings = defaultSettings
+        , fileOpenedByPlugin = False
+        , virtualList = VirtualList.initWithConfig config
+        }
 
 
 type alias NoteMeta =
@@ -93,16 +72,11 @@ type alias Settings =
 
 defaultSettings : Settings
 defaultSettings =
-    { includeFolders = [ "Zettel" ]
+    { includeFolders = []
     , excludeFolders = []
     , showNotesWithoutId = True
     , idField = "id"
     }
-
-
-defaultItemHeight : Float
-defaultItemHeight =
-    26
 
 
 init : Encode.Value -> ( Model, Cmd Msg )
@@ -131,12 +105,8 @@ type Msg
     | FileRenamed ( String, String )
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
-    | NotesProvided (List NoteMeta)
-    | NotesUpdated
-    | NoOp
-    | RowHeightMeasured Int (Result Browser.Dom.Error Browser.Dom.Element)
-    | Scrolled
-    | ViewportUpdated (Result Browser.Dom.Error Browser.Dom.Viewport)
+    | NotesProvided ( List NoteMeta, List String )
+    | VirtualListMsg VirtualList.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -161,23 +131,16 @@ update msg model =
         NoteClicked filePath ->
             ( { model | fileOpenedByPlugin = True }, Ports.openFile filePath )
 
-        NotesProvided notes ->
-            updateNotes model notes
+        NotesProvided ( notes, changedNotes ) ->
+            updateNotes model notes changedNotes
 
-        NotesUpdated ->
-            ( model, measureViewport )
+        VirtualListMsg virtualListMsg ->
+            translate (VirtualList.update virtualListMsg model.virtualList) model
 
-        NoOp ->
-            ( model, Cmd.none )
 
-        RowHeightMeasured index result ->
-            handleRowHeightMeasurementResult model index result
-
-        Scrolled ->
-            ( model, measureViewport )
-
-        ViewportUpdated result ->
-            handleViewportUpdate model result
+translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+translate ( virtualListModel, virtualListCmd ) model =
+    ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
 
 createNote : Model -> String -> Bool -> ( Model, Cmd Msg )
@@ -195,12 +158,15 @@ createNote model path child =
 
         newId =
             if child then
-                Maybe.map getNewChildId id
+                Maybe.map NoteId.getNewIdInSubsequence id
             else
-                Maybe.map getNewIdInSequence id
+                Maybe.map NoteId.getNewIdInSequence id
+
+        newUniqueId =
+            Maybe.map (getUniqueId model.notes) newId
 
         fileContent =
-            case newId of
+            case newUniqueId of
                 Just justId ->
                     createNoteContent model.settings.idField justId
 
@@ -210,154 +176,30 @@ createNote model path child =
         ( model, Ports.createNote ( newPath, fileContent ) )
 
 
+getUniqueId : List NoteMeta -> String -> String
+getUniqueId notes id =
+    -- Prevents infinite loops
+    getUniqueIdHelper notes id 25
+
+
+getUniqueIdHelper : List NoteMeta -> String -> Int -> String
+getUniqueIdHelper notes id remainingAttempts =
+    if remainingAttempts <= 0 then
+        id
+    else if isNoteIdTaken notes id then
+        getUniqueIdHelper notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
+    else
+        id
+
+
+isNoteIdTaken : List NoteMeta -> String -> Bool
+isNoteIdTaken notes noteId =
+    List.any (\note -> note.id == Just noteId) notes
+
+
 createNoteContent : String -> String -> String
 createNoteContent idName id =
     "---\n" ++ idName ++ ": " ++ id ++ "\n---"
-
-
-getNewIdInSequence : String -> String
-getNewIdInSequence id =
-    let
-        ( start, end ) =
-            incrementLastElement id
-    in
-        start ++ end
-
-
-getNewChildId : String -> String
-getNewChildId input =
-    let
-        ( _, elementType ) =
-            getLastElement input
-
-        newLastElement =
-            case elementType of
-                Digit ->
-                    "a"
-
-                Letter ->
-                    "1"
-
-                Other ->
-                    ""
-    in
-        input ++ newLastElement
-
-
-incrementLastElement : String -> ( String, String )
-incrementLastElement input =
-    let
-        ( lastElement, elementType ) =
-            getLastElement input
-
-        start =
-            String.dropRight (String.length lastElement) input
-
-        incrementedLastElement =
-            incrementElement lastElement elementType
-    in
-        ( start, Maybe.withDefault lastElement incrementedLastElement )
-
-
-incrementElement : String -> CharType -> Maybe String
-incrementElement element elementType =
-    case elementType of
-        Digit ->
-            String.toInt element
-                |> Maybe.andThen (\num -> Just (num + 1))
-                |> Maybe.map String.fromInt
-
-        Letter ->
-            incrementString element
-
-        Other ->
-            Nothing
-
-
-incrementString : String -> Maybe String
-incrementString str =
-    if str == "" then
-        Nothing
-    else
-        str
-            |> String.reverse
-            |> incrementChars
-            |> Maybe.map String.reverse
-
-
-incrementChars : String -> Maybe String
-incrementChars str =
-    case String.toList str of
-        [] ->
-            Nothing
-
-        head :: tail ->
-            let
-                ( nextChar, carry ) =
-                    incrementChar head
-            in
-                if carry then
-                    incrementChars (String.fromList tail)
-                        |> Maybe.map (\incrementedTail -> nextChar ++ incrementedTail)
-                else
-                    Just (nextChar ++ String.fromList tail)
-
-
-incrementChar : Char -> ( String, Bool )
-incrementChar char =
-    if char == 'z' then
-        ( "a", True )
-        -- Overflow to 'a', with carry
-    else
-        ( String.fromChar (Char.fromCode (Char.toCode char + 1)), False )
-
-
-type CharType
-    = Digit
-    | Letter
-    | Other
-
-
-charType : Char -> CharType
-charType c =
-    if Char.isDigit c then
-        Digit
-    else if Char.isAlpha c then
-        Letter
-    else
-        Other
-
-
-getLastElement : String -> ( String, CharType )
-getLastElement string =
-    let
-        ( reversedElement, elementType ) =
-            compareElements [] (string |> String.reverse |> String.toList)
-    in
-        ( String.reverse reversedElement, elementType )
-
-
-compareElements : List Char -> List Char -> ( String, CharType )
-compareElements acc remaining =
-    case remaining of
-        [] ->
-            case acc of
-                [] ->
-                    ( "", Other )
-
-                head :: _ ->
-                    ( String.fromList acc, charType head )
-
-        c :: rest ->
-            case acc of
-                [] ->
-                    compareElements [ c ] rest
-
-                head :: _ ->
-                    if charType head == charType c then
-                        compareElements (c :: acc) rest
-                    else
-                        ( String.fromList acc |> String.reverse, charType head )
 
 
 getPathWithoutFileName : String -> String
@@ -372,52 +214,49 @@ getPathWithoutFileName filePath =
         String.join "/" withoutFileName
 
 
-updateNotes : Model -> List NoteMeta -> ( Model, Cmd Msg )
-updateNotes model newNotes =
+updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
+updateNotes model newNotes changedNotes =
     let
-        existingHeights =
-            newNotes
-                |> List.filterMap
-                    (\note ->
-                        findIndexByFilePath note.filePath model.notes
-                            |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
-                            |> Maybe.map (\height -> ( note.filePath, height ))
-                    )
-                |> Dict.fromList
+        ids =
+            sortNotes newNotes
+                |> List.map .filePath
 
-        updatedRowHeights =
-            newNotes
-                |> List.indexedMap
-                    (\i note ->
-                        case Dict.get note.filePath existingHeights of
-                            Just height ->
-                                ( i, height )
-
-                            Nothing ->
-                                ( i, Default defaultItemHeight )
-                    )
-                |> Dict.fromList
-
-        updatedCumulativeHeights =
-            calculateCumulativeHeights updatedRowHeights
+        ( newVirtualList, virtualListCmd ) =
+            VirtualList.setItemsAndRemeasure model.virtualList ids changedNotes
     in
         ( { model
             | notes = newNotes
-            , rowHeights = updatedRowHeights
-            , cumulativeHeights = updatedCumulativeHeights
+            , virtualList = newVirtualList
           }
-        , Task.perform (\_ -> NotesUpdated) (Task.succeed ())
+        , Cmd.map VirtualListMsg virtualListCmd
         )
+
+
+sortNotes : List NoteMeta -> List NoteMeta
+sortNotes notes =
+    List.sortWith
+        (\a b ->
+            case ( a.id, b.id ) of
+                ( Nothing, Nothing ) ->
+                    compare a.title b.title
+
+                ( Nothing, Just _ ) ->
+                    GT
+
+                ( Just _, Nothing ) ->
+                    LT
+
+                ( Just idA, Just idB ) ->
+                    NoteId.compareId idA idB
+        )
+        notes
 
 
 handleFileRename : Model -> ( String, String ) -> ( Model, Cmd Msg )
 handleFileRename model ( oldPath, newPath ) =
     let
         updatedCurrentFile =
-            if model.currentFile == Just oldPath then
-                Just newPath
-            else
-                model.currentFile
+            updateCurrentFile model.currentFile oldPath newPath
 
         cmd =
             if model.currentFile == Just oldPath then
@@ -428,18 +267,12 @@ handleFileRename model ( oldPath, newPath ) =
         ( { model | currentFile = updatedCurrentFile }, cmd )
 
 
-measureViewport : Cmd Msg
-measureViewport =
-    Task.attempt ViewportUpdated (Browser.Dom.getViewportOf "virtual-list")
-
-
-findIndexByFilePath : String -> List NoteMeta -> Maybe Int
-findIndexByFilePath targetFilePath notes =
-    notes
-        |> List.indexedMap Tuple.pair
-        |> List.filter (\( _, note ) -> note.filePath == targetFilePath)
-        |> List.head
-        |> Maybe.map Tuple.first
+updateCurrentFile : Maybe String -> String -> String -> Maybe String
+updateCurrentFile current oldPath newPath =
+    if current == Just oldPath then
+        Just newPath
+    else
+        current
 
 
 getNoteByPath : String -> List NoteMeta -> Maybe NoteMeta
@@ -473,170 +306,7 @@ scrollToExternallyOpenedNote model path =
 
 scrollToNote : Model -> String -> Cmd Msg
 scrollToNote model path =
-    case findIndexByFilePath path model.notes of
-        Just index ->
-            let
-                elementStart =
-                    Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
-            in
-                scrollToPosition "virtual-list" elementStart model.containerHeight
-
-        Nothing ->
-            Cmd.none
-
-
-scrollToPosition : String -> Float -> Float -> Cmd Msg
-scrollToPosition targetId elementStart containerHeight =
-    let
-        position =
-            elementStart - 0.5 * containerHeight
-    in
-        Browser.Dom.setViewportOf targetId 0 position
-            |> Task.attempt (\_ -> NoOp)
-
-
-handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUpdate model result =
-    case result of
-        Ok viewport ->
-            handleViewportUpdateSucceeded model viewport
-
-        Err _ ->
-            ( model, Cmd.none )
-
-
-handleViewportUpdateSucceeded : Model -> Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUpdateSucceeded model viewport =
-    let
-        newScrollTop =
-            viewport.viewport.y
-
-        newContainerHeight =
-            viewport.viewport.height
-
-        visibleRange =
-            calculateVisibleRange model newScrollTop newContainerHeight
-
-        ( start, end ) =
-            visibleRange
-
-        unmeasuredIndices =
-            List.range start (end - 1)
-                |> List.filter
-                    (\index ->
-                        case Dict.get index model.rowHeights of
-                            Just (Default _) ->
-                                True
-
-                            Just (Measured _) ->
-                                False
-
-                            Nothing ->
-                                True
-                    )
-
-        measureCmds =
-            unmeasuredIndices
-                |> List.filterMap
-                    (\index ->
-                        noteFilePath model index
-                            |> Maybe.map
-                                (\filePath ->
-                                    Browser.Dom.getElement filePath
-                                        |> Task.attempt (RowHeightMeasured index)
-                                )
-                    )
-                |> Cmd.batch
-    in
-        ( { model
-            | scrollTop = newScrollTop
-            , containerHeight = newContainerHeight
-            , visibleRange = visibleRange
-          }
-        , measureCmds
-        )
-
-
-handleRowHeightMeasurementResult : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( Model, Cmd Msg )
-handleRowHeightMeasurementResult model index result =
-    case result of
-        Ok element ->
-            updateRowHeight model index element
-
-        Err _ ->
-            ( model, Cmd.none )
-
-
-updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
-updateRowHeight model index element =
-    let
-        height =
-            element.element.height
-
-        updatedRowHeights =
-            Dict.insert index (Measured height) model.rowHeights
-
-        updatedCumulativeHeights =
-            calculateCumulativeHeights updatedRowHeights
-    in
-        ( { model
-            | rowHeights = updatedRowHeights
-            , cumulativeHeights = updatedCumulativeHeights
-          }
-        , Cmd.none
-        )
-
-
-noteFilePath : Model -> Int -> Maybe String
-noteFilePath model index =
-    List.Extra.getAt index model.notes
-        |> Maybe.map .filePath
-
-
-calculateCumulativeHeights : Dict Int RowHeight -> Dict Int Float
-calculateCumulativeHeights heights =
-    foldl
-        (\index rowHeight ( accumHeights, cumulative ) ->
-            let
-                height =
-                    rowHeightToFloat rowHeight
-
-                cumulativeHeight =
-                    cumulative + height
-            in
-                ( Dict.insert index cumulativeHeight accumHeights, cumulativeHeight )
-        )
-        ( Dict.empty, 0 )
-        heights
-        |> Tuple.first
-
-
-calculateVisibleRange : Model -> Float -> Float -> ( Int, Int )
-calculateVisibleRange model scrollTop containerHeight =
-    let
-        start =
-            Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) >= scrollTop)
-                |> List.head
-                |> Maybe.withDefault 0
-
-        end =
-            Dict.keys model.cumulativeHeights
-                |> List.filter (\i -> Maybe.withDefault 0 (Dict.get i model.cumulativeHeights) < scrollTop + containerHeight)
-                |> last
-                |> Maybe.withDefault (List.length model.notes - 1)
-
-        buffer =
-            model.buffer
-    in
-        ( (max 0 (start - buffer)), (min (List.length model.notes) (end + buffer)) )
-
-
-slice : Int -> Int -> List a -> List a
-slice start end list =
-    list
-        |> List.drop start
-        |> List.take (end - start)
+    Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList path VirtualList.Center)
 
 
 
@@ -645,86 +315,43 @@ slice start end list =
 
 view : Model -> Html Msg
 view model =
-    let
-        ( start, end ) =
-            model.visibleRange
-
-        visibleItems =
-            slice start end model.notes
-
-        rows =
-            List.indexedMap
-                (\localIndex item ->
-                    let
-                        globalIndex =
-                            start + localIndex
-                    in
-                        viewRow model globalIndex item
-                )
-                visibleItems
-    in
-        div
-            [ Html.Attributes.class "virtual-list"
-            , Html.Attributes.id "virtual-list"
-              -- Height needs to be in the element for fast measurement
-            , Html.Attributes.style "height" "100%"
-            , onScroll Scrolled
-            ]
-            [ div
-                [ Html.Attributes.style "height" (String.fromFloat (totalHeight model) ++ "px")
-                , Html.Attributes.class "note-id-list-spacer"
-                ]
-                [ div [ Html.Attributes.class "note-id-list-items" ]
-                    rows
-                ]
-            ]
+    VirtualList.view (renderRow model) model.virtualList VirtualListMsg
 
 
-onScroll : msg -> Html.Attribute msg
-onScroll msg =
-    on "scroll" (Decode.succeed msg)
-
-
-totalHeight : Model -> Float
-totalHeight model =
-    case Dict.get (List.length model.notes - 1) model.cumulativeHeights of
-        Just height ->
-            height
+renderRow : Model -> String -> Html Msg
+renderRow model filePath =
+    case getNoteByPath filePath model.notes of
+        Just note ->
+            renderNote model note
 
         Nothing ->
-            0
+            div [] []
 
 
-viewRow : Model -> Int -> NoteMeta -> Html Msg
-viewRow model index note =
-    let
-        top =
-            Maybe.withDefault 0 (Dict.get (index - 1) model.cumulativeHeights)
-    in
-        div
-            [ Html.Attributes.id note.filePath
-            , Html.Attributes.classList
-                [ ( "tree-item-self", True )
-                , ( "is-clickable", True )
-                , ( "is-active", Just note.filePath == model.currentFile )
-                ]
-            , Html.Attributes.style "transform" ("translateY(" ++ toString top ++ "px)")
-            , Html.Attributes.attribute "data-path" note.filePath
-            , onClick (NoteClicked note.filePath)
-            , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
+renderNote : Model -> NoteMeta -> Html Msg
+renderNote model note =
+    div
+        [ Html.Attributes.classList
+            [ ( "tree-item-self", True )
+            , ( "is-clickable", True )
+            , ( "is-active", Just note.filePath == model.currentFile )
             ]
-            [ div
-                [ Html.Attributes.class "tree-item-inner" ]
-                (case note.id of
-                    Just id ->
-                        [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                        , Html.text note.title
-                        ]
+        , Html.Attributes.attribute "data-path" note.filePath
+        , onClick (NoteClicked note.filePath)
+        , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
+        ]
+        [ div
+            [ Html.Attributes.class "tree-item-inner" ]
+            (case note.id of
+                Just id ->
+                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                    , Html.text note.title
+                    ]
 
-                    Nothing ->
-                        [ Html.text note.title ]
-                )
-            ]
+                Nothing ->
+                    [ Html.text note.title ]
+            )
+        ]
 
 
 subscriptions : Model -> Sub Msg
