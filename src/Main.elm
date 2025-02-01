@@ -6,6 +6,7 @@ import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (onClick)
 import Html.Events.Extra.Mouse as Mouse
+import Html.Lazy exposing (lazy)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId
@@ -411,7 +412,7 @@ splitLevelByFilePath notes =
 
 view : Model -> Html Msg
 view model =
-    VirtualList.view (renderRow model) model.virtualList VirtualListMsg
+    VirtualList.view (lazy (renderRow model)) model.virtualList VirtualListMsg
 
 
 renderRow : Model -> String -> Html Msg
