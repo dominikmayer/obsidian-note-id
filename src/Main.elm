@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Browser
+import Dict exposing (Dict)
 import Html exposing (Html, div)
 import Html.Attributes
 import Html.Events exposing (onClick)
@@ -31,6 +32,7 @@ main =
 
 type alias Model =
     { notes : List NoteMeta
+    , splitLevels : Dict String (Maybe Int)
     , currentFile : Maybe String
     , settings : Settings
     , fileOpenedByPlugin : Bool
@@ -48,6 +50,7 @@ defaultModel =
             { default | buffer = 10 }
     in
         { notes = []
+        , splitLevels = Dict.empty
         , currentFile = Nothing
         , settings = defaultSettings
         , fileOpenedByPlugin = False
@@ -67,6 +70,7 @@ type alias Settings =
     , excludeFolders : List String
     , showNotesWithoutId : Bool
     , idField : String
+    , splitLevel : Int
     }
 
 
@@ -76,23 +80,25 @@ defaultSettings =
     , excludeFolders = []
     , showNotesWithoutId = True
     , idField = "id"
+    , splitLevel = 0
     }
 
 
 init : Encode.Value -> ( Model, Cmd Msg )
 init flags =
-    let
-        updatedSettings =
-            case Decode.decodeValue partialSettingsDecoder flags of
-                Ok decoded ->
-                    decoded defaultSettings
+    ( { defaultModel | settings = decodeSettings defaultSettings flags }
+    , Cmd.none
+    )
 
-                Err _ ->
-                    defaultSettings
-    in
-        ( { defaultModel | settings = updatedSettings }
-        , Cmd.none
-        )
+
+decodeSettings : Settings -> Decode.Value -> Settings
+decodeSettings settings newSettings =
+    case Decode.decodeValue partialSettingsDecoder newSettings of
+        Ok decoded ->
+            decoded settings
+
+        Err _ ->
+            settings
 
 
 
@@ -106,6 +112,7 @@ type Msg
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided ( List NoteMeta, List String )
+    | SettingsChanged Settings
     | VirtualListMsg VirtualList.Msg
 
 
@@ -134,8 +141,28 @@ update msg model =
         NotesProvided ( notes, changedNotes ) ->
             updateNotes model notes changedNotes
 
+        SettingsChanged settings ->
+            handleSettingsChange model settings
+
         VirtualListMsg virtualListMsg ->
             translate (VirtualList.update virtualListMsg model.virtualList) model
+
+
+handleSettingsChange : Model -> Settings -> ( Model, Cmd Msg )
+handleSettingsChange model settings =
+    let
+        ids =
+            model.notes |> List.map .filePath
+
+        ( newVirtualList, virtualListCmd ) =
+            VirtualList.setItemsAndRemeasure model.virtualList ids ids
+    in
+        ( { model
+            | virtualList = newVirtualList
+            , settings = settings
+          }
+        , Cmd.map VirtualListMsg virtualListCmd
+        )
 
 
 translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
@@ -221,12 +248,16 @@ updateNotes model newNotes changedNotes =
             sortNotes newNotes
                 |> List.map .filePath
 
+        splitLevels =
+            splitLevelByFilePath newNotes
+
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasure model.virtualList ids changedNotes
     in
         ( { model
             | notes = newNotes
             , virtualList = newVirtualList
+            , splitLevels = splitLevels
           }
         , Cmd.map VirtualListMsg virtualListCmd
         )
@@ -313,6 +344,71 @@ scrollToNote model path =
 -- VIEW
 
 
+type alias NoteWithSplit =
+    { note : NoteMeta
+    , splitLevel : Maybe Int
+    }
+
+
+annotateNotes : List NoteMeta -> List NoteWithSplit
+annotateNotes notes =
+    let
+        sortedNotes =
+            sortNotes notes
+
+        annotate xs =
+            case xs of
+                [] ->
+                    []
+
+                first :: rest ->
+                    let
+                        initialSplit =
+                            case first.id of
+                                Nothing ->
+                                    Just 1
+
+                                Just _ ->
+                                    Nothing
+                    in
+                        { note = first, splitLevel = initialSplit }
+                            :: annotateRest first rest
+
+        annotateRest prev xs =
+            case xs of
+                [] ->
+                    []
+
+                current :: rest ->
+                    let
+                        computedSplit =
+                            case ( prev.id, current.id ) of
+                                ( Just prevId, Just currId ) ->
+                                    NoteId.splitLevel prevId currId
+
+                                ( Just _, Nothing ) ->
+                                    Just 1
+
+                                ( Nothing, Just _ ) ->
+                                    Just 1
+
+                                ( Nothing, Nothing ) ->
+                                    -- If two consecutive notes lack an id, assume they belong to the same block.
+                                    Nothing
+                    in
+                        { note = current, splitLevel = computedSplit }
+                            :: annotateRest current rest
+    in
+        annotate sortedNotes
+
+
+splitLevelByFilePath : List NoteMeta -> Dict String (Maybe Int)
+splitLevelByFilePath notes =
+    annotateNotes notes
+        |> List.map (\nws -> ( nws.note.filePath, nws.splitLevel ))
+        |> Dict.fromList
+
+
 view : Model -> Html Msg
 view model =
     VirtualList.view (renderRow model) model.virtualList VirtualListMsg
@@ -322,36 +418,55 @@ renderRow : Model -> String -> Html Msg
 renderRow model filePath =
     case getNoteByPath filePath model.notes of
         Just note ->
-            renderNote model note
+            let
+                maybeSplit =
+                    Dict.get filePath model.splitLevels
+                        |> Maybe.andThen identity
+            in
+                renderNote model note maybeSplit
 
         Nothing ->
             div [] []
 
 
-renderNote : Model -> NoteMeta -> Html Msg
-renderNote model note =
-    div
-        [ Html.Attributes.classList
-            [ ( "tree-item-self", True )
-            , ( "is-clickable", True )
-            , ( "is-active", Just note.filePath == model.currentFile )
-            ]
-        , Html.Attributes.attribute "data-path" note.filePath
-        , onClick (NoteClicked note.filePath)
-        , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
-        ]
-        [ div
-            [ Html.Attributes.class "tree-item-inner" ]
-            (case note.id of
-                Just id ->
-                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                    , Html.text note.title
-                    ]
+renderNote : Model -> NoteMeta -> Maybe Int -> Html Msg
+renderNote model note maybeSplit =
+    let
+        marginStyle =
+            case maybeSplit of
+                Just level ->
+                    if 0 < level && level <= model.settings.splitLevel then
+                        [ Html.Attributes.style "margin-top" "var(--size-4-4)" ]
+                    else
+                        []
 
                 Nothing ->
-                    [ Html.text note.title ]
+                    []
+    in
+        div
+            ([ Html.Attributes.classList
+                [ ( "tree-item-self", True )
+                , ( "is-clickable", True )
+                , ( "is-active", Just note.filePath == model.currentFile )
+                ]
+             , Html.Attributes.attribute "data-path" note.filePath
+             , onClick (NoteClicked note.filePath)
+             , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
+             ]
+                ++ marginStyle
             )
-        ]
+            [ div
+                [ Html.Attributes.class "tree-item-inner" ]
+                (case note.id of
+                    Just id ->
+                        [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                        , Html.text note.title
+                        ]
+
+                    Nothing ->
+                        [ Html.text note.title ]
+                )
+            ]
 
 
 subscriptions : Model -> Sub Msg
@@ -361,53 +476,24 @@ subscriptions _ =
         , Ports.receiveCreateNote NoteCreationRequested
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed
+        , Ports.receiveSettings SettingsChanged
         ]
-
-
-settingsDecoder : Decode.Decoder Settings
-settingsDecoder =
-    Decode.map4
-        (\includeFolders excludeFolders showNotesWithoutId idField ->
-            { includeFolders = includeFolders
-            , excludeFolders = excludeFolders
-            , showNotesWithoutId = showNotesWithoutId
-            , idField = idField
-            }
-        )
-        (Decode.oneOf
-            [ Decode.field "includeFolders" (Decode.list Decode.string)
-            , Decode.succeed defaultSettings.includeFolders
-            ]
-        )
-        (Decode.oneOf
-            [ Decode.field "excludeFolders" (Decode.list Decode.string)
-            , Decode.succeed defaultSettings.excludeFolders
-            ]
-        )
-        (Decode.oneOf
-            [ Decode.field "showNotesWithoutId" Decode.bool
-            , Decode.succeed defaultSettings.showNotesWithoutId
-            ]
-        )
-        (Decode.oneOf
-            [ Decode.field "idField" Decode.string
-            , Decode.succeed defaultSettings.idField
-            ]
-        )
 
 
 partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
 partialSettingsDecoder =
-    Decode.map4
-        (\includeFolders excludeFolders showNotesWithoutId idField settings ->
+    Decode.map5
+        (\includeFolders excludeFolders showNotesWithoutId idField splitLevel settings ->
             { settings
                 | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
                 , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
                 , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
                 , idField = idField |> Maybe.withDefault settings.idField
+                , splitLevel = splitLevel |> Maybe.withDefault settings.splitLevel
             }
         )
         (Decode.field "includeFolders" (Decode.list Decode.string) |> Decode.maybe)
         (Decode.field "excludeFolders" (Decode.list Decode.string) |> Decode.maybe)
         (Decode.field "showNotesWithoutId" Decode.bool |> Decode.maybe)
         (Decode.field "idField" Decode.string |> Decode.maybe)
+        (Decode.field "splitLevel" Decode.int |> Decode.maybe)

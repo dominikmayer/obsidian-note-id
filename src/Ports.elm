@@ -22,8 +22,20 @@ port receiveCreateNote : (( String, Bool ) -> msg) -> Sub msg
 port receiveFileRenamed : (( String, String ) -> msg) -> Sub msg
 
 
+port receiveSettings : (Settings -> msg) -> Sub msg
+
+
 type alias NoteMeta =
     { title : String
     , id : Maybe String
     , filePath : String
+    }
+
+
+type alias Settings =
+    { includeFolders : List String
+    , excludeFolders : List String
+    , showNotesWithoutId : Bool
+    , idField : String
+    , splitLevel : Int
     }

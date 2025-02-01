@@ -8,6 +8,7 @@ interface IDSidePanelSettings {
     excludeFolders: string[];
     showNotesWithoutId: boolean;
     idField: string;
+    splitLevel: number;
 }
 
 const DEFAULT_SETTINGS: IDSidePanelSettings = {
@@ -15,6 +16,7 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
     excludeFolders: [],
     showNotesWithoutId: true,
     idField: '',
+    splitLevel: 0,
 };
 
 interface NoteMeta {
@@ -47,7 +49,7 @@ class IDSidePanelView extends ItemView {
 
         this.elmApp = Elm.Main.init({
             node: elmContainer,
-            flag: this.plugin.settings,
+            flags: this.plugin.settings,
         });
 
         this.elmApp.ports.openFile.subscribe((filePath: string) => {
@@ -377,8 +379,16 @@ export default class IDSidePanelPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+        this.sendSettingsToElm(this.settings);
         await this.initializeCache();
         await this.refreshView();
+    }
+
+    private sendSettingsToElm(settings: IDSidePanelSettings) {
+        const elmApp = this.getElmApp()
+        if (elmApp && elmApp.ports.receiveSettings) {
+            elmApp.ports.receiveSettings.send(settings);
+        }
     }
 }
 
@@ -451,6 +461,22 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.showNotesWithoutId)
                     .onChange(async (value) => {
                         this.plugin.settings.showNotesWithoutId = value;
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+            new Setting(containerEl)
+            .setName('Hierarchy Split Level')
+            .setDesc('Defines how notes are visually grouped based on ID hierarchy. ' +
+                     'A value of 1 separates top-level IDs (e.g., 1 vs. 2). ' +
+                     'A value of 2 adds an additional split between sub-levels (e.g., 1.1 vs. 1.2), and so on.')
+            .addSlider((slider) =>
+                slider
+                    .setLimits(0, 10, 1)
+                    .setValue(this.plugin.settings.splitLevel)
+                    .setDynamicTooltip()
+                    .onChange(async (value) => {
+                        this.plugin.settings.splitLevel = value;
                         await this.plugin.saveSettings();
                     })
             );
