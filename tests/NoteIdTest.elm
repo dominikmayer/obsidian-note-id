@@ -63,7 +63,8 @@ all =
                 , ( "", "", EQ )
                 ]
             ++ testBranchLevels
-                [ ( "1.1a", "1.1a", Nothing )
+                [ ( "1", "1.1a", Nothing )
+                , ( "1.1a", "1.1a", Nothing )
                 , ( "1.1a", "11a", Just 1 )
                 , ( "1.1a", "1-1a", Just 1 )
                 , ( "1.1a", "1.1ab", Just 3 )
