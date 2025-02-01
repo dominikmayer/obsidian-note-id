@@ -226,8 +226,15 @@ isNoteIdTaken notes noteId =
 
 
 createNoteContent : String -> String -> String
-createNoteContent idName id =
-    "---\n" ++ idName ++ ": " ++ id ++ "\n---"
+createNoteContent idNameFromSettings id =
+    let
+        idName =
+            if String.isEmpty idNameFromSettings then
+                "id"
+            else
+                idNameFromSettings
+    in
+        "---\n" ++ idName ++ ": " ++ id ++ "\n---"
 
 
 getPathWithoutFileName : String -> String
