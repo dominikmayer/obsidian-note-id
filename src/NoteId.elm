@@ -1,4 +1,4 @@
-module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId)
+module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId, splitLevel)
 
 import List.Extra
 import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
@@ -260,3 +260,108 @@ compareIdPart a b =
 
         ( _, Delimiter _ ) ->
             GT
+
+
+type alias Level =
+    { value : IdPart
+    , delimiter : Maybe String
+    }
+
+
+{-| Group a list of parsed IdPart tokens into levels.
+We skip any leading delimiters.
+
+For each non‑delimiter token we look at the next token:
+
+- If it is a delimiter, we attach it to the level and skip it.
+- Otherwise the level gets no delimiter.
+
+Note that consecutive non‑delimiter tokens (e.g. in "11a") yield separate levels.
+-}
+groupLevels : List IdPart -> List Level
+groupLevels tokens =
+    case tokens of
+        [] ->
+            []
+
+        t :: rest ->
+            case t of
+                Delimiter _ ->
+                    groupLevels rest
+
+                _ ->
+                    let
+                        ( delim, remaining ) =
+                            case rest of
+                                t2 :: rest2 ->
+                                    case t2 of
+                                        Delimiter s ->
+                                            ( Just s, rest2 )
+
+                                        _ ->
+                                            ( Nothing, rest )
+
+                                [] ->
+                                    ( Nothing, [] )
+                    in
+                        { value = t, delimiter = delim }
+                            :: groupLevels remaining
+
+
+{-| Compare two lists of levels.
+
+We traverse the lists from the beginning (level 1 onward) and check for a difference.
+
+A difference is found when either:
+
+- The non‑delimiter token (`value`) differs, or
+- The attached delimiter differs.
+
+If the two lists are identical up to the length of the shorter one, we treat that as a branch
+(i.e. one id extends the other) and return Nothing.
+-}
+compareLevels : List Level -> List Level -> Maybe Int
+compareLevels levels1 levels2 =
+    let
+        helper l1 l2 index =
+            case ( l1, l2 ) of
+                ( x :: xs, y :: ys ) ->
+                    if (x.value == y.value) && (x.delimiter == y.delimiter) then
+                        helper xs ys (index + 1)
+                    else
+                        Just index
+
+                _ ->
+                    -- One list is a prefix of the other (or both empty) → no split.
+                    Nothing
+    in
+        helper levels1 levels2 1
+
+
+{-| splitLevel : String -> String -> Maybe Int
+
+This function uses the existing parser (`parts`) to split each ID into tokens.
+It then groups the tokens into levels (each level being a non‑delimiter token plus
+the delimiter immediately following it, if any).
+
+The two lists of levels are then compared in order.
+
+A difference (in token or in delimiter) at a given level is considered a split.
+
+If the levels are identical (or one is a prefix of the other) then no split is reported.
+-}
+splitLevel : String -> String -> Maybe Int
+splitLevel id1 id2 =
+    case ( parts id1, parts id2 ) of
+        ( Ok tokens1, Ok tokens2 ) ->
+            let
+                levels1 =
+                    groupLevels tokens1
+
+                levels2 =
+                    groupLevels tokens2
+            in
+                compareLevels levels1 levels2
+
+        _ ->
+            Nothing

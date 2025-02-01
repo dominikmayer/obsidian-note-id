@@ -34,6 +34,7 @@ all =
                 , ( "abc1da21", [ Letters "abc", Number 1, Letters "da", Number 21 ] )
                 , ( "12abc2db27e", [ Number 12, Letters "abc", Number 2, Letters "db", Number 27, Letters "e" ] )
                 , ( "1.2a8f9", [ Number 1, Delimiter ".", Number 2, Letters "a", Number 8, Letters "f", Number 9 ] )
+                , ( "1.-2", [ Number 1, Delimiter ".-", Number 2 ] )
                 , ( "abca", [ Letters "abca" ] )
                 , ( "41as3.27ag.7f9zz"
                   , [ Number 41
@@ -52,6 +53,7 @@ all =
                 ]
             ++ testCompare
                 [ ( "1.1a", "1.1a", EQ )
+                , ( "1.1a", "1-1a", GT )
                 , ( "1.1a", "1.1ab", LT )
                 , ( "1.1ab", "1.1ab1", LT )
                 , ( "1.1ab1", "1.1ab12", LT )
@@ -59,6 +61,18 @@ all =
                 , ( "1.2.23.9", "1.23.10", LT )
                 , ( "1.2.22.9", "1.22.9", LT )
                 , ( "", "", EQ )
+                ]
+            ++ testBranchLevels
+                [ ( "1.1a", "1.1a", Nothing )
+                , ( "1.1a", "11a", Just 1 )
+                , ( "1.1a", "1-1a", Just 1 )
+                , ( "1.1a", "1.1ab", Just 3 )
+                , ( "1.1ab", "1.1ab1", Nothing )
+                , ( "1.1ab1", "1.1ab12", Just 4 )
+                , ( "1.1ab12", "1.1ab12", Nothing )
+                , ( "1.2.23.9", "1.23.10", Just 2 )
+                , ( "1.2.22.9", "1.22.9", Just 2 )
+                , ( "", "", Nothing )
                 ]
 
 
@@ -121,4 +135,17 @@ testSingleCompare ( a, b, order ) =
     [ test (a ++ " and " ++ b ++ " ordered incorrectly") <|
         \_ ->
             Expect.equal (NoteId.compareId a b) order
+    ]
+
+
+testBranchLevels : List ( String, String, Maybe Int ) -> List Test
+testBranchLevels cases =
+    List.concatMap testBranchLevel cases
+
+
+testBranchLevel : ( String, String, Maybe Int ) -> List Test
+testBranchLevel ( a, b, level ) =
+    [ test ("The branch of " ++ a ++ " and " ++ b ++ " is recognized incorrectly") <|
+        \_ ->
+            Expect.equal (NoteId.splitLevel a b) level
     ]
