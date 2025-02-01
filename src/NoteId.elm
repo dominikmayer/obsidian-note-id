@@ -332,10 +332,20 @@ compareLevels levels1 levels2 =
                         Just index
 
                 _ ->
-                    -- One list is a prefix of the other (or both empty) → no split.
                     Nothing
     in
-        helper levels1 levels2 1
+        case ( levels1, levels2 ) of
+            ( [], [] ) ->
+                Nothing
+
+            ( [], _ ) ->
+                Just 1
+
+            ( _, [] ) ->
+                Just 1
+
+            _ ->
+                helper levels1 levels2 1
 
 
 {-| splitLevel : String -> String -> Maybe Int
