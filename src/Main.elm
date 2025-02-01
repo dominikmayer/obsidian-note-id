@@ -436,7 +436,7 @@ renderNote model note maybeSplit =
             case maybeSplit of
                 Just level ->
                     if 0 < level && level <= model.settings.splitLevel then
-                        [ Html.Attributes.style "margin-top" "var(--size-4-4)" ]
+                        adaptedMarginStyle model.settings.splitLevel level
                     else
                         []
 
@@ -467,6 +467,29 @@ renderNote model note maybeSplit =
                         [ Html.text note.title ]
                 )
             ]
+
+
+adaptedMarginStyle : Int -> Int -> List (Html.Attribute msg)
+adaptedMarginStyle splitLevelSetting level =
+    let
+        availableSizes =
+            [ "--size-4-8"
+            , "--size-4-9"
+            , "--size-4-12"
+            , "--size-4-16"
+            , "--size-4-18"
+            ]
+
+        sizeMap : Dict Int String
+        sizeMap =
+            List.indexedMap (\i size -> ( splitLevelSetting - i, size )) availableSizes
+                |> Dict.fromList
+
+        marginSize =
+            Dict.get level sizeMap
+                |> Maybe.withDefault "--size-4-18"
+    in
+        [ Html.Attributes.style "margin-top" ("var(" ++ marginSize ++ ")") ]
 
 
 subscriptions : Model -> Sub Msg
