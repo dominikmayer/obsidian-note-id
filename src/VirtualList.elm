@@ -218,8 +218,8 @@ initWithConfig options =
 
 
 type RowHeight
-    = Measured Float
-    | Default Float
+    = Unmeasured Float
+    | Measured Float
 
 
 {-| The `Msg` of the virtual list. You need to include it in your `Msg` and make sure it will be processed.
@@ -312,17 +312,13 @@ setItemsAndRemeasure model { ids, idsToRemeasure } =
 
 updateModelWithNewItems : Model -> List String -> Dict Int RowHeight -> ( Model, Cmd Msg )
 updateModelWithNewItems model ids updatedRowHeights =
-    let
-        updatedCumulativeHeights =
-            calculateCumulativeHeights updatedRowHeights
-    in
-        ( { model
-            | ids = ids
-            , cumulativeHeights = updatedCumulativeHeights
-            , rowHeights = updatedRowHeights
-          }
-        , measureViewport model.listId
-        )
+    ( { model
+        | ids = ids
+        , cumulativeHeights = calculateCumulativeHeights updatedRowHeights
+        , rowHeights = updatedRowHeights
+      }
+    , measureViewport model.listId
+    )
 
 
 getRowHeightsFromCache : List String -> List String -> Dict Int RowHeight -> Float -> Dict Int RowHeight
@@ -343,14 +339,19 @@ getRowHeightsFromCache ids idsToRemeasure rowHeights defaultItemHeight =
         knownOrDefaultHeight =
             (\index id ->
                 if List.member id idsToRemeasure then
-                    ( index, Default defaultItemHeight )
+                    case Dict.get id existingHeights of
+                        Just height ->
+                            ( index, Unmeasured (rowHeightToFloat height) )
+
+                        Nothing ->
+                            ( index, Unmeasured defaultItemHeight )
                 else
                     case Dict.get id existingHeights of
                         Just height ->
                             ( index, height )
 
                         Nothing ->
-                            ( index, Default defaultItemHeight )
+                            ( index, Unmeasured defaultItemHeight )
             )
     in
         ids
@@ -396,7 +397,7 @@ rowHeightToFloat rowHeight =
         Measured value ->
             value
 
-        Default value ->
+        Unmeasured value ->
             value
 
 
@@ -515,7 +516,7 @@ handleSuccessfulViewportUpdate model viewport =
 isUnmeasured : Dict comparable RowHeight -> comparable -> Bool
 isUnmeasured rowHeights index =
     case Dict.get index rowHeights of
-        Just (Default _) ->
+        Just (Unmeasured _) ->
             True
 
         Just (Measured _) ->
