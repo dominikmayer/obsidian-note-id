@@ -156,7 +156,7 @@ handleSettingsChange model settings =
             model.notes |> List.map .filePath
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasure model.virtualList ids ids
+            VirtualList.setItemsAndRemeasureAll model.virtualList ids
     in
         ( { model
             | virtualList = newVirtualList
@@ -260,7 +260,7 @@ updateNotes model newNotes changedNotes =
             splitLevelByFilePath newNotes
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasure model.virtualList ids changedNotes
+            VirtualList.setItemsAndRemeasure model.virtualList { ids = ids, idsToRemeasure = changedNotes }
     in
         ( { model
             | notes = newNotes

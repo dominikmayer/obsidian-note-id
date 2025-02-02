@@ -7,6 +7,7 @@ module VirtualList
         , view
         , setItems
         , setItemsAndRemeasure
+        , setItemsAndRemeasureAll
         , scrollToItem
         , Model
         , Msg
@@ -64,7 +65,7 @@ To use a virtual list you need to connect it to your `model`, `view` and `update
 
 # Updating the Items
 
-@docs setItems, setItemsAndRemeasure
+@docs setItems, setItemsAndRemeasure, setItemsAndRemeasureAll
 
 # Scrolling
 
@@ -291,18 +292,46 @@ dynamicBuffer base scrollSpeed =
 -}
 setItems : Model -> List String -> ( Model, Cmd Msg )
 setItems model newIds =
-    setItemsAndRemeasure model newIds []
+    setItemsAndRemeasure model { ids = newIds, idsToRemeasure = [] }
+
+
+{-| Same as `updateItems` but remeasures the whole list.
+-}
+setItemsAndRemeasureAll : Model -> List String -> ( Model, Cmd Msg )
+setItemsAndRemeasureAll model newIds =
+    setItemsAndRemeasure model { ids = newIds, idsToRemeasure = newIds }
 
 
 {-| Same as `updateItems` but lets you specify which items should be remeasured.
 -}
-setItemsAndRemeasure : Model -> List String -> List String -> ( Model, Cmd Msg )
-setItemsAndRemeasure model ids idsToRemeasure =
+setItemsAndRemeasure : Model -> { ids : List String, idsToRemeasure : List String } -> ( Model, Cmd Msg )
+setItemsAndRemeasure model { ids, idsToRemeasure } =
+    getRowHeightsFromCache ids idsToRemeasure model.rowHeights model.defaultItemHeight
+        |> updateModelWithNewItems model ids
+
+
+updateModelWithNewItems : Model -> List String -> Dict Int RowHeight -> ( Model, Cmd Msg )
+updateModelWithNewItems model ids updatedRowHeights =
+    let
+        updatedCumulativeHeights =
+            calculateCumulativeHeights updatedRowHeights
+    in
+        ( { model
+            | ids = ids
+            , cumulativeHeights = updatedCumulativeHeights
+            , rowHeights = updatedRowHeights
+          }
+        , measureViewport model.listId
+        )
+
+
+getRowHeightsFromCache : List String -> List String -> Dict Int RowHeight -> Float -> Dict Int RowHeight
+getRowHeightsFromCache ids idsToRemeasure rowHeights defaultItemHeight =
     let
         heightKnown =
             (\id ->
-                findIndexForId model.ids id
-                    |> Maybe.andThen (\index -> Dict.get index model.rowHeights)
+                findIndexForId ids id
+                    |> Maybe.andThen (\index -> Dict.get index rowHeights)
                     |> Maybe.map (\height -> ( id, height ))
             )
 
@@ -314,31 +343,19 @@ setItemsAndRemeasure model ids idsToRemeasure =
         knownOrDefaultHeight =
             (\index id ->
                 if List.member id idsToRemeasure then
-                    ( index, Default model.defaultItemHeight )
+                    ( index, Default defaultItemHeight )
                 else
                     case Dict.get id existingHeights of
                         Just height ->
                             ( index, height )
 
                         Nothing ->
-                            ( index, Default model.defaultItemHeight )
+                            ( index, Default defaultItemHeight )
             )
-
-        updatedRowHeights =
-            ids
-                |> List.indexedMap knownOrDefaultHeight
-                |> Dict.fromList
-
-        updatedCumulativeHeights =
-            calculateCumulativeHeights updatedRowHeights
     in
-        ( { model
-            | ids = ids
-            , cumulativeHeights = updatedCumulativeHeights
-            , rowHeights = updatedRowHeights
-          }
-        , measureViewport model.listId
-        )
+        ids
+            |> List.indexedMap knownOrDefaultHeight
+            |> Dict.fromList
 
 
 findIndex : (a -> Bool) -> List a -> Maybe Int
@@ -416,14 +433,14 @@ measureRow : Model -> Int -> Result Browser.Dom.Error Browser.Dom.Element -> ( M
 measureRow model index result =
     case result of
         Ok element ->
-            updateRowHeight model index element
+            updateRowHeightWithMeasurement model index element
 
         Err _ ->
             ( model, Cmd.none )
 
 
-updateRowHeight : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
-updateRowHeight model index element =
+updateRowHeightWithMeasurement : Model -> Int -> Browser.Dom.Element -> ( Model, Cmd Msg )
+updateRowHeightWithMeasurement model index element =
     let
         height =
             element.element.height
