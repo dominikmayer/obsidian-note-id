@@ -258,30 +258,35 @@ update msg model =
             measureRow model index result
 
         Scrolled ->
-            handleScroll model
+            updateOnScroll model
 
         ViewportUpdated result ->
-            handleViewportUpdate model result
+            updateOnViewportChange model result
 
 
-handleScroll : Model -> ( Model, Cmd Msg )
-handleScroll model =
+updateOnScroll : Model -> ( Model, Cmd Msg )
+updateOnScroll model =
     let
         scrollSpeed =
             abs (model.scrollTop - model.previousScrollTop)
 
         newBuffer =
             if model.dynamicBuffer then
-                dynamicBuffer model.baseBuffer scrollSpeed
+                calculateDynamicBuffer model.baseBuffer scrollSpeed
             else
                 model.buffer
     in
         ( { model | buffer = newBuffer }, measureViewport model.listId )
 
 
-dynamicBuffer : Int -> Float -> Int
-dynamicBuffer base scrollSpeed =
-    base * min 4 (1 + round (scrollSpeed / 100))
+maxBufferMultiplier : Int
+maxBufferMultiplier =
+    4
+
+
+calculateDynamicBuffer : Int -> Float -> Int
+calculateDynamicBuffer base scrollSpeed =
+    base * min maxBufferMultiplier (1 + round (scrollSpeed / 100))
 
 
 {-| Sets the items in the virtual list. For each item you provide one stable id.
@@ -292,22 +297,22 @@ dynamicBuffer base scrollSpeed =
 -}
 setItems : Model -> List String -> ( Model, Cmd Msg )
 setItems model newIds =
-    setItemsAndRemeasure model { ids = newIds, idsToRemeasure = [] }
+    setItemsAndRemeasure model { newIds = newIds, idsToRemeasure = [] }
 
 
 {-| Same as `updateItems` but remeasures the whole list.
 -}
 setItemsAndRemeasureAll : Model -> List String -> ( Model, Cmd Msg )
 setItemsAndRemeasureAll model newIds =
-    setItemsAndRemeasure model { ids = newIds, idsToRemeasure = newIds }
+    setItemsAndRemeasure model { newIds = newIds, idsToRemeasure = newIds }
 
 
 {-| Same as `updateItems` but lets you specify which items should be remeasured.
 -}
-setItemsAndRemeasure : Model -> { ids : List String, idsToRemeasure : List String } -> ( Model, Cmd Msg )
-setItemsAndRemeasure model { ids, idsToRemeasure } =
-    getRowHeightsFromCache ids idsToRemeasure model.rowHeights model.defaultItemHeight
-        |> updateModelWithNewItems model ids
+setItemsAndRemeasure : Model -> { newIds : List String, idsToRemeasure : List String } -> ( Model, Cmd Msg )
+setItemsAndRemeasure model { newIds, idsToRemeasure } =
+    getRowHeightsFromCache { oldIds = model.ids, newIds = newIds, idsToRemeasure = idsToRemeasure } model.rowHeights model.defaultItemHeight
+        |> updateModelWithNewItems model newIds
 
 
 updateModelWithNewItems : Model -> List String -> Dict Int RowHeight -> ( Model, Cmd Msg )
@@ -321,42 +326,42 @@ updateModelWithNewItems model ids updatedRowHeights =
     )
 
 
-getRowHeightsFromCache : List String -> List String -> Dict Int RowHeight -> Float -> Dict Int RowHeight
-getRowHeightsFromCache ids idsToRemeasure rowHeights defaultItemHeight =
+getRowHeightsFromCache :
+    { oldIds : List String, newIds : List String, idsToRemeasure : List String }
+    -> Dict Int RowHeight
+       -- currentRowHeights (keyed by the old index)
+    -> Float
+       -- defaultItemHeight
+    -> Dict Int RowHeight
+getRowHeightsFromCache ids currentRowHeights defaultItemHeight =
+    ids.newIds
+        |> List.indexedMap (mapRowHeight ids currentRowHeights defaultItemHeight)
+        |> Dict.fromList
+
+
+mapRowHeight :
+    { oldIds : List String, newIds : List String, idsToRemeasure : List String }
+    -> Dict Int RowHeight
+    -> Float
+    -> Int
+    -> String
+    -> ( Int, RowHeight )
+mapRowHeight { oldIds, idsToRemeasure } currentRowHeights defaultItemHeight newIndex id =
     let
-        heightKnown =
-            (\id ->
-                findIndexForId ids id
-                    |> Maybe.andThen (\index -> Dict.get index rowHeights)
-                    |> Maybe.map (\height -> ( id, height ))
-            )
+        maybeOldIndex =
+            findIndexForId oldIds id
 
-        existingHeights =
-            ids
-                |> List.filterMap heightKnown
-                |> Dict.fromList
+        existingHeight =
+            maybeOldIndex
+                |> Maybe.andThen (\oldIndex -> Dict.get oldIndex currentRowHeights)
 
-        knownOrDefaultHeight =
-            (\index id ->
-                if List.member id idsToRemeasure then
-                    case Dict.get id existingHeights of
-                        Just height ->
-                            ( index, Unmeasured (rowHeightToFloat height) )
-
-                        Nothing ->
-                            ( index, Unmeasured defaultItemHeight )
-                else
-                    case Dict.get id existingHeights of
-                        Just height ->
-                            ( index, height )
-
-                        Nothing ->
-                            ( index, Unmeasured defaultItemHeight )
-            )
+        newHeight =
+            if List.member id idsToRemeasure then
+                Unmeasured (Maybe.withDefault defaultItemHeight (Maybe.map rowHeightToFloat existingHeight))
+            else
+                Maybe.withDefault (Unmeasured defaultItemHeight) existingHeight
     in
-        ids
-            |> List.indexedMap knownOrDefaultHeight
-            |> Dict.fromList
+        ( newIndex, newHeight )
 
 
 findIndex : (a -> Bool) -> List a -> Maybe Int
@@ -471,8 +476,8 @@ updateRowHeightWithMeasurement model index element =
         )
 
 
-handleViewportUpdate : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
-handleViewportUpdate model result =
+updateOnViewportChange : Model -> Result Browser.Dom.Error Browser.Dom.Viewport -> ( Model, Cmd Msg )
+updateOnViewportChange model result =
     case result of
         Ok viewport ->
             handleSuccessfulViewportUpdate model viewport
@@ -499,7 +504,7 @@ handleSuccessfulViewportUpdate model viewport =
 
         measureCmds =
             unmeasuredIndices
-                |> List.map getRowElement
+                |> List.map requestRowMeasurement
                 |> Cmd.batch
     in
         ( { model
@@ -526,8 +531,8 @@ isUnmeasured rowHeights index =
             True
 
 
-getRowElement : Int -> Cmd Msg
-getRowElement index =
+requestRowMeasurement : Int -> Cmd Msg
+requestRowMeasurement index =
     Browser.Dom.getElement (rowId index)
         |> Task.attempt (RowElementReceived index)
 
@@ -573,7 +578,13 @@ scrollToItem model id alignment =
                     abs (model.scrollTop - elementStart) > 1
             in
                 if needsScroll then
-                    scrollToPosition model.listId elementStart model.height nextElementStart alignment
+                    scrollToPosition
+                        { targetId = model.listId
+                        , elementStart = elementStart
+                        , containerHeight = model.height
+                        , nextElementStart = nextElementStart
+                        , alignment = alignment
+                        }
                 else
                     Cmd.none
 
@@ -581,24 +592,33 @@ scrollToItem model id alignment =
             Cmd.none
 
 
-scrollToPosition : String -> Float -> Float -> Maybe Float -> Alignment -> Cmd Msg
-scrollToPosition targetId elementStart containerHeight maybeNextElementStart alignment =
+type alias ScrollPosition =
+    { targetId : String
+    , elementStart : Float
+    , containerHeight : Float
+    , nextElementStart : Maybe Float
+    , alignment : Alignment
+    }
+
+
+scrollToPosition : ScrollPosition -> Cmd Msg
+scrollToPosition position =
     let
         nextElementStart =
-            Maybe.withDefault elementStart maybeNextElementStart
+            Maybe.withDefault position.elementStart position.nextElementStart
 
-        position =
-            case alignment of
+        finalPosition =
+            case position.alignment of
                 Top ->
-                    elementStart
+                    position.elementStart
 
                 Center ->
-                    elementStart - 0.5 * containerHeight
+                    position.elementStart - 0.5 * position.containerHeight
 
                 Bottom ->
-                    nextElementStart - containerHeight
+                    nextElementStart - position.containerHeight
     in
-        Browser.Dom.setViewportOf targetId 0 position
+        Browser.Dom.setViewportOf position.targetId 0 finalPosition
             |> Task.attempt (\_ -> NoOp)
 
 

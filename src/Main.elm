@@ -260,7 +260,7 @@ updateNotes model newNotes changedNotes =
             splitLevelByFilePath newNotes
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasure model.virtualList { ids = ids, idsToRemeasure = changedNotes }
+            VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = changedNotes }
     in
         ( { model
             | notes = newNotes
