@@ -9,6 +9,7 @@ interface IDSidePanelSettings {
     showNotesWithoutId: boolean;
     idField: string;
     splitLevel: number;
+    indentation: boolean;
 }
 
 const DEFAULT_SETTINGS: IDSidePanelSettings = {
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
     showNotesWithoutId: true,
     idField: '',
     splitLevel: 0,
+    indentation: false,
 };
 
 interface NoteMeta {
@@ -465,20 +467,37 @@ class IDSidePanelSettingTab extends PluginSettingTab {
                     })
             );
 
+            containerEl.createEl('br');
+            const appearanceSection = containerEl.createEl('div', { cls: 'setting-item setting-item-heading' });
+            const appearanceSectionInfo = appearanceSection.createEl('div', { cls: 'setting-item-info' });
+            appearanceSectionInfo.createEl('div', { text: 'Display', cls: 'setting-item-name' });
+            
+        
             new Setting(containerEl)
-            .setName('Hierarchy Split Level')
-            .setDesc('Defines how notes are visually grouped based on ID hierarchy. ' +
-                     'A value of 1 separates top-level IDs (e.g., 1 vs. 2). ' +
-                     'A value of 2 adds an additional split between sub-levels (e.g., 1.1 vs. 1.2), and so on.')
-            .addSlider((slider) =>
-                slider
-                    .setLimits(0, 10, 1)
-                    .setValue(this.plugin.settings.splitLevel)
-                    .setDynamicTooltip()
+                .setName('Hierarchy Split Level')
+                .setDesc('Defines how notes are visually grouped based on ID hierarchy. ' +
+                         'A value of 1 separates top-level IDs (e.g., 1 vs. 2). ' +
+                         'A value of 2 adds an additional split between sub-levels (e.g., 1.1 vs. 1.2), and so on.')
+                .addSlider((slider) =>
+                    slider
+                        .setLimits(0, 10, 1)
+                        .setValue(this.plugin.settings.splitLevel)
+                        .setDynamicTooltip()
+                        .onChange(async (value) => {
+                            this.plugin.settings.splitLevel = value;
+                            await this.plugin.saveSettings();
+                        })
+                );
+        
+            new Setting(containerEl)
+                .setName("Indent Notes")
+                .setDesc("Indents notes based on their id level.")
+                .addToggle(toggle => toggle
+                    .setValue(this.plugin.settings.indentation)
                     .onChange(async (value) => {
-                        this.plugin.settings.splitLevel = value;
+                        this.plugin.settings.indentation = value;
                         await this.plugin.saveSettings();
                     })
-            );
+                );
     }
 }

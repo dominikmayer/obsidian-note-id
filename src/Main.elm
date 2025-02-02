@@ -72,6 +72,7 @@ type alias Settings =
     , showNotesWithoutId : Bool
     , idField : String
     , splitLevel : Int
+    , indentation : Bool
     }
 
 
@@ -82,6 +83,7 @@ defaultSettings =
     , showNotesWithoutId = True
     , idField = "id"
     , splitLevel = 0
+    , indentation = False
     }
 
 
@@ -440,16 +442,28 @@ renderRow model filePath =
 renderNote : Model -> NoteMeta -> Maybe Int -> Html Msg
 renderNote model note maybeSplit =
     let
-        marginStyle =
+        marginTopStyle =
             case maybeSplit of
-                Just level ->
-                    if 0 < level && level <= model.settings.splitLevel then
-                        adaptedMarginStyle model.settings.splitLevel level
+                Just splitLevel ->
+                    if 0 < splitLevel && splitLevel <= model.settings.splitLevel then
+                        adaptedMarginTopStyle model.settings.splitLevel splitLevel
                     else
                         []
 
                 Nothing ->
                     []
+
+        level =
+            note.id
+                |> Maybe.map NoteId.level
+                |> Maybe.withDefault 0
+                |> toFloat
+
+        marginLeftStyle =
+            if model.settings.indentation then
+                [ marginLeft level ]
+            else
+                []
     in
         div
             ([ Html.Attributes.classList
@@ -461,10 +475,10 @@ renderNote model note maybeSplit =
              , onClick (NoteClicked note.filePath)
              , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
              ]
-                ++ marginStyle
+                ++ marginTopStyle
             )
             [ div
-                [ Html.Attributes.class "tree-item-inner" ]
+                (Html.Attributes.class "tree-item-inner" :: marginLeftStyle)
                 (case note.id of
                     Just id ->
                         [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
@@ -477,8 +491,8 @@ renderNote model note maybeSplit =
             ]
 
 
-adaptedMarginStyle : Int -> Int -> List (Html.Attribute msg)
-adaptedMarginStyle splitLevelSetting level =
+adaptedMarginTopStyle : Int -> Int -> List (Html.Attribute msg)
+adaptedMarginTopStyle splitLevelSetting level =
     let
         availableSizes =
             [ "--size-4-8"
@@ -500,6 +514,11 @@ adaptedMarginStyle splitLevelSetting level =
         [ Html.Attributes.style "margin-top" ("var(" ++ marginSize ++ ")") ]
 
 
+marginLeft : Float -> Html.Attribute msg
+marginLeft level =
+    Html.Attributes.style "margin-left" ("calc(var(--size-2-3) * " ++ String.fromFloat level ++ ")")
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
@@ -513,14 +532,15 @@ subscriptions _ =
 
 partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
 partialSettingsDecoder =
-    Decode.map5
-        (\includeFolders excludeFolders showNotesWithoutId idField splitLevel settings ->
+    Decode.map6
+        (\includeFolders excludeFolders showNotesWithoutId idField splitLevel indentation settings ->
             { settings
                 | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
                 , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
                 , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
                 , idField = idField |> Maybe.withDefault settings.idField
                 , splitLevel = splitLevel |> Maybe.withDefault settings.splitLevel
+                , indentation = indentation |> Maybe.withDefault settings.indentation
             }
         )
         (Decode.field "includeFolders" (Decode.list Decode.string) |> Decode.maybe)
@@ -528,3 +548,4 @@ partialSettingsDecoder =
         (Decode.field "showNotesWithoutId" Decode.bool |> Decode.maybe)
         (Decode.field "idField" Decode.string |> Decode.maybe)
         (Decode.field "splitLevel" Decode.int |> Decode.maybe)
+        (Decode.field "indentation" Decode.bool |> Decode.maybe)

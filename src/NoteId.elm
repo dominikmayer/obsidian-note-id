@@ -1,4 +1,4 @@
-module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId, splitLevel)
+module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId, splitLevel, level)
 
 import List.Extra
 import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
@@ -114,6 +114,19 @@ type IdPart
     = Number Int
     | Letters String
     | Delimiter String
+
+
+isDelimiter : IdPart -> Bool
+isDelimiter part =
+    case part of
+        Number _ ->
+            False
+
+        Letters _ ->
+            False
+
+        Delimiter _ ->
+            True
 
 
 parts : String -> Result String (List IdPart)
@@ -350,3 +363,11 @@ splitLevel id1 id2 =
 
         _ ->
             Nothing
+
+
+level : String -> Int
+level id =
+    parts id
+        |> Result.map (List.filter (not << isDelimiter))
+        |> Result.map List.length
+        |> Result.withDefault 0

@@ -77,6 +77,18 @@ all =
                 , ( "", "1a", Just 1 )
                 , ( "1a", "", Just 1 )
                 ]
+            ++ testLevels
+                [ ( "1", 1 )
+                , ( "1.1a", 3 )
+                , ( "1-1a", 3 )
+                , ( "1.1ab", 3 )
+                , ( "1.1ab1", 4 )
+                , ( "11ab1", 3 )
+                , ( "1.2.23.9", 4 )
+                , ( "1.22.9", 3 )
+                , ( "", 0 )
+                , ( "1a", 2 )
+                ]
 
 
 testGetNewIdsInSequence : List ( String, String ) -> List Test
@@ -151,4 +163,17 @@ testBranchLevel ( a, b, level ) =
     [ test ("The branch of " ++ a ++ " and " ++ b ++ " is recognized incorrectly") <|
         \_ ->
             Expect.equal (NoteId.splitLevel a b) level
+    ]
+
+
+testLevels : List ( String, Int ) -> List Test
+testLevels cases =
+    List.concatMap testLevel cases
+
+
+testLevel : ( String, Int ) -> List Test
+testLevel ( id, level ) =
+    [ test (id ++ " has the wrong level") <|
+        \_ ->
+            Expect.equal (NoteId.level id) level
     ]

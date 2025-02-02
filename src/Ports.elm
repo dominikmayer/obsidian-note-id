@@ -38,4 +38,5 @@ type alias Settings =
     , showNotesWithoutId : Bool
     , idField : String
     , splitLevel : Int
+    , indentation : Bool
     }

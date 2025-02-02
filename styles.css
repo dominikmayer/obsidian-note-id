@@ -2,6 +2,10 @@
     color: var(--text-faint);
 }
 
+.virtual-list .tree-item-self {
+    padding-left: var(--size-4-2);
+}
+
 .virtual-list-item {
     left: 0;
     right: 0;
