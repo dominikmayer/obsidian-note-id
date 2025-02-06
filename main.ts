@@ -345,13 +345,17 @@ export default class IDSidePanelPlugin extends Plugin {
 			}),
 		);
 
-		this.app.vault.on("rename", async (file, oldPath) => {
-			this.noteCache.delete(oldPath);
-			await this.handleFileChange(file);
-			// Sending this after the files are reloaded so scrolling works
-			const elmApp = this.getElmApp();
-			if (elmApp && elmApp.ports.receiveFileRenamed) {
-				elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
+		this.registerEvent(
+			this.app.vault.on("rename", async (file, oldPath) => {
+				this.noteCache.delete(oldPath);
+				await this.handleFileChange(file);
+				// Sending this after the files are reloaded so scrolling works
+				const elmApp = this.getElmApp();
+				if (elmApp && elmApp.ports.receiveFileRenamed) {
+					elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
+				}
+			}),
+		);
 
 		this.registerEvent(
 			this.app.vault.on("delete", async (file) => {
