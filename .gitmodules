@@ -1,0 +1,3 @@
+[submodule "elm-virtual-list"]
+	path = elm-virtual-list
+	url = https://github.com/dominikmayer/elm-virtual-list
