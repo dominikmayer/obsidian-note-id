@@ -220,10 +220,20 @@ class IDSidePanelView extends ItemView {
 }
 
 export default class IDSidePanelPlugin extends Plugin {
-	private activePanelView: IDSidePanelView | null = null;
 	private scheduleRefreshTimeout: number | null = null;
 	settings: IDSidePanelSettings;
 	noteCache: Map<string, NoteMeta> = new Map();
+
+	private getActivePanelView() {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ID_PANEL);
+		if (leaves.length > 0) {
+			const view = leaves[0].view;
+			if (view instanceof IDSidePanelView) {
+				return view;
+			}
+		}
+		return null;
+	}
 
 	async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
 		const { includeFolders, excludeFolders, showNotesWithoutId, idField } =
@@ -285,7 +295,8 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	private getElmApp() {
-		return this.activePanelView ? this.activePanelView.getElmApp() : null;
+		const activePanelView = this.getActivePanelView();
+		return activePanelView ? activePanelView.getElmApp() : null;
 	}
 
 	async onload() {
@@ -300,7 +311,6 @@ export default class IDSidePanelPlugin extends Plugin {
 		this.registerView(VIEW_TYPE_ID_PANEL, (leaf) => {
 			const view = new IDSidePanelView(leaf, this);
 			view.icon = "file-digit";
-			this.activePanelView = view;
 			return view;
 		});
 
@@ -335,17 +345,13 @@ export default class IDSidePanelPlugin extends Plugin {
 			}),
 		);
 
-		this.registerEvent(
-			this.app.vault.on("rename", async (file, oldPath) => {
-				this.noteCache.delete(oldPath);
-				await this.handleFileChange(file);
-				// Sending this after the files are reloaded so scrolling works
-				const elmApp = this.getElmApp();
-				if (elmApp && elmApp.ports.receiveFileRenamed) {
-					elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
-				}
-			}),
-		);
+		this.app.vault.on("rename", async (file, oldPath) => {
+			this.noteCache.delete(oldPath);
+			await this.handleFileChange(file);
+			// Sending this after the files are reloaded so scrolling works
+			const elmApp = this.getElmApp();
+			if (elmApp && elmApp.ports.receiveFileRenamed) {
+				elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
 
 		this.registerEvent(
 			this.app.vault.on("delete", async (file) => {
@@ -415,12 +421,15 @@ export default class IDSidePanelPlugin extends Plugin {
 		}
 		this.scheduleRefreshTimeout = window.setTimeout(() => {
 			this.scheduleRefreshTimeout = null;
-			if (this.activePanelView)
-				this.activePanelView.renderNotes(changedFiles);
+			const activePanelView = this.getActivePanelView();
+			if (activePanelView) activePanelView.renderNotes(changedFiles);
 		}, 50);
 	}
 
 	async activateView() {
+		// Remove existing instances of the view first
+		this.app.workspace.detachLeavesOfType(VIEW_TYPE_ID_PANEL);
+
 		// Get the right leaf or create one if it doesn't exist
 		let leaf = this.app.workspace.getRightLeaf(false);
 
@@ -440,8 +449,9 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	async refreshView() {
-		if (this.activePanelView) {
-			this.activePanelView.renderNotes();
+		const activePanelView = this.getActivePanelView();
+		if (activePanelView) {
+			activePanelView.renderNotes();
 		}
 	}
 
