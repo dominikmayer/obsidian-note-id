@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-note-id",
-	"version": "1.0.7",
+	"version": "1.0.8",
 	"description": "Displays notes by their ID, enabling structured sequences for manuscripts or Zettelkasten (\"Folgezettel\").",
 	"main": "main.js",
 	"scripts": {
