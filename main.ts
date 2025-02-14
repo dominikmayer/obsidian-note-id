@@ -427,8 +427,9 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	async activateView() {
-		// Remove existing instances of the view first
-		this.app.workspace.detachLeavesOfType(VIEW_TYPE_ID_PANEL);
+		if (this.getActivePanelView()) {
+			return;
+		}
 
 		// Get the right leaf or create one if it doesn't exist
 		let leaf = this.app.workspace.getRightLeaf(false);
