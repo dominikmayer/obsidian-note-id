@@ -1,13 +1,18 @@
+.workspace-leaf-content[data-type="id-side-panel"] .view-content {
+	padding: 0;
+	overflow: hidden;
+}
+
 .note-id {
-    color: var(--text-faint);
+	color: var(--text-faint);
 }
 
 .virtual-list .tree-item-self {
-    padding-left: var(--size-4-2);
+	padding-left: var(--size-4-2);
 }
 
 .virtual-list-item {
-    left: 0;
-    right: 0;
-    overflow: hidden;
+	left: 0;
+	right: 0;
+	overflow: hidden;
 }
