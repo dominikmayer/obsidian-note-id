@@ -61,6 +61,7 @@ defaultModel =
 
 type alias NoteMeta =
     { title : String
+    , tocTitle: Maybe String
     , id : Maybe String
     , filePath : String
     }
@@ -71,6 +72,7 @@ type alias Settings =
     , excludeFolders : List String
     , showNotesWithoutId : Bool
     , idField : String
+    , tocField: String
     , splitLevel : Int
     , indentation : Bool
     }
@@ -82,6 +84,7 @@ defaultSettings =
     , excludeFolders = []
     , showNotesWithoutId = True
     , idField = "id"
+    , tocField = "toc-title"
     , splitLevel = 0
     , indentation = False
     }
@@ -532,13 +535,14 @@ subscriptions _ =
 
 partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
 partialSettingsDecoder =
-    Decode.map6
-        (\includeFolders excludeFolders showNotesWithoutId idField splitLevel indentation settings ->
+    Decode.map7
+        (\includeFolders excludeFolders showNotesWithoutId idField tocField splitLevel indentation settings ->
             { settings
                 | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
                 , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
                 , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
                 , idField = idField |> Maybe.withDefault settings.idField
+                , tocField = tocField |> Maybe.withDefault settings.idField
                 , splitLevel = splitLevel |> Maybe.withDefault settings.splitLevel
                 , indentation = indentation |> Maybe.withDefault settings.indentation
             }
@@ -547,5 +551,6 @@ partialSettingsDecoder =
         (Decode.field "excludeFolders" (Decode.list Decode.string) |> Decode.maybe)
         (Decode.field "showNotesWithoutId" Decode.bool |> Decode.maybe)
         (Decode.field "idField" Decode.string |> Decode.maybe)
+        (Decode.field "tocField" Decode.string |> Decode.maybe)
         (Decode.field "splitLevel" Decode.int |> Decode.maybe)
         (Decode.field "indentation" Decode.bool |> Decode.maybe)

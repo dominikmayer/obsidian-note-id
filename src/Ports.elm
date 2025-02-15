@@ -27,6 +27,7 @@ port receiveSettings : (Settings -> msg) -> Sub msg
 
 type alias NoteMeta =
     { title : String
+    , tocTitle: Maybe String
     , id : Maybe String
     , filePath : String
     }
@@ -37,6 +38,7 @@ type alias Settings =
     , excludeFolders : List String
     , showNotesWithoutId : Bool
     , idField : String
+    , tocField: String
     , splitLevel : Int
     , indentation : Bool
     }

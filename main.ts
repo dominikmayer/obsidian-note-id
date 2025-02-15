@@ -12,12 +12,15 @@ import {
 import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = "id-side-panel";
+const ID_FIELD_DEFAULT = "id";
+const TOC_TITLE_FIELD_DEFAULT = "toc-title";
 
 interface IDSidePanelSettings {
 	includeFolders: string[];
 	excludeFolders: string[];
 	showNotesWithoutId: boolean;
 	idField: string;
+	tocField: string;
 	splitLevel: number;
 	indentation: boolean;
 }
@@ -27,12 +30,14 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
 	excludeFolders: [],
 	showNotesWithoutId: true,
 	idField: "",
+	tocField: "",
 	splitLevel: 0,
 	indentation: false,
 };
 
 interface NoteMeta {
 	title: string;
+	tocTitle: string | null;
 	id: string | number | null;
 	file: TFile;
 }
@@ -210,6 +215,7 @@ class IDSidePanelView extends ItemView {
 		) {
 			const notes = combined.map((note) => ({
 				title: note.title,
+				tocTitle: note.tocTitle,
 				id: note.id ? note.id.toString() : null, // Convert Maybe to a string
 				filePath: note.file.path,
 			}));
@@ -236,8 +242,13 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
-		const { includeFolders, excludeFolders, showNotesWithoutId, idField } =
-			this.settings;
+		const {
+			includeFolders,
+			excludeFolders,
+			showNotesWithoutId,
+			idField,
+			tocField,
+		} = this.settings;
 		const filePath = file.path.toLowerCase();
 
 		// Normalize folder paths to remove trailing slashes and lower case them
@@ -259,6 +270,7 @@ export default class IDSidePanelPlugin extends Plugin {
 
 		const cache = this.app.metadataCache.getFileCache(file);
 		let id = null;
+		let tocTitle = null;
 		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
 			const frontmatter: Record<
 				string,
@@ -271,13 +283,17 @@ export default class IDSidePanelPlugin extends Plugin {
 				},
 				{} as Record<string, any>,
 			);
-			const normalizedIdField = idField.toLowerCase() || "id";
+			const normalizedIdField = idField.toLowerCase() || ID_FIELD_DEFAULT;
 			id = frontmatterKeys[normalizedIdField] ?? null;
+
+			const normalizedTocTitleField =
+				tocField.toLowerCase() || TOC_TITLE_FIELD_DEFAULT;
+			tocTitle = frontmatterKeys[normalizedTocTitleField] ?? null;
 		}
 
 		if (id === null && !showNotesWithoutId) return null;
 
-		return { title: file.basename, id, file };
+		return { title: file.basename, tocTitle, id, file };
 	}
 
 	async initializeCache() {
@@ -497,10 +513,24 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 			)
 			.addText((text) =>
 				text
-					.setPlaceholder("id")
+					.setPlaceholder(ID_FIELD_DEFAULT)
 					.setValue(this.plugin.settings.idField)
 					.onChange(async (value) => {
 						this.plugin.settings.idField = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Table of contents title property")
+			.setDesc(
+				"Define the frontmatter field used as the title shown in the table of contents (case-insensitive).",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(TOC_TITLE_FIELD_DEFAULT)
+					.setValue(this.plugin.settings.tocField)
+					.onChange(async (value) => {
+						this.plugin.settings.tocField = value.trim();
 						await this.plugin.saveSettings();
 					}),
 			);
