@@ -1,6 +1,12 @@
 .workspace-leaf-content[data-type="id-side-panel"] .view-content {
 	padding: 0;
-	overflow: hidden;
+	display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.workspace-leaf-content[data-type="id-side-panel"] .nav-header {
+    flex-shrink: 0; /* Keeps the header at its natural height */
 }
 
 .note-id {
@@ -12,6 +18,7 @@
 }
 
 .virtual-list-item {
+	flex-grow: 1;
 	left: 0;
 	right: 0;
 	overflow: hidden;

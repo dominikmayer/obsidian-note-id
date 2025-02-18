@@ -31,12 +31,20 @@ main =
 -- MODEL
 
 
+type Display
+    = TOC
+    | Notes
+
+
 type alias Model =
     { notes : List NoteMeta
-    , splitLevels : Dict String (Maybe Int)
+    , splitLevels :
+        Dict String (Maybe Int)
+        -- TODO: Move to Display
     , currentFile : Maybe String
     , settings : Settings
     , fileOpenedByPlugin : Bool
+    , display : Display
     , virtualList : VirtualList.Model
     }
 
@@ -55,13 +63,14 @@ defaultModel =
         , currentFile = Nothing
         , settings = defaultSettings
         , fileOpenedByPlugin = False
+        , display = Notes
         , virtualList = VirtualList.initWithConfig config
         }
 
 
 type alias NoteMeta =
     { title : String
-    , tocTitle: Maybe String
+    , tocTitle : Maybe String
     , id : Maybe String
     , filePath : String
     }
@@ -72,7 +81,7 @@ type alias Settings =
     , excludeFolders : List String
     , showNotesWithoutId : Bool
     , idField : String
-    , tocField: String
+    , tocField : String
     , splitLevel : Int
     , indentation : Bool
     }
@@ -84,7 +93,7 @@ defaultSettings =
     , excludeFolders = []
     , showNotesWithoutId = True
     , idField = "id"
-    , tocField = "toc-title"
+    , tocField = "toc"
     , splitLevel = 0
     , indentation = False
     }
@@ -113,6 +122,7 @@ decodeSettings settings newSettings =
 
 type Msg
     = ContextMenuTriggered Mouse.Event String
+    | DisplayChanged Bool
     | FileOpened (Maybe String)
     | FileRenamed ( String, String )
     | NoteClicked String
@@ -131,6 +141,16 @@ update msg model =
                     event.clientPos
             in
                 ( model, Ports.openContextMenu ( x, y, path ) )
+
+        DisplayChanged tocShown ->
+            let
+                newDisplay =
+                    if tocShown then
+                        TOC
+                    else
+                        Notes
+            in
+                updateDisplay model newDisplay
 
         FileOpened filePath ->
             fileOpened model filePath
@@ -154,18 +174,52 @@ update msg model =
             translate (VirtualList.update virtualListMsg model.virtualList) model
 
 
+updateDisplay : Model -> Display -> ( Model, Cmd Msg )
+updateDisplay model newDisplay =
+    let
+        newModel =
+            { model | display = newDisplay }
+
+        ( updatedModel, cmd ) =
+            updateVirtualList newModel
+    in
+        ( updatedModel
+        , cmd
+        )
+
+
 handleSettingsChange : Model -> Settings -> ( Model, Cmd Msg )
 handleSettingsChange model settings =
     let
+        ( newModel, cmd ) =
+            updateVirtualList model
+    in
+        ( { newModel
+            | settings = settings
+          }
+        , cmd
+        )
+
+
+updateVirtualList : Model -> ( Model, Cmd Msg )
+updateVirtualList model =
+    let
+        filteredNotes =
+            filterNotes model.display model.notes
+
         ids =
-            model.notes |> List.map .filePath
+            sortNotes filteredNotes
+                |> List.map .filePath
+
+        splitLevels =
+            splitLevelByFilePath filteredNotes
 
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasureAll model.virtualList ids
     in
         ( { model
             | virtualList = newVirtualList
-            , settings = settings
+            , splitLevels = splitLevels
           }
         , Cmd.map VirtualListMsg virtualListCmd
         )
@@ -257,12 +311,15 @@ getPathWithoutFileName filePath =
 updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
 updateNotes model newNotes changedNotes =
     let
+        filteredNotes =
+            filterNotes model.display newNotes
+
         ids =
-            sortNotes newNotes
+            sortNotes filteredNotes
                 |> List.map .filePath
 
         splitLevels =
-            splitLevelByFilePath newNotes
+            splitLevelByFilePath filteredNotes
 
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = changedNotes }
@@ -274,6 +331,16 @@ updateNotes model newNotes changedNotes =
           }
         , Cmd.map VirtualListMsg virtualListCmd
         )
+
+
+filterNotes : Display -> List NoteMeta -> List NoteMeta
+filterNotes display notes =
+    case display of
+        TOC ->
+            List.filter (\note -> note.tocTitle /= Nothing) notes
+
+        Notes ->
+            notes
 
 
 sortNotes : List NoteMeta -> List NoteMeta
@@ -446,15 +513,18 @@ renderNote : Model -> NoteMeta -> Maybe Int -> Html Msg
 renderNote model note maybeSplit =
     let
         marginTopStyle =
-            case maybeSplit of
-                Just splitLevel ->
-                    if 0 < splitLevel && splitLevel <= model.settings.splitLevel then
-                        adaptedMarginTopStyle model.settings.splitLevel splitLevel
-                    else
-                        []
+            if model.display == TOC then
+                []
+            else
+                case maybeSplit of
+                    Just splitLevel ->
+                        if 0 < splitLevel && splitLevel <= model.settings.splitLevel then
+                            adaptedMarginTopStyle model.settings.splitLevel splitLevel
+                        else
+                            []
 
-                Nothing ->
-                    []
+                    Nothing ->
+                        []
 
         level =
             note.id
@@ -467,6 +537,12 @@ renderNote model note maybeSplit =
                 [ marginLeft level ]
             else
                 []
+
+        title =
+            if model.display == TOC then
+                Maybe.withDefault note.title note.tocTitle
+            else
+                note.title
     in
         div
             ([ Html.Attributes.classList
@@ -485,11 +561,11 @@ renderNote model note maybeSplit =
                 (case note.id of
                     Just id ->
                         [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                        , Html.text note.title
+                        , Html.text title
                         ]
 
                     Nothing ->
-                        [ Html.text note.title ]
+                        [ Html.text title ]
                 )
             ]
 
@@ -527,6 +603,7 @@ subscriptions _ =
     Sub.batch
         [ Ports.receiveNotes NotesProvided
         , Ports.receiveCreateNote NoteCreationRequested
+        , Ports.receiveDisplayIsToc DisplayChanged
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed
         , Ports.receiveSettings SettingsChanged
@@ -542,7 +619,7 @@ partialSettingsDecoder =
                 , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
                 , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
                 , idField = idField |> Maybe.withDefault settings.idField
-                , tocField = tocField |> Maybe.withDefault settings.idField
+                , tocField = tocField |> Maybe.withDefault settings.tocField
                 , splitLevel = splitLevel |> Maybe.withDefault settings.splitLevel
                 , indentation = indentation |> Maybe.withDefault settings.indentation
             }

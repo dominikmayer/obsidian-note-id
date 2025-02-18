@@ -19,6 +19,9 @@ port receiveFileOpen : (Maybe String -> msg) -> Sub msg
 port receiveCreateNote : (( String, Bool ) -> msg) -> Sub msg
 
 
+port receiveDisplayIsToc : (Bool -> msg) -> Sub msg
+
+
 port receiveFileRenamed : (( String, String ) -> msg) -> Sub msg
 
 
@@ -27,7 +30,7 @@ port receiveSettings : (Settings -> msg) -> Sub msg
 
 type alias NoteMeta =
     { title : String
-    , tocTitle: Maybe String
+    , tocTitle : Maybe String
     , id : Maybe String
     , filePath : String
     }
@@ -38,7 +41,7 @@ type alias Settings =
     , excludeFolders : List String
     , showNotesWithoutId : Bool
     , idField : String
-    , tocField: String
+    , tocField : String
     , splitLevel : Int
     , indentation : Bool
     }

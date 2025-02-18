@@ -8,12 +8,13 @@ import {
 	WorkspaceLeaf,
 	Menu,
 	normalizePath,
+	setIcon,
 } from "obsidian";
 import { Elm } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = "id-side-panel";
 const ID_FIELD_DEFAULT = "id";
-const TOC_TITLE_FIELD_DEFAULT = "toc-title";
+const TOC_TITLE_FIELD_DEFAULT = "toc";
 
 interface IDSidePanelSettings {
 	includeFolders: string[];
@@ -63,6 +64,17 @@ class IDSidePanelView extends ItemView {
 	async onOpen() {
 		const container = this.containerEl.children[1] as HTMLElement;
 		container.empty();
+
+		const header = container.createDiv("nav-header");
+		const toolbar = header.createDiv("nav-buttons-container");
+		const tocButton = toolbar.createDiv("clickable-icon nav-action-button");
+		setIcon(tocButton, "table-of-contents");
+		tocButton.addEventListener("click", () => {
+			const tocShown = tocButton.classList.toggle("is-active");
+			if (this.elmApp && this.elmApp.ports.receiveDisplayIsToc) {
+				this.elmApp.ports.receiveDisplayIsToc.send(tocShown);
+			}
+		});
 
 		const elmContainer = container.createDiv();
 
@@ -292,7 +304,7 @@ export default class IDSidePanelPlugin extends Plugin {
 		}
 
 		if (id === null && !showNotesWithoutId) return null;
-
+		
 		return { title: file.basename, tocTitle, id, file };
 	}
 
@@ -426,7 +438,8 @@ export default class IDSidePanelPlugin extends Plugin {
 			const metaChanged =
 				!oldMeta ||
 				newMeta.id !== oldMeta.id ||
-				newMeta.title !== oldMeta.title;
+				newMeta.title !== oldMeta.title ||
+				newMeta.tocTitle !== oldMeta.tocTitle;
 
 			if (metaChanged) {
 				this.noteCache.set(file.path, newMeta);
