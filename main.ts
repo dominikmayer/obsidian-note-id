@@ -427,24 +427,16 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	async activateView() {
-		if (this.getActivePanelView()) {
-			return;
-		}
-
-		// Get the right leaf or create one if it doesn't exist
-		let leaf = this.app.workspace.getRightLeaf(false);
-
+		let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_ID_PANEL)[0];
+	
 		if (!leaf) {
-			// Use getLeaf() to create a new leaf
-			leaf = this.app.workspace.getLeaf(true);
+			leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf(true);
+			await leaf.setViewState({
+				type: VIEW_TYPE_ID_PANEL,
+				active: true,
+			});
 		}
-
-		await leaf.setViewState({
-			type: VIEW_TYPE_ID_PANEL,
-			active: true,
-		});
-
-		// Reveal the leaf to make it active
+	
 		this.app.workspace.revealLeaf(leaf);
 		await this.refreshView();
 	}
