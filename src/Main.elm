@@ -178,7 +178,7 @@ update msg model =
             updateNotes model notes changedNotes
 
         ScrollToCurrentNote ->
-            ( model, scrollToCurrentNote model )
+            scrollToCurrentNote model
 
         SettingsChanged settings ->
             handleSettingsChange model settings
@@ -382,13 +382,13 @@ handleFileRename model ( oldPath, newPath ) =
         updatedCurrentFile =
             updateCurrentFile model.currentFile oldPath newPath
 
-        cmd =
+        ( newModel, cmd ) =
             if model.currentFile == Just oldPath then
                 scrollToNote model newPath
             else
-                Cmd.none
+                ( model, Cmd.none )
     in
-        ( { model | currentFile = updatedCurrentFile }, cmd )
+        ( { newModel | currentFile = updatedCurrentFile }, cmd )
 
 
 updateCurrentFile : Maybe String -> String -> String -> Maybe String
@@ -425,18 +425,28 @@ scrollToExternallyOpenedNote model path =
     if model.fileOpenedByPlugin then
         ( { model | fileOpenedByPlugin = False }, Cmd.none )
     else
-        ( model, scrollToNote model path )
+        scrollToNote model path
 
 
-scrollToNote : Model -> String -> Cmd Msg
+scrollToNote : Model -> String -> ( Model, Cmd Msg )
 scrollToNote model path =
-    Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList path VirtualList.Center)
+    let
+        ( newVirtualList, virtualListCmd ) =
+            VirtualList.scrollToItem model.virtualList path VirtualList.Center
+    in
+        ( { model | virtualList = newVirtualList }
+        , Cmd.map VirtualListMsg virtualListCmd
+        )
 
 
-scrollToCurrentNote : Model -> Cmd Msg
+scrollToCurrentNote : Model -> ( Model, Cmd Msg )
 scrollToCurrentNote model =
-    Maybe.map (scrollToNote model) model.currentFile
-        |> Maybe.withDefault Cmd.none
+    case model.currentFile of
+        Just path ->
+            scrollToNote model path
+
+        Nothing ->
+            ( model, Cmd.none )
 
 
 
