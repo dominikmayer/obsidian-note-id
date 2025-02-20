@@ -157,7 +157,7 @@ update msg model =
                     updateDisplay model newDisplay
 
                 scrollCmd =
-                    Process.sleep 100
+                    Process.sleep 1
                         |> Task.perform (\_ -> ScrollToCurrentNote)
             in
                 ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
