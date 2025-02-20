@@ -11,6 +11,8 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId
 import Ports exposing (..)
+import Process
+import Task
 import VirtualList
 
 
@@ -128,6 +130,7 @@ type Msg
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided ( List NoteMeta, List String )
+    | ScrollToCurrentNote
     | SettingsChanged Settings
     | VirtualListMsg VirtualList.Msg
 
@@ -149,8 +152,15 @@ update msg model =
                         TOC
                     else
                         Notes
+
+                ( newModel, displayCmd ) =
+                    updateDisplay model newDisplay
+
+                scrollCmd =
+                    Process.sleep 100
+                        |> Task.perform (\_ -> ScrollToCurrentNote)
             in
-                updateDisplay model newDisplay
+                ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
 
         FileOpened filePath ->
             fileOpened model filePath
@@ -166,6 +176,9 @@ update msg model =
 
         NotesProvided ( notes, changedNotes ) ->
             updateNotes model notes changedNotes
+
+        ScrollToCurrentNote ->
+            ( model, scrollToCurrentNote model )
 
         SettingsChanged settings ->
             handleSettingsChange model settings
@@ -418,6 +431,12 @@ scrollToExternallyOpenedNote model path =
 scrollToNote : Model -> String -> Cmd Msg
 scrollToNote model path =
     Cmd.map VirtualListMsg (VirtualList.scrollToItem model.virtualList path VirtualList.Center)
+
+
+scrollToCurrentNote : Model -> Cmd Msg
+scrollToCurrentNote model =
+    Maybe.map (scrollToNote model) model.currentFile
+        |> Maybe.withDefault Cmd.none
 
 
 
