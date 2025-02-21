@@ -115,7 +115,7 @@ init flags =
 
 decodeSettings : Settings -> Decode.Value -> Settings
 decodeSettings settings newSettings =
-    case Decode.decodeValue partialSettingsDecoder newSettings of
+    case Decode.decodeValue (Decode.field "settings" partialSettingsDecoder) newSettings of
         Ok decoded ->
             decoded settings
 
