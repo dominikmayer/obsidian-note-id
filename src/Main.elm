@@ -103,7 +103,10 @@ defaultSettings =
 
 init : Encode.Value -> ( Model, Cmd Msg )
 init flags =
-    ( { defaultModel | settings = decodeSettings defaultSettings flags }
+    ( { defaultModel
+        | settings = decodeSettings defaultSettings flags
+        , currentFile = decodeActiveFile flags
+      }
     , Cmd.none
     )
 
@@ -116,6 +119,16 @@ decodeSettings settings newSettings =
 
         Err _ ->
             settings
+
+
+decodeActiveFile : Encode.Value -> Maybe String
+decodeActiveFile flags =
+    case Decode.decodeValue (Decode.field "activeFile" Decode.string) flags of
+        Ok path ->
+            Just path
+
+        Err _ ->
+            Nothing
 
 
 

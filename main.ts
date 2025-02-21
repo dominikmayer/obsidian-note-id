@@ -78,9 +78,14 @@ class IDSidePanelView extends ItemView {
 
 		const elmContainer = container.createDiv();
 
+		const activeFile = this.app.workspace.getActiveFile();
+		
 		this.elmApp = Elm.Main.init({
 			node: elmContainer,
-			flags: this.plugin.settings,
+			flags: {
+				settings: this.plugin.settings,
+				activeFile: activeFile ? activeFile.path : null
+			}
 		});
 
 		this.elmApp.ports.openFile.subscribe((filePath: string) => {
