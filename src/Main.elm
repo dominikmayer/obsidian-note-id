@@ -103,12 +103,14 @@ defaultSettings =
 
 init : Encode.Value -> ( Model, Cmd Msg )
 init flags =
-    ( { defaultModel
-        | settings = decodeSettings defaultSettings flags
-        , currentFile = decodeActiveFile flags
-      }
-    , Cmd.none
-    )
+    let
+        model =
+            { defaultModel
+                | settings = decodeSettings defaultSettings flags
+                , currentFile = decodeActiveFile flags
+            }
+    in
+        scrollToCurrentNote model
 
 
 decodeSettings : Settings -> Decode.Value -> Settings
