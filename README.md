@@ -4,12 +4,13 @@ The [Obsidian](https://www.obsidian.md/) Note ID Plugin displays notes by their 
 
 ## Features
 
-- **Note Organization by ID**: Displays notes in alphanumeric order based on the `id` property.
+- **Note Organization by ID**: Displays notes in alphanumeric order based on the `id` [property](https://help.obsidian.md/Editing+and+formatting/Properties).
 - **Cluster Identification**: Reveals clusters of related ideas, helping you see how your notes interconnect and where gaps or areas of high activity exist.
 - **Support for Zettelkasten**: Ideal for Zettelkasten practitioners looking to position new notes logically and expand existing threads of thought.
 - **Easily Create New Notes:** Use the context menu or a command to seamlessly create new notes that continue an existing sequence (e.g., 1.2 → 1.3) or start a subsequence branching from a note (e.g., 1.2 → 1.2a). This makes it simple to extend ideas and maintain logical connections.
+- **Dedicated Table of Contents View:** The table of contents view functions as a curated index, displaying only notes explicitly marked with the `toc` property (e.g., `toc: Zettelkasten` for the note that starts the Zettelkasten cluster). Unlike the main note list, which shows all notes, the table of contents view provides a structured way to highlight key topics without cluttering the sidebar
 
-### How Clusters Work
+## How Clusters Work
 
 Clusters form when related notes branch off from an initial idea, creating a web of connections. For example:
 
@@ -37,6 +38,13 @@ Some users prepend sequence numbers to file names (e.g., 1.1 Note Title), but th
 
 ## Installation
 
+### From the web
+
+1. Open the plugin on the [Obsidian Plugin Website](https://obsidian.md/plugins?id=note-id).
+2. Click on `Install`.
+
+### From within Obsidian
+
 1. Open Obsidian.
 2. Go to `Settings > Community Plugins`.
 3. Search for "Note ID".
@@ -44,23 +52,44 @@ Some users prepend sequence numbers to file names (e.g., 1.1 Note Title), but th
 
 ## Usage
 
-1. Add an `id` property to the frontmatter of your notes (e.g., `id: 1.1`).
-2. Open the sidebar panel to view notes ordered by their IDs.
-3. Use the panel to explore note clusters and expand your thinking systematically.
+1. Press `Ctrl + P` or `Cmd + P` to open the Command palette.
+2. Execute `Note ID: Open side panel` and you will see a sidebar panel with all your notes. (You can change which notes to include/exclude in the plugin settings.)
+3. Add an `id` [property](https://help.obsidian.md/Editing+and+formatting/Properties) to your first note (e.g., `id: 1.1`). (You can change the name of the property in the settings.)
+4. Use the Command palette, a configurable [hotkey](https://help.obsidian.md/User+interface/Hotkeys) or the context menu in the sidebar panel to create a new note in sequence (`1.1` → `1.2`) or subsequence (`1.1` → `1.1a`).
+5. Add a `toc` property with the title that should show up in the table of contents (e.g., `toc: Productivity`). The table of contents view only displays notes with a `toc` property, helping you maintain high-level overviews of key topics or themes.
+
+### Example
+
+This note has the title `Deep work is the key to being productive`:
+
+```
+---
+id: 3.1
+toc: Productivity
+---
+
+Deep work is the ability to focus without distraction on cognitively demanding tasks. It allows you to produce at an elite level and should be a core part of any knowledge worker's routine.
+```
+
+- This note serves as an entry point for the Productivity cluster, so it appears in the table of contents under `Productivity`.
+- Related notes can reference or extend it (e.g., id: 3.1a for a note on time blocking)
+- The table of contents view displays only notes with a `toc` property, providing a structured overview of key topics for easier navigation.
 
 ## Settings
 
 The plugin allows you to
 
-- change the name of the ID property
-- select the folders with notes to include or exclude
-- decide whether notes without ID should be shown
+- change the name of `id` and `toc` properties,
+- select the folders with notes to include or exclude,
+- decide whether notes without ID should be shown,
+- indent notes depending on the "hierarchy" level of their ID, and
+- configure the visual separation between notes.
 
 ## Feedback and Contributions
 
 Feedback and contributions are welcome! Visit [GitHub](https://github.com/dominikmayer/obsidian-note-id) to report issues or submit pull requests.
 
-### Other Plugins
+## Other Plugins
 
 - [Reader Mode](https://github.com/dominikmayer/obsidian-reader-mode) ensures that notes are opened in reader mode, so you can see dialogs rendered right away.
 - [Yesterday](https://github.com/dominikmayer/obsidian-yesterday) lets you create and edit a [Yesterday](https://www.yesterday.md) journal in Obsidian.
