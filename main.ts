@@ -22,6 +22,8 @@ interface IDSidePanelSettings {
 	showNotesWithoutId: boolean;
 	idField: string;
 	tocField: string;
+	autoToc: boolean;
+	tocLevel: number;
 	splitLevel: number;
 	indentation: boolean;
 }
@@ -32,6 +34,8 @@ const DEFAULT_SETTINGS: IDSidePanelSettings = {
 	showNotesWithoutId: true,
 	idField: "",
 	tocField: "",
+	autoToc: true,
+	tocLevel: 1,
 	splitLevel: 0,
 	indentation: false,
 };
@@ -79,13 +83,13 @@ class IDSidePanelView extends ItemView {
 		const elmContainer = container.createDiv();
 
 		const activeFile = this.app.workspace.getActiveFile();
-		
+
 		this.elmApp = Elm.Main.init({
 			node: elmContainer,
 			flags: {
 				settings: this.plugin.settings,
-				activeFile: activeFile ? activeFile.path : null
-			}
+				activeFile: activeFile ? activeFile.path : null,
+			},
 		});
 
 		this.elmApp.ports.openFile.subscribe((filePath: string) => {
@@ -309,7 +313,7 @@ export default class IDSidePanelPlugin extends Plugin {
 		}
 
 		if (id === null && !showNotesWithoutId) return null;
-		
+
 		return { title: file.basename, tocTitle, id, file };
 	}
 
@@ -466,15 +470,17 @@ export default class IDSidePanelPlugin extends Plugin {
 
 	async activateView() {
 		let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_ID_PANEL)[0];
-	
+
 		if (!leaf) {
-			leaf = this.app.workspace.getRightLeaf(false) ?? this.app.workspace.getLeaf(true);
+			leaf =
+				this.app.workspace.getRightLeaf(false) ??
+				this.app.workspace.getLeaf(true);
 			await leaf.setViewState({
 				type: VIEW_TYPE_ID_PANEL,
 				active: true,
 			});
 		}
-	
+
 		this.app.workspace.revealLeaf(leaf);
 		await this.refreshView();
 	}
@@ -605,7 +611,57 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 		});
 
 		new Setting(containerEl)
-			.setName("Hierarchy Split Level")
+			.setName("Automatically include notes in table of contents")
+			.setDesc(
+				"If enabled, notes will be included in the table of contents based on their hierarchy level. " +
+					"If disabled, only notes with a 'toc' property will be shown.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.autoToc)
+					.onChange(async (value) => {
+						this.plugin.settings.autoToc = value;
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Table of contents level")
+			.setDesc(
+				"Defines which hierarchy level of notes should be included in the table of contents. " +
+					"A value of 1 includes only top-level notes, 2 includes sub-levels, and so on. " +
+					"Notes with a 'toc' property are always included.",
+			)
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 10, 1)
+					.setValue(this.plugin.settings.tocLevel)
+					.setDynamicTooltip()
+					.setDisabled(!this.plugin.settings.autoToc)
+					.onChange(async (value) => {
+						this.plugin.settings.tocLevel = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName(
+				"Only show notes with a 'toc' property in the table of contents",
+			)
+			.setDesc(
+				"If enabled, only notes with a 'toc' property will be shown in the table of contents.",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.tocOnly)
+					.onChange(async (value) => {
+						this.plugin.settings.tocOnly = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Hierarchy split level")
 			.setDesc(
 				"Defines how notes are visually grouped based on ID hierarchy. " +
 					"A value of 1 separates top-level IDs (e.g., 1 vs. 2). " +
@@ -623,7 +679,7 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Indent Notes")
+			.setName("Indent notes")
 			.setDesc("Indents notes based on their id level.")
 			.addToggle((toggle) =>
 				toggle
