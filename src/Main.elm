@@ -16,6 +16,7 @@ import Task
 import VirtualList
 
 
+
 -- MAIN
 
 
@@ -42,7 +43,8 @@ type alias Model =
     { notes : List NoteMeta
     , splitLevels :
         Dict String (Maybe Int)
-        -- TODO: Move to Display
+
+    -- TODO: Move to Display
     , currentFile : Maybe String
     , settings : Settings
     , fileOpenedByPlugin : Bool
@@ -60,14 +62,14 @@ defaultModel =
         config =
             { default | buffer = 10 }
     in
-        { notes = []
-        , splitLevels = Dict.empty
-        , currentFile = Nothing
-        , settings = defaultSettings
-        , fileOpenedByPlugin = False
-        , display = Notes
-        , virtualList = VirtualList.initWithConfig config
-        }
+    { notes = []
+    , splitLevels = Dict.empty
+    , currentFile = Nothing
+    , settings = defaultSettings
+    , fileOpenedByPlugin = False
+    , display = Notes
+    , virtualList = VirtualList.initWithConfig config
+    }
 
 
 type alias NoteMeta =
@@ -110,7 +112,7 @@ init flags =
                 , currentFile = decodeActiveFile flags
             }
     in
-        scrollToCurrentNote model
+    scrollToCurrentNote model
 
 
 decodeSettings : Settings -> Decode.Value -> Settings
@@ -158,13 +160,14 @@ update msg model =
                 ( x, y ) =
                     event.clientPos
             in
-                ( model, Ports.openContextMenu ( x, y, path ) )
+            ( model, Ports.openContextMenu ( x, y, path ) )
 
         DisplayChanged tocShown ->
             let
                 newDisplay =
                     if tocShown then
                         TOC
+
                     else
                         Notes
 
@@ -175,7 +178,7 @@ update msg model =
                     Process.sleep 1
                         |> Task.perform (\_ -> ScrollToCurrentNote)
             in
-                ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
+            ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
 
         FileOpened filePath ->
             fileOpened model filePath
@@ -211,9 +214,9 @@ updateDisplay model newDisplay =
         ( updatedModel, cmd ) =
             updateVirtualList newModel
     in
-        ( updatedModel
-        , cmd
-        )
+    ( updatedModel
+    , cmd
+    )
 
 
 handleSettingsChange : Model -> Settings -> ( Model, Cmd Msg )
@@ -222,11 +225,11 @@ handleSettingsChange model settings =
         ( newModel, cmd ) =
             updateVirtualList model
     in
-        ( { newModel
-            | settings = settings
-          }
-        , cmd
-        )
+    ( { newModel
+        | settings = settings
+      }
+    , cmd
+    )
 
 
 updateVirtualList : Model -> ( Model, Cmd Msg )
@@ -245,12 +248,12 @@ updateVirtualList model =
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasureAll model.virtualList ids
     in
-        ( { model
-            | virtualList = newVirtualList
-            , splitLevels = splitLevels
-          }
-        , Cmd.map VirtualListMsg virtualListCmd
-        )
+    ( { model
+        | virtualList = newVirtualList
+        , splitLevels = splitLevels
+      }
+    , Cmd.map VirtualListMsg virtualListCmd
+    )
 
 
 translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
@@ -274,6 +277,7 @@ createNote model path child =
         newId =
             if child then
                 Maybe.map NoteId.getNewIdInSubsequence id
+
             else
                 Maybe.map NoteId.getNewIdInSequence id
 
@@ -288,7 +292,7 @@ createNote model path child =
                 Nothing ->
                     ""
     in
-        ( model, Ports.createNote ( newPath, fileContent ) )
+    ( model, Ports.createNote ( newPath, fileContent ) )
 
 
 getUniqueId : List NoteMeta -> String -> String
@@ -301,8 +305,10 @@ getUniqueIdHelper : List NoteMeta -> String -> Int -> String
 getUniqueIdHelper notes id remainingAttempts =
     if remainingAttempts <= 0 then
         id
+
     else if isNoteIdTaken notes id then
         getUniqueIdHelper notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
+
     else
         id
 
@@ -318,10 +324,11 @@ createNoteContent idNameFromSettings id =
         idName =
             if String.isEmpty idNameFromSettings then
                 "id"
+
             else
                 idNameFromSettings
     in
-        "---\n" ++ idName ++ ": " ++ id ++ "\n---"
+    "---\n" ++ idName ++ ": " ++ id ++ "\n---"
 
 
 getPathWithoutFileName : String -> String
@@ -333,7 +340,7 @@ getPathWithoutFileName filePath =
         withoutFileName =
             List.take (List.length components - 1) components
     in
-        String.join "/" withoutFileName
+    String.join "/" withoutFileName
 
 
 updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
@@ -352,13 +359,13 @@ updateNotes model newNotes changedNotes =
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = changedNotes }
     in
-        ( { model
-            | notes = newNotes
-            , virtualList = newVirtualList
-            , splitLevels = splitLevels
-          }
-        , Cmd.map VirtualListMsg virtualListCmd
-        )
+    ( { model
+        | notes = newNotes
+        , virtualList = newVirtualList
+        , splitLevels = splitLevels
+      }
+    , Cmd.map VirtualListMsg virtualListCmd
+    )
 
 
 filterNotes : Display -> List NoteMeta -> List NoteMeta
@@ -400,16 +407,18 @@ handleFileRename model ( oldPath, newPath ) =
         ( newModel, cmd ) =
             if model.currentFile == Just oldPath then
                 scrollToNote model newPath
+
             else
                 ( model, Cmd.none )
     in
-        ( { newModel | currentFile = updatedCurrentFile }, cmd )
+    ( { newModel | currentFile = updatedCurrentFile }, cmd )
 
 
 updateCurrentFile : Maybe String -> String -> String -> Maybe String
 updateCurrentFile current oldPath newPath =
     if current == Just oldPath then
         Just newPath
+
     else
         current
 
@@ -429,7 +438,7 @@ fileOpened model filePath =
                 ( updatedModel, scrollCmd ) =
                     scrollToExternallyOpenedNote model path
             in
-                ( { updatedModel | currentFile = Just path }, scrollCmd )
+            ( { updatedModel | currentFile = Just path }, scrollCmd )
 
         Nothing ->
             ( model, Cmd.none )
@@ -439,6 +448,7 @@ scrollToExternallyOpenedNote : Model -> String -> ( Model, Cmd Msg )
 scrollToExternallyOpenedNote model path =
     if model.fileOpenedByPlugin then
         ( { model | fileOpenedByPlugin = False }, Cmd.none )
+
     else
         scrollToNote model path
 
@@ -449,9 +459,9 @@ scrollToNote model path =
         ( newVirtualList, virtualListCmd ) =
             VirtualList.scrollToItem model.virtualList path VirtualList.Center
     in
-        ( { model | virtualList = newVirtualList }
-        , Cmd.map VirtualListMsg virtualListCmd
-        )
+    ( { model | virtualList = newVirtualList }
+    , Cmd.map VirtualListMsg virtualListCmd
+    )
 
 
 scrollToCurrentNote : Model -> ( Model, Cmd Msg )
@@ -495,8 +505,8 @@ annotateNotes notes =
                                 Just _ ->
                                     Nothing
                     in
-                        { note = first, splitLevel = initialSplit }
-                            :: annotateRest first rest
+                    { note = first, splitLevel = initialSplit }
+                        :: annotateRest first rest
 
         annotateRest prev xs =
             case xs of
@@ -520,10 +530,10 @@ annotateNotes notes =
                                     -- If two consecutive notes lack an id, assume they belong to the same block.
                                     Nothing
                     in
-                        { note = current, splitLevel = computedSplit }
-                            :: annotateRest current rest
+                    { note = current, splitLevel = computedSplit }
+                        :: annotateRest current rest
     in
-        annotate sortedNotes
+    annotate sortedNotes
 
 
 splitLevelByFilePath : List NoteMeta -> Dict String (Maybe Int)
@@ -547,7 +557,7 @@ renderRow model filePath =
                     Dict.get filePath model.splitLevels
                         |> Maybe.andThen identity
             in
-                renderNote model note maybeSplit
+            renderNote model note maybeSplit
 
         Nothing ->
             div [] []
@@ -559,11 +569,13 @@ renderNote model note maybeSplit =
         marginTopStyle =
             if model.display == TOC then
                 []
+
             else
                 case maybeSplit of
                     Just splitLevel ->
                         if 0 < splitLevel && splitLevel <= model.settings.splitLevel then
                             adaptedMarginTopStyle model.settings.splitLevel splitLevel
+
                         else
                             []
 
@@ -579,39 +591,41 @@ renderNote model note maybeSplit =
         marginLeftStyle =
             if model.settings.indentation then
                 [ marginLeft level ]
+
             else
                 []
 
         title =
             if model.display == TOC then
                 Maybe.withDefault note.title note.tocTitle
+
             else
                 note.title
     in
-        div
-            ([ Html.Attributes.classList
-                [ ( "tree-item-self", True )
-                , ( "is-clickable", True )
-                , ( "is-active", Just note.filePath == model.currentFile )
-                ]
-             , Html.Attributes.attribute "data-path" note.filePath
-             , onClick (NoteClicked note.filePath)
-             , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
-             ]
-                ++ marginTopStyle
-            )
-            [ div
-                (Html.Attributes.class "tree-item-inner" :: marginLeftStyle)
-                (case note.id of
-                    Just id ->
-                        [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
-                        , Html.text title
-                        ]
-
-                    Nothing ->
-                        [ Html.text title ]
-                )
+    div
+        ([ Html.Attributes.classList
+            [ ( "tree-item-self", True )
+            , ( "is-clickable", True )
+            , ( "is-active", Just note.filePath == model.currentFile )
             ]
+         , Html.Attributes.attribute "data-path" note.filePath
+         , onClick (NoteClicked note.filePath)
+         , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
+         ]
+            ++ marginTopStyle
+        )
+        [ div
+            (Html.Attributes.class "tree-item-inner" :: marginLeftStyle)
+            (case note.id of
+                Just id ->
+                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                    , Html.text title
+                    ]
+
+                Nothing ->
+                    [ Html.text title ]
+            )
+        ]
 
 
 adaptedMarginTopStyle : Int -> Int -> List (Html.Attribute msg)
@@ -634,7 +648,7 @@ adaptedMarginTopStyle splitLevelSetting level =
             Dict.get level sizeMap
                 |> Maybe.withDefault "--size-4-18"
     in
-        [ Html.Attributes.style "margin-top" ("var(" ++ marginSize ++ ")") ]
+    [ Html.Attributes.style "margin-top" ("var(" ++ marginSize ++ ")") ]
 
 
 marginLeft : Float -> Html.Attribute msg
