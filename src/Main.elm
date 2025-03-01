@@ -194,7 +194,7 @@ update msg model =
             handleSettingsChange model settings
 
         VirtualListMsg virtualListMsg ->
-            translate (VirtualList.update virtualListMsg model.virtualList) model
+            mapVirtualListResult (VirtualList.update virtualListMsg model.virtualList) model
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
@@ -300,8 +300,18 @@ handleSettingsChange model portSettings =
 updateVirtualList : Model -> ( Model, Cmd Msg )
 updateVirtualList model =
     let
+        ids =
+            sortNotes model.notes
+                |> List.map .filePath
+    in
+    updateVirtualListHelper model model.notes ids
+
+
+updateVirtualListHelper : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
+updateVirtualListHelper model notes idsToRemeasure =
+    let
         filteredNotes =
-            filterNotes model.display model.settings.tocLevel model.notes
+            filterNotes model.display model.settings.tocLevel notes
 
         ids =
             sortNotes filteredNotes
@@ -311,7 +321,7 @@ updateVirtualList model =
             splitLevelByFilePath filteredNotes
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasureAll model.virtualList ids
+            VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = idsToRemeasure }
     in
     ( { model
         | virtualList = newVirtualList
@@ -321,8 +331,8 @@ updateVirtualList model =
     )
 
 
-translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
-translate ( virtualListModel, virtualListCmd ) model =
+mapVirtualListResult : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+mapVirtualListResult ( virtualListModel, virtualListCmd ) model =
     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
 
@@ -412,26 +422,10 @@ getPathWithoutFileName filePath =
 updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
 updateNotes model newNotes changedNotes =
     let
-        filteredNotes =
-            filterNotes model.display model.settings.tocLevel newNotes
-
-        ids =
-            sortNotes filteredNotes
-                |> List.map .filePath
-
-        splitLevels =
-            splitLevelByFilePath filteredNotes
-
-        ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = changedNotes }
+        ( newModel, cmd ) =
+            updateVirtualListHelper model newNotes changedNotes
     in
-    ( { model
-        | notes = newNotes
-        , virtualList = newVirtualList
-        , splitLevels = splitLevels
-      }
-    , Cmd.map VirtualListMsg virtualListCmd
-    )
+    ( { newModel | notes = newNotes }, cmd )
 
 
 filterNotes : Display -> Maybe Int -> List NoteMeta -> List NoteMeta
