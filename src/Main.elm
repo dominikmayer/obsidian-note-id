@@ -11,9 +11,17 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId
 import Ports exposing (..)
-import Process
 import Task
 import VirtualList
+
+
+
+-- CONSTANTS
+
+
+uniqueIdRetries : Int
+uniqueIdRetries =
+    50
 
 
 
@@ -41,13 +49,10 @@ type Display
 
 type alias Model =
     { notes : List NoteMeta
-    , splitLevels :
-        Dict String (Maybe Int)
-
-    -- TODO: Move to Display
+    , splitLevels : Dict String (Maybe Int)
     , currentFile : Maybe String
     , settings : Settings
-    , fileOpenedByPlugin : Bool
+    , scrollToNewlyOpenedNote : Bool
     , display : Display
     , virtualList : VirtualList.Model
     }
@@ -66,7 +71,7 @@ defaultModel =
     , splitLevels = Dict.empty
     , currentFile = Nothing
     , settings = defaultSettings
-    , fileOpenedByPlugin = False
+    , scrollToNewlyOpenedNote = True
     , display = Notes
     , virtualList = VirtualList.initWithConfig config
     }
@@ -149,7 +154,7 @@ type Msg
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided ( List NoteMeta, List String )
-    | ScrollToCurrentNote
+    | ScrollRequested String
     | SettingsChanged Ports.Settings
     | VirtualListMsg VirtualList.Msg
 
@@ -165,22 +170,7 @@ update msg model =
             ( model, Ports.openContextMenu ( x, y, path ) )
 
         DisplayChanged tocShown ->
-            let
-                newDisplay =
-                    if tocShown then
-                        TOC
-
-                    else
-                        Notes
-
-                ( newModel, displayCmd ) =
-                    updateDisplay model newDisplay
-
-                scrollCmd =
-                    Process.sleep 1
-                        |> Task.perform (\_ -> ScrollToCurrentNote)
-            in
-            ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
+            handleDisplayChange model tocShown
 
         FileOpened filePath ->
             fileOpened model filePath
@@ -192,13 +182,13 @@ update msg model =
             createNote model filePath child
 
         NoteClicked filePath ->
-            ( { model | fileOpenedByPlugin = True }, Ports.openFile filePath )
+            handleNoteClick model filePath
 
         NotesProvided ( notes, changedNotes ) ->
             updateNotes model notes changedNotes
 
-        ScrollToCurrentNote ->
-            scrollToCurrentNote model
+        ScrollRequested path ->
+            scrollToNote model path
 
         SettingsChanged settings ->
             handleSettingsChange model settings
@@ -207,14 +197,71 @@ update msg model =
             translate (VirtualList.update virtualListMsg model.virtualList) model
 
 
+handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
+handleDisplayChange model tocShown =
+    let
+        newDisplay =
+            if tocShown then
+                TOC
+
+            else
+                Notes
+    in
+    reloadNotesAndScroll model newDisplay
+
+
+reloadNotesAndScroll : Model -> Display -> ( Model, Cmd Msg )
+reloadNotesAndScroll model newDisplay =
+    let
+        ( newModelPre, displayCmd ) =
+            updateDisplay model newDisplay
+
+        ( newModel, scrollCmd ) =
+            scrollToCurrentNote newModelPre
+    in
+    ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
+
+
+handleNoteClick : Model -> String -> ( Model, Cmd Msg )
+handleNoteClick model filePath =
+    let
+        ( newModel, updateCmd ) =
+            if model.display == TOC then
+                updateDisplay model Notes
+
+            else
+                ( model, Cmd.none )
+
+        fileIsAlreadyOpen =
+            Maybe.map ((==) filePath) model.currentFile |> Maybe.withDefault False
+
+        fileCmd =
+            if fileIsAlreadyOpen then
+                Task.perform (\_ -> ScrollRequested filePath) (Task.succeed ())
+
+            else
+                Ports.openFile filePath
+
+        cmd =
+            Cmd.batch [ fileCmd, updateCmd ]
+    in
+    ( { newModel | scrollToNewlyOpenedNote = model.display == TOC }, cmd )
+
+
 updateDisplay : Model -> Display -> ( Model, Cmd Msg )
 updateDisplay model newDisplay =
     let
         newModel =
             { model | display = newDisplay }
 
-        ( updatedModel, cmd ) =
+        ( updatedModel, updateCmd ) =
             updateVirtualList newModel
+
+        cmd =
+            Cmd.batch
+                [ updateCmd
+                , Ports.toggleTOCButton (newDisplay == TOC)
+                ]
     in
     ( updatedModel
     , cmd
@@ -316,16 +363,17 @@ createNote model path child =
 getUniqueId : List NoteMeta -> String -> String
 getUniqueId notes id =
     -- Prevents infinite loops
-    getUniqueIdHelper notes id 25
+    generateUniqueId notes id uniqueIdRetries
 
 
-getUniqueIdHelper : List NoteMeta -> String -> Int -> String
-getUniqueIdHelper notes id remainingAttempts =
+generateUniqueId : List NoteMeta -> String -> Int -> String
+generateUniqueId notes id remainingAttempts =
     if remainingAttempts <= 0 then
+        -- TODO: This should throw an error
         id
 
     else if isNoteIdTaken notes id then
-        getUniqueIdHelper notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
+        generateUniqueId notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
 
     else
         id
@@ -480,11 +528,11 @@ fileOpened model filePath =
 
 scrollToExternallyOpenedNote : Model -> String -> ( Model, Cmd Msg )
 scrollToExternallyOpenedNote model path =
-    if model.fileOpenedByPlugin then
-        ( { model | fileOpenedByPlugin = False }, Cmd.none )
+    if model.scrollToNewlyOpenedNote then
+        scrollToNote model path
 
     else
-        scrollToNote model path
+        ( { model | scrollToNewlyOpenedNote = True }, Cmd.none )
 
 
 scrollToNote : Model -> String -> ( Model, Cmd Msg )

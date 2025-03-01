@@ -118,6 +118,12 @@ class IDSidePanelView extends ItemView {
 			},
 		);
 
+		this.elmApp.ports.toggleTOCButton.subscribe(
+			async (toggled: boolean) => {
+				tocButton.classList.toggle("is-active", toggled);
+			},
+		);
+
 		this.elmApp.ports.openContextMenu.subscribe(
 			([x, y, filePath]: [number, number, string]) => {
 				const file = this.app.vault.getAbstractFileByPath(
@@ -629,7 +635,7 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 			.setName("Table of contents level")
 			.setDesc(
 				"Defines which hierarchy level of notes should be included in the table of contents. " +
-					"A value of 1 includes only top-level notes, 2 includes sub-levels, and so on. " +
+					"A value of 1 includes only top-level notes (1, 2, …), 2 includes sub-levels (1.1, 1.2, …), and so on. " +
 					"Notes with a 'toc' property are always included.",
 			)
 			.addSlider((slider) =>
@@ -640,22 +646,6 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 					.setDisabled(!this.plugin.settings.autoToc)
 					.onChange(async (value) => {
 						this.plugin.settings.tocLevel = value;
-						await this.plugin.saveSettings();
-					}),
-			);
-
-		new Setting(containerEl)
-			.setName(
-				"Only show notes with a 'toc' property in the table of contents",
-			)
-			.setDesc(
-				"If enabled, only notes with a 'toc' property will be shown in the table of contents.",
-			)
-			.addToggle((toggle) =>
-				toggle
-					.setValue(this.plugin.settings.tocOnly)
-					.onChange(async (value) => {
-						this.plugin.settings.tocOnly = value;
 						await this.plugin.saveSettings();
 					}),
 			);

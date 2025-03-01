@@ -10,6 +10,9 @@ port openFile : String -> Cmd msg
 port openContextMenu : ( Float, Float, String ) -> Cmd msg
 
 
+port toggleTOCButton : Bool -> Cmd msg
+
+
 port receiveNotes : (( List NoteMeta, List String ) -> msg) -> Sub msg
 
 
