@@ -347,7 +347,8 @@ createNote model path child =
                 Maybe.map NoteId.getNewIdInSequence id
 
         newUniqueId =
-            Maybe.map (getUniqueId model.notes) newId
+            newId
+                |> Maybe.andThen (getUniqueId model.notes)
 
         fileContent =
             case newUniqueId of
@@ -360,23 +361,22 @@ createNote model path child =
     ( model, Ports.createNote ( newPath, fileContent ) )
 
 
-getUniqueId : List NoteMeta -> String -> String
+getUniqueId : List NoteMeta -> String -> Maybe String
 getUniqueId notes id =
     -- Prevents infinite loops
     generateUniqueId notes id uniqueIdRetries
 
 
-generateUniqueId : List NoteMeta -> String -> Int -> String
+generateUniqueId : List NoteMeta -> String -> Int -> Maybe String
 generateUniqueId notes id remainingAttempts =
     if remainingAttempts <= 0 then
-        -- TODO: This should throw an error
-        id
+        Nothing
 
     else if isNoteIdTaken notes id then
         generateUniqueId notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
 
     else
-        id
+        Just id
 
 
 isNoteIdTaken : List NoteMeta -> String -> Bool
