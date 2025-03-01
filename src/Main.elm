@@ -185,7 +185,7 @@ update msg model =
             handleNoteClick model filePath
 
         NotesProvided ( notes, changedNotes ) ->
-            updateNotes model notes changedNotes
+            updateNotes model notes (Debug.log "changed" changedNotes)
 
         ScrollRequested path ->
             scrollToNote model path
@@ -301,20 +301,20 @@ updateVirtualList : Model -> ( Model, Cmd Msg )
 updateVirtualList model =
     let
         ids =
-            sortNotes model.notes
+            model.notes
                 |> List.map .filePath
     in
-    updateVirtualListHelper model model.notes ids
+    updateVirtualListHelper model ids
 
 
-updateVirtualListHelper : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
-updateVirtualListHelper model notes idsToRemeasure =
+updateVirtualListHelper : Model -> List String -> ( Model, Cmd Msg )
+updateVirtualListHelper model idsToRemeasure =
     let
         filteredNotes =
-            filterNotes model.display model.settings.tocLevel notes
+            filterNotes model.display model.settings.tocLevel model.notes
 
         ids =
-            sortNotes filteredNotes
+            filteredNotes
                 |> List.map .filePath
 
         splitLevels =
@@ -422,10 +422,13 @@ getPathWithoutFileName filePath =
 updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
 updateNotes model newNotes changedNotes =
     let
-        ( newModel, cmd ) =
-            updateVirtualListHelper model newNotes changedNotes
+        modelWithSortedNotes =
+            { model | notes = sortNotes newNotes }
+
+        ( modelWithUpdatedVirtualList, cmd ) =
+            updateVirtualListHelper modelWithSortedNotes changedNotes
     in
-    ( { newModel | notes = newNotes }, cmd )
+    ( modelWithUpdatedVirtualList, cmd )
 
 
 filterNotes : Display -> Maybe Int -> List NoteMeta -> List NoteMeta
@@ -563,9 +566,6 @@ type alias NoteWithSplit =
 annotateNotes : List NoteMeta -> List NoteWithSplit
 annotateNotes notes =
     let
-        sortedNotes =
-            sortNotes notes
-
         annotate xs =
             case xs of
                 [] ->
@@ -609,7 +609,7 @@ annotateNotes notes =
                     { note = current, splitLevel = computedSplit }
                         :: annotateRest current rest
     in
-    annotate sortedNotes
+    annotate notes
 
 
 splitLevelByFilePath : List NoteMeta -> Dict String (Maybe Int)
