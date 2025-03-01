@@ -463,7 +463,7 @@ sortNotes notes =
         (\a b ->
             case ( a.id, b.id ) of
                 ( Nothing, Nothing ) ->
-                    compare a.title b.title
+                    compare (String.toLower a.title) (String.toLower b.title)
 
                 ( Nothing, Just _ ) ->
                     GT
