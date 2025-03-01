@@ -118,6 +118,12 @@ class IDSidePanelView extends ItemView {
 			},
 		);
 
+		this.elmApp.ports.toggleTOCButton.subscribe(
+			async (toggled: boolean) => {
+				tocButton.classList.toggle("is-active", toggled);
+			},
+		);
+
 		this.elmApp.ports.openContextMenu.subscribe(
 			([x, y, filePath]: [number, number, string]) => {
 				const file = this.app.vault.getAbstractFileByPath(
