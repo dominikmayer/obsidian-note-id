@@ -48,8 +48,7 @@ type Display
 
 
 type alias Model =
-    { notes : List NoteMeta
-    , splitLevels : Dict String (Maybe Int)
+    { notes : List NoteWithSplit
     , currentFile : Maybe String
     , settings : Settings
     , scrollToNewlyOpenedNote : Bool
@@ -68,7 +67,6 @@ defaultModel =
             { default | buffer = 10 }
     in
     { notes = []
-    , splitLevels = Dict.empty
     , currentFile = Nothing
     , settings = defaultSettings
     , scrollToNewlyOpenedNote = True
@@ -82,6 +80,12 @@ type alias NoteMeta =
     , tocTitle : Maybe String
     , id : Maybe String
     , filePath : String
+    }
+
+
+type alias NoteWithSplit =
+    { note : NoteMeta
+    , splitLevel : Maybe Int
     }
 
 
@@ -185,7 +189,7 @@ update msg model =
             handleNoteClick model filePath
 
         NotesProvided ( notes, changedNotes ) ->
-            updateNotes model notes changedNotes
+            updateNotes model notes (Debug.log "changed" changedNotes)
 
         ScrollRequested path ->
             scrollToNote model path
@@ -194,7 +198,7 @@ update msg model =
             handleSettingsChange model settings
 
         VirtualListMsg virtualListMsg ->
-            translate (VirtualList.update virtualListMsg model.virtualList) model
+            mapVirtualListResult (VirtualList.update virtualListMsg model.virtualList) model
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
@@ -300,29 +304,35 @@ handleSettingsChange model portSettings =
 updateVirtualList : Model -> ( Model, Cmd Msg )
 updateVirtualList model =
     let
+        ids =
+            model.notes
+                |> List.map (.note >> .filePath)
+    in
+    updateVirtualListHelper model ids
+
+
+updateVirtualListHelper : Model -> List String -> ( Model, Cmd Msg )
+updateVirtualListHelper model idsToRemeasure =
+    let
         filteredNotes =
             filterNotes model.display model.settings.tocLevel model.notes
 
         ids =
-            sortNotes filteredNotes
-                |> List.map .filePath
-
-        splitLevels =
-            splitLevelByFilePath filteredNotes
+            filteredNotes
+                |> List.map (.note >> .filePath)
 
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasureAll model.virtualList ids
+            VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = idsToRemeasure }
     in
     ( { model
         | virtualList = newVirtualList
-        , splitLevels = splitLevels
       }
     , Cmd.map VirtualListMsg virtualListCmd
     )
 
 
-translate : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
-translate ( virtualListModel, virtualListCmd ) model =
+mapVirtualListResult : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+mapVirtualListResult ( virtualListModel, virtualListCmd ) model =
     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
 
@@ -337,7 +347,7 @@ createNote model path child =
 
         id =
             getNoteByPath path model.notes
-                |> Maybe.andThen (\note -> note.id)
+                |> Maybe.andThen (\noteWithSplit -> noteWithSplit.note.id)
 
         newId =
             if child then
@@ -347,7 +357,8 @@ createNote model path child =
                 Maybe.map NoteId.getNewIdInSequence id
 
         newUniqueId =
-            Maybe.map (getUniqueId model.notes) newId
+            newId
+                |> Maybe.andThen (getUniqueId model.notes)
 
         fileContent =
             case newUniqueId of
@@ -360,28 +371,27 @@ createNote model path child =
     ( model, Ports.createNote ( newPath, fileContent ) )
 
 
-getUniqueId : List NoteMeta -> String -> String
+getUniqueId : List NoteWithSplit -> String -> Maybe String
 getUniqueId notes id =
     -- Prevents infinite loops
     generateUniqueId notes id uniqueIdRetries
 
 
-generateUniqueId : List NoteMeta -> String -> Int -> String
+generateUniqueId : List NoteWithSplit -> String -> Int -> Maybe String
 generateUniqueId notes id remainingAttempts =
     if remainingAttempts <= 0 then
-        -- TODO: This should throw an error
-        id
+        Nothing
 
     else if isNoteIdTaken notes id then
         generateUniqueId notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
 
     else
-        id
+        Just id
 
 
-isNoteIdTaken : List NoteMeta -> String -> Bool
+isNoteIdTaken : List NoteWithSplit -> String -> Bool
 isNoteIdTaken notes noteId =
-    List.any (\note -> note.id == Just noteId) notes
+    List.any (\noteWithSplit -> noteWithSplit.note.id == Just noteId) notes
 
 
 createNoteContent : String -> String -> String
@@ -412,40 +422,83 @@ getPathWithoutFileName filePath =
 updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
 updateNotes model newNotes changedNotes =
     let
-        filteredNotes =
-            filterNotes model.display model.settings.tocLevel newNotes
+        annotatedNotes =
+            annotateNotes (sortNotes newNotes)
 
-        ids =
-            sortNotes filteredNotes
-                |> List.map .filePath
+        -- Find notes whose splitLevel or position changed
+        oldNoteMap =
+            createSplitMap model.notes
 
-        splitLevels =
-            splitLevelByFilePath filteredNotes
+        newNoteMap =
+            createSplitMap annotatedNotes
 
-        ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = changedNotes }
+        affectedIds =
+            if List.isEmpty model.notes then
+                -- On initial load, all new notes need to be measured
+                List.map (.note >> .filePath) annotatedNotes
+
+            else
+                let
+                    changedSplitIds =
+                        findNotesWithSplitChanges { oldNotes = model.notes, newNotes = annotatedNotes }
+                in
+                List.append changedSplitIds changedNotes
+
+        modelWithSortedNotes =
+            { model | notes = annotatedNotes }
+
+        ( modelWithUpdatedVirtualList, cmd ) =
+            updateVirtualListHelper modelWithSortedNotes affectedIds
     in
-    ( { model
-        | notes = newNotes
-        , virtualList = newVirtualList
-        , splitLevels = splitLevels
-      }
-    , Cmd.map VirtualListMsg virtualListCmd
-    )
+    ( modelWithUpdatedVirtualList, cmd )
 
 
-filterNotes : Display -> Maybe Int -> List NoteMeta -> List NoteMeta
+findNotesWithSplitChanges : { oldNotes : List NoteWithSplit, newNotes : List NoteWithSplit } -> List String
+findNotesWithSplitChanges { oldNotes, newNotes } =
+    newNotes
+        |> List.filter
+            (splitHasChanged
+                { oldNoteMap = createSplitMap oldNotes
+                , newNoteMap = createSplitMap newNotes
+                }
+            )
+        |> List.map (.note >> .filePath)
+
+
+createSplitMap : List NoteWithSplit -> Dict String (Maybe Int)
+createSplitMap notes =
+    notes
+        |> List.map (\noteWithSplit -> ( noteWithSplit.note.filePath, noteWithSplit.splitLevel ))
+        |> Dict.fromList
+
+
+splitHasChanged : { oldNoteMap : Dict String (Maybe Int), newNoteMap : Dict String (Maybe Int) } -> NoteWithSplit -> Bool
+splitHasChanged { oldNoteMap, newNoteMap } noteWithSplit =
+    let
+        filePath =
+            noteWithSplit.note.filePath
+
+        oldSplit =
+            Dict.get filePath oldNoteMap
+
+        newSplit =
+            Dict.get filePath newNoteMap
+    in
+    oldSplit /= newSplit
+
+
+filterNotes : Display -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
 filterNotes display maybeTocLevel notes =
     case display of
         TOC ->
             List.filter
-                (\note ->
+                (\noteWithSplit ->
                     let
                         hasTocField =
-                            note.tocTitle /= Nothing
+                            noteWithSplit.note.tocTitle /= Nothing
 
                         noteLevel =
-                            Maybe.withDefault 0 (note.id |> Maybe.map NoteId.level)
+                            Maybe.withDefault 0 (noteWithSplit.note.id |> Maybe.map NoteId.level)
                     in
                     case maybeTocLevel of
                         Just tocLevel ->
@@ -466,7 +519,7 @@ sortNotes notes =
         (\a b ->
             case ( a.id, b.id ) of
                 ( Nothing, Nothing ) ->
-                    compare a.title b.title
+                    compare (String.toLower a.title) (String.toLower b.title)
 
                 ( Nothing, Just _ ) ->
                     GT
@@ -505,10 +558,10 @@ updateCurrentFile current oldPath newPath =
         current
 
 
-getNoteByPath : String -> List NoteMeta -> Maybe NoteMeta
+getNoteByPath : String -> List NoteWithSplit -> Maybe NoteWithSplit
 getNoteByPath path notes =
     notes
-        |> List.filter (\note -> note.filePath == path)
+        |> List.filter (\noteWithSplit -> noteWithSplit.note.filePath == path)
         |> List.head
 
 
@@ -560,18 +613,9 @@ scrollToCurrentNote model =
 -- VIEW
 
 
-type alias NoteWithSplit =
-    { note : NoteMeta
-    , splitLevel : Maybe Int
-    }
-
-
 annotateNotes : List NoteMeta -> List NoteWithSplit
 annotateNotes notes =
     let
-        sortedNotes =
-            sortNotes notes
-
         annotate xs =
             case xs of
                 [] ->
@@ -615,14 +659,7 @@ annotateNotes notes =
                     { note = current, splitLevel = computedSplit }
                         :: annotateRest current rest
     in
-    annotate sortedNotes
-
-
-splitLevelByFilePath : List NoteMeta -> Dict String (Maybe Int)
-splitLevelByFilePath notes =
-    annotateNotes notes
-        |> List.map (\nws -> ( nws.note.filePath, nws.splitLevel ))
-        |> Dict.fromList
+    annotate notes
 
 
 view : Model -> Html Msg
@@ -633,13 +670,8 @@ view model =
 renderRow : Model -> String -> Html Msg
 renderRow model filePath =
     case getNoteByPath filePath model.notes of
-        Just note ->
-            let
-                maybeSplit =
-                    Dict.get filePath model.splitLevels
-                        |> Maybe.andThen identity
-            in
-            renderNote model note maybeSplit
+        Just noteWithSplit ->
+            renderNote model noteWithSplit.note noteWithSplit.splitLevel
 
         Nothing ->
             div [] []
