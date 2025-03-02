@@ -425,13 +425,66 @@ updateNotes model newNotes changedNotes =
         annotatedNotes =
             annotateNotes (sortNotes newNotes)
 
+        -- Find notes whose splitLevel or position changed
+        oldNoteMap =
+            createSplitMap model.notes
+
+        newNoteMap =
+            createSplitMap annotatedNotes
+
+        affectedIds =
+            if List.isEmpty model.notes then
+                -- On initial load, all new notes need to be measured
+                List.map (.note >> .filePath) annotatedNotes
+
+            else
+                let
+                    changedSplitIds =
+                        findNotesWithSplitChanges { oldNotes = model.notes, newNotes = annotatedNotes }
+                in
+                List.append changedSplitIds changedNotes
+
         modelWithSortedNotes =
             { model | notes = annotatedNotes }
 
         ( modelWithUpdatedVirtualList, cmd ) =
-            updateVirtualListHelper modelWithSortedNotes changedNotes
+            updateVirtualListHelper modelWithSortedNotes affectedIds
     in
     ( modelWithUpdatedVirtualList, cmd )
+
+
+findNotesWithSplitChanges : { oldNotes : List NoteWithSplit, newNotes : List NoteWithSplit } -> List String
+findNotesWithSplitChanges { oldNotes, newNotes } =
+    newNotes
+        |> List.filter
+            (splitHasChanged
+                { oldNoteMap = createSplitMap oldNotes
+                , newNoteMap = createSplitMap newNotes
+                }
+            )
+        |> List.map (.note >> .filePath)
+
+
+createSplitMap : List NoteWithSplit -> Dict String (Maybe Int)
+createSplitMap notes =
+    notes
+        |> List.map (\noteWithSplit -> ( noteWithSplit.note.filePath, noteWithSplit.splitLevel ))
+        |> Dict.fromList
+
+
+splitHasChanged : { oldNoteMap : Dict String (Maybe Int), newNoteMap : Dict String (Maybe Int) } -> NoteWithSplit -> Bool
+splitHasChanged { oldNoteMap, newNoteMap } noteWithSplit =
+    let
+        filePath =
+            noteWithSplit.note.filePath
+
+        oldSplit =
+            Dict.get filePath oldNoteMap
+
+        newSplit =
+            Dict.get filePath newNoteMap
+    in
+    oldSplit /= newSplit
 
 
 filterNotes : Display -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
