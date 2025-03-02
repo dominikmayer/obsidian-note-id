@@ -543,20 +543,6 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 					}),
 			);
 		new Setting(containerEl)
-			.setName("Table of contents title property")
-			.setDesc(
-				"Define the frontmatter field used as the title shown in the table of contents (case-insensitive).",
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder(TOC_TITLE_FIELD_DEFAULT)
-					.setValue(this.plugin.settings.tocField)
-					.onChange(async (value) => {
-						this.plugin.settings.tocField = value.trim();
-						await this.plugin.saveSettings();
-					}),
-			);
-		new Setting(containerEl)
 			.setName("Include folders")
 			.setDesc(
 				"Only include notes from these folders. Leave empty to include all.",
@@ -617,35 +603,13 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 		});
 
 		new Setting(containerEl)
-			.setName("Automatically include notes in table of contents")
-			.setDesc(
-				"If enabled, notes will be included in the table of contents based on their hierarchy level. " +
-					"If disabled, only notes with a 'toc' property will be shown.",
-			)
+			.setName("Indent notes")
+			.setDesc("Indents notes based on their id level.")
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings.autoToc)
+					.setValue(this.plugin.settings.indentation)
 					.onChange(async (value) => {
-						this.plugin.settings.autoToc = value;
-						await this.plugin.saveSettings();
-						this.display();
-					}),
-			);
-		new Setting(containerEl)
-			.setName("Table of contents level")
-			.setDesc(
-				"Defines which hierarchy level of notes should be included in the table of contents. " +
-					"A value of 1 includes only top-level notes (1, 2, …), 2 includes sub-levels (1.1, 1.2, …), and so on. " +
-					"Notes with a 'toc' property are always included.",
-			)
-			.addSlider((slider) =>
-				slider
-					.setLimits(1, 10, 1)
-					.setValue(this.plugin.settings.tocLevel)
-					.setDynamicTooltip()
-					.setDisabled(!this.plugin.settings.autoToc)
-					.onChange(async (value) => {
-						this.plugin.settings.tocLevel = value;
+						this.plugin.settings.indentation = value;
 						await this.plugin.saveSettings();
 					}),
 			);
@@ -668,14 +632,63 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		containerEl.createEl("br");
+		const tocSection = containerEl.createEl("div", {
+			cls: "setting-item setting-item-heading",
+		});
+		const tocSectionInfo = tocSection.createEl("div", {
+			cls: "setting-item-info",
+		});
+		tocSectionInfo.createEl("div", {
+			text: "Table of contents",
+			cls: "setting-item-name",
+		});
+
 		new Setting(containerEl)
-			.setName("Indent notes")
-			.setDesc("Indents notes based on their id level.")
+			.setName("Table of contents title property")
+			.setDesc(
+				"Define the frontmatter field used as the title shown in the table of contents (case-insensitive).",
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder(TOC_TITLE_FIELD_DEFAULT)
+					.setValue(this.plugin.settings.tocField)
+					.onChange(async (value) => {
+						this.plugin.settings.tocField = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName("Automatically include notes in table of contents")
+			.setDesc(
+				"If enabled, notes will be included in the table of contents based on their hierarchy level. " +
+					"If disabled, only notes with the table of contents title property will be shown.",
+			)
 			.addToggle((toggle) =>
 				toggle
-					.setValue(this.plugin.settings.indentation)
+					.setValue(this.plugin.settings.autoToc)
 					.onChange(async (value) => {
-						this.plugin.settings.indentation = value;
+						this.plugin.settings.autoToc = value;
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
+		new Setting(containerEl)
+			.setName("Table of contents level")
+			.setDesc(
+				"Defines which hierarchy level of notes should be included in the table of contents. " +
+					"A value of 1 includes only top-level notes (1, 2, …), 2 includes sub-levels (1.1, 1.2, …), and so on. " +
+					"Notes with the table of contents title property are always included.",
+			)
+			.addSlider((slider) =>
+				slider
+					.setLimits(1, 10, 1)
+					.setValue(this.plugin.settings.tocLevel)
+					.setDynamicTooltip()
+					.setDisabled(!this.plugin.settings.autoToc)
+					.onChange(async (value) => {
+						this.plugin.settings.tocLevel = value;
 						await this.plugin.saveSettings();
 					}),
 			);
