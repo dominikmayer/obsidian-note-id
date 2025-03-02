@@ -189,7 +189,7 @@ update msg model =
             handleNoteClick model filePath
 
         NotesProvided ( notes, changedNotes ) ->
-            updateNotes model notes (Debug.log "changed" changedNotes)
+            updateNotes model notes changedNotes
 
         ScrollRequested path ->
             scrollToNote model path
