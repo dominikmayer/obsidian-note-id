@@ -190,7 +190,6 @@ class IDSidePanelView extends ItemView {
 				}
 			}),
 		);
-		this.renderNotes();
 	}
 
 	getUniqueFilePath(path: string) {
