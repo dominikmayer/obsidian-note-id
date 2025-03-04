@@ -123,7 +123,12 @@ init flags =
                 , currentFile = decodeActiveFile flags
             }
     in
+    -- Won't find the note yet but initiate the future scroll
     scrollToCurrentNote model
+
+
+
+-- ( model, Cmd.none )
 
 
 decodeSettings : Settings -> Decode.Value -> Settings
@@ -424,13 +429,6 @@ updateNotes model newNotes changedNotes =
     let
         annotatedNotes =
             annotateNotes (sortNotes newNotes)
-
-        -- Find notes whose splitLevel or position changed
-        oldNoteMap =
-            createSplitMap model.notes
-
-        newNoteMap =
-            createSplitMap annotatedNotes
 
         affectedIds =
             if List.isEmpty model.notes then
