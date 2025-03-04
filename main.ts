@@ -10,7 +10,7 @@ import {
 	normalizePath,
 	setIcon,
 } from "obsidian";
-import { Elm } from "./Main.elm";
+import { Elm, ElmApp } from "./Main.elm";
 
 const VIEW_TYPE_ID_PANEL = "id-side-panel";
 const ID_FIELD_DEFAULT = "id";
@@ -47,6 +47,8 @@ interface NoteMeta {
 	file: TFile;
 }
 
+type FrontmatterValue = string | number | boolean | null;
+
 class IDSidePanelView extends ItemView {
 	plugin: IDSidePanelPlugin;
 	// private virtualList: VirtualList;
@@ -56,7 +58,7 @@ class IDSidePanelView extends ItemView {
 		this.plugin = plugin;
 	}
 
-	private elmApp: any | null = null;
+	private elmApp: ElmApp | null = null;
 
 	getViewType() {
 		return VIEW_TYPE_ID_PANEL;
@@ -188,7 +190,6 @@ class IDSidePanelView extends ItemView {
 				}
 			}),
 		);
-		this.renderNotes();
 	}
 
 	getUniqueFilePath(path: string) {
@@ -299,23 +300,26 @@ export default class IDSidePanelPlugin extends Plugin {
 		let id = null;
 		let tocTitle = null;
 		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
-			const frontmatter: Record<
-				string,
-				string | number | boolean | null
-			> = cache?.frontmatter ?? {};
-			const frontmatterKeys = Object.keys(frontmatter).reduce(
-				(acc, key) => {
-					acc[key.toLowerCase()] = frontmatter[key];
-					return acc;
-				},
-				{} as Record<string, any>,
-			);
+			const frontmatter: Record<string, FrontmatterValue> =
+				cache?.frontmatter ?? {};
+			const frontmatterKeys = Object.keys(frontmatter).reduce<
+				Record<string, FrontmatterValue>
+			>((acc, key) => {
+				acc[key.toLowerCase()] = frontmatter[key];
+				return acc;
+			}, {});
 			const normalizedIdField = idField.toLowerCase() || ID_FIELD_DEFAULT;
-			id = frontmatterKeys[normalizedIdField] ?? null;
+			id =
+				frontmatterKeys[normalizedIdField] != null
+					? String(frontmatterKeys[normalizedIdField])
+					: null;
 
 			const normalizedTocTitleField =
 				tocField.toLowerCase() || TOC_TITLE_FIELD_DEFAULT;
-			tocTitle = frontmatterKeys[normalizedTocTitleField] ?? null;
+			tocTitle =
+				frontmatterKeys[normalizedTocTitleField] != null
+					? String(frontmatterKeys[normalizedTocTitleField])
+					: null;
 		}
 
 		if (id === null && !showNotesWithoutId) return null;
