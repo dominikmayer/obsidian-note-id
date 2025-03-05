@@ -425,10 +425,10 @@ export default class IDSidePanelPlugin extends Plugin {
 		);
 
 		this.addCommand({
-			id: "search-by-property",
+			id: "note-search",
 			name: "Search notes by title, title of contents title or ID",
 			callback: () => {
-				new ExtendedSearchModal(
+				new NoteSearchModal(
 					this.app,
 					this.settings.idField || ID_FIELD_DEFAULT,
 					this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
@@ -717,7 +717,7 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 
 type PropertyValue = string | string[];
 
-class ExtendedSearchModal extends FuzzySuggestModal<TFile> {
+class NoteSearchModal extends FuzzySuggestModal<TFile> {
 	private idProperty: string;
 	private tocProperty: string;
 	private noteCache: Map<string, NoteMeta>;
@@ -729,7 +729,9 @@ class ExtendedSearchModal extends FuzzySuggestModal<TFile> {
 		noteCache: Map<string, NoteMeta>,
 	) {
 		super(app);
-		this.setPlaceholder("Enter property:value or title");
+		this.setPlaceholder(
+			"Enter note title, note ID or table of contents title to open a note",
+		);
 		this.idProperty = idProperty;
 		this.tocProperty = tocProperty;
 		this.noteCache = noteCache;

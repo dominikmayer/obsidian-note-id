@@ -9,6 +9,7 @@ The [Obsidian](https://www.obsidian.md/) Note ID Plugin displays notes by their 
 - **Support for Zettelkasten**: Ideal for Zettelkasten practitioners looking to position new notes logically and expand existing threads of thought.
 - **Easily Create New Notes:** Use the context menu or a command to seamlessly create new notes that continue an existing sequence (e.g., 1.2 → 1.3) or start a subsequence branching from a note (e.g., 1.2 → 1.2a). This makes it simple to extend ideas and maintain logical connections.
 - **Dedicated Table of Contents View:** The table of contents view functions as a curated index, displaying top-level notes and/or notes explicitly marked with the `toc` property – e.g., `toc: Zettelkasten` for the note that starts the Zettelkasten cluster. Unlike the main note list, which shows all notes, the table of contents view provides a structured way to highlight key topics without cluttering the sidebar
+- **Enhanced Note Search**: Quickly search your notes using fuzzy matching by note title, note ID, or table of contents title for more efficient navigation.
 
 ## How Clusters Work
 
@@ -73,6 +74,10 @@ Deep work is the ability to focus without distraction on cognitively demanding t
 
 - This note serves as an entry point for the Productivity cluster, so it appears in the table of contents under `Productivity`.
 - Related notes can reference or extend it (e.g., id: 3.1a for a note on time blocking)
+
+### Searching for Notes
+
+You can search for notes with the command `Note ID: Search notes by title, title of contents title or ID`. Assign a [hotkey](https://help.obsidian.md/hotkeys) like Cmd/Ctrl-Shift-O to easily access it.
 
 ## Settings
 
