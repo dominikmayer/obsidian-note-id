@@ -3,6 +3,7 @@ import {
 	ItemView,
 	Plugin,
 	Notice,
+	SuggestModal,
 	TAbstractFile,
 	TFile,
 	WorkspaceLeaf,
@@ -420,6 +421,19 @@ export default class IDSidePanelPlugin extends Plugin {
 				await this.handleFileChange(file);
 			}),
 		);
+
+		this.addCommand({
+			id: "search-by-property",
+			name: "Search notes by title, title of contents title or ID",
+			callback: () => {
+				console.log(this.settings);
+				new ExtendedSearchModal(
+					this.app,
+					this.settings.idField || ID_FIELD_DEFAULT,
+					this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
+				).open();
+			},
+		});
 	}
 
 	private createNoteFromCommand(subsequence: boolean) {
@@ -696,5 +710,184 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+	}
+}
+type PropertyValue = string | string[];
+
+class ExtendedSearchModal extends SuggestModal<TFile> {
+	private idProperty: string;
+	private tocProperty: string;
+
+	constructor(app: App, idProperty: string, tocProperty: string) {
+		super(app);
+		this.setPlaceholder("Enter property:value or title");
+		this.idProperty = idProperty;
+		this.tocProperty = tocProperty;
+		console.log(this.idProperty, this.tocProperty);
+	}
+
+	private getNormalizedPropertyValue(
+		frontmatter: Record<string, unknown> | undefined,
+		property: string,
+	): PropertyValue | undefined {
+		if (!frontmatter) return undefined;
+		const lowerProperty = property.toLowerCase();
+		for (const key in frontmatter) {
+			if (key.toLowerCase() === lowerProperty) {
+				const value = frontmatter[key];
+				if (typeof value === "string") {
+					return value;
+				} else if (
+					Array.isArray(value) &&
+					value.every((v) => typeof v === "string")
+				) {
+					return value as string[];
+				}
+				return undefined; // Return undefined for unsupported types
+			}
+		}
+		return undefined;
+	}
+	getSuggestions(query: string): TFile[] {
+		const lowerQuery = query.toLowerCase().trim();
+		return this.app.vault.getMarkdownFiles().filter((file) => {
+			const titleMatch = file.basename.toLowerCase().includes(lowerQuery);
+			const frontmatter =
+				this.app.metadataCache.getFileCache(file)?.frontmatter;
+			const aliasesValue = this.getNormalizedPropertyValue(
+				frontmatter,
+				"aliases",
+			);
+			const aliasMatch =
+				aliasesValue && this.propertyIncludes(aliasesValue, lowerQuery);
+			const idValue = this.getNormalizedPropertyValue(
+				frontmatter,
+				this.idProperty,
+			);
+			const idMatch =
+				idValue && this.propertyIncludes(idValue, lowerQuery);
+			const tocValue = this.getNormalizedPropertyValue(
+				frontmatter,
+				this.tocProperty,
+			);
+			const tocMatch =
+				tocValue && this.propertyIncludes(tocValue, lowerQuery);
+			// Include file if any field matches or query is empty
+			return (
+				titleMatch ||
+				aliasMatch ||
+				idMatch ||
+				tocMatch ||
+				lowerQuery === ""
+			);
+		});
+	}
+
+	private propertyIncludes(value: PropertyValue, query: string): boolean {
+		if (typeof value === "string") {
+			return value.toLowerCase().includes(query);
+		} else if (Array.isArray(value)) {
+			return value.some(
+				(v) => typeof v === "string" && v.toLowerCase().includes(query),
+			);
+		}
+		return false;
+	}
+
+	private getMatchType(
+		file: TFile,
+		query: string,
+	): "title" | "aliases" | "id" | "toc" {
+		const lowerQuery = query.toLowerCase().trim();
+		const titleMatch = file.basename.toLowerCase().includes(lowerQuery);
+
+		if (titleMatch) return "title";
+		const frontmatter =
+			this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const aliasMatch =
+			frontmatter &&
+			this.propertyIncludes(frontmatter["aliases"], lowerQuery);
+		if (aliasMatch) return "aliases";
+		const idMatch =
+			frontmatter &&
+			this.propertyIncludes(frontmatter[this.idProperty], lowerQuery);
+		if (idMatch) return "id";
+		const tocMatch =
+			frontmatter &&
+			this.propertyIncludes(frontmatter[this.tocProperty], lowerQuery);
+		if (tocMatch) return "toc";
+		return "title"; // Fallback, e.g., when query is empty
+	}
+
+	private getPropertyDisplayValue(value: PropertyValue): string {
+		if (Array.isArray(value)) {
+			return value.join(", ");
+		} else if (typeof value === "string") {
+			return value;
+		} else {
+			return String(value);
+		}
+	}
+
+	renderSuggestion(file: TFile, el: HTMLElement): void {
+		const query = this.inputEl.value; // Original query for highlighting
+		const lowerQuery = query.toLowerCase().trim();
+		const matchType = this.getMatchType(file, lowerQuery);
+		const frontmatter =
+			this.app.metadataCache.getFileCache(file)?.frontmatter;
+		const idValue = this.getNormalizedPropertyValue(
+			frontmatter,
+			this.idProperty,
+		);
+
+		el.addClass("mod-complex");
+
+		const contentEl = el.createEl("div", { cls: "suggestion-content" });
+		const titleEl = contentEl.createEl("div", { cls: "suggestion-title" });
+		const noteEl = contentEl.createEl("div", { cls: "suggestion-note" });
+
+		if (matchType === "title") {
+			titleEl.innerHTML = this.highlightText(file.basename, query);
+			if (idValue) {
+				noteEl.setText(
+					`${this.idProperty}: ${this.getPropertyDisplayValue(idValue)}`,
+				);
+			}
+		} else {
+			let propertyValue: PropertyValue | undefined;
+			if (matchType === "aliases") {
+				propertyValue = this.getNormalizedPropertyValue(
+					frontmatter,
+					"aliases",
+				);
+			} else if (matchType === "id") {
+				propertyValue = idValue;
+			} else if (matchType === "toc") {
+				propertyValue = this.getNormalizedPropertyValue(
+					frontmatter,
+					this.tocProperty,
+				);
+			}
+			if (propertyValue) {
+				titleEl.innerHTML = this.highlightText(
+					this.getPropertyDisplayValue(propertyValue),
+					query,
+				);
+				noteEl.setText(file.basename);
+			}
+		}
+	}
+
+	onChooseSuggestion(file: TFile, evt: MouseEvent | KeyboardEvent) {
+		this.app.workspace.openLinkText(file.path, "", true);
+	}
+
+	private highlightText(text: string, query: string): string {
+		if (!query) return text;
+		const regex = new RegExp(`(${query})`, "gi");
+		return text.replace(
+			regex,
+			'<span class="suggestion-highlight">$1</span>',
+		);
 	}
 }
