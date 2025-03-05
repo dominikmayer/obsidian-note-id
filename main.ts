@@ -3,13 +3,15 @@ import {
 	ItemView,
 	Plugin,
 	Notice,
-	SuggestModal,
+	FuzzySuggestModal,
+	FuzzyMatch,
 	TAbstractFile,
 	TFile,
 	WorkspaceLeaf,
 	Menu,
 	normalizePath,
 	setIcon,
+	FrontMatterCache,
 } from "obsidian";
 import { Elm, ElmApp } from "./Main.elm";
 
@@ -426,7 +428,6 @@ export default class IDSidePanelPlugin extends Plugin {
 			id: "search-by-property",
 			name: "Search notes by title, title of contents title or ID",
 			callback: () => {
-				console.log(this.settings);
 				new ExtendedSearchModal(
 					this.app,
 					this.settings.idField || ID_FIELD_DEFAULT,
@@ -712,9 +713,10 @@ class IDSidePanelSettingTab extends PluginSettingTab {
 			);
 	}
 }
+
 type PropertyValue = string | string[];
 
-class ExtendedSearchModal extends SuggestModal<TFile> {
+class ExtendedSearchModal extends FuzzySuggestModal<TFile> {
 	private idProperty: string;
 	private tocProperty: string;
 
@@ -726,97 +728,65 @@ class ExtendedSearchModal extends SuggestModal<TFile> {
 		console.log(this.idProperty, this.tocProperty);
 	}
 
-	private getNormalizedPropertyValue(
-		frontmatter: Record<string, unknown> | undefined,
-		property: string,
-	): PropertyValue | undefined {
-		if (!frontmatter) return undefined;
-		const lowerProperty = property.toLowerCase();
-		for (const key in frontmatter) {
-			if (key.toLowerCase() === lowerProperty) {
-				const value = frontmatter[key];
-				if (typeof value === "string") {
-					return value;
-				} else if (
-					Array.isArray(value) &&
-					value.every((v) => typeof v === "string")
-				) {
-					return value as string[];
-				}
-				return undefined; // Return undefined for unsupported types
-			}
-		}
-		return undefined;
-	}
-	getSuggestions(query: string): TFile[] {
-		const lowerQuery = query.toLowerCase().trim();
-		return this.app.vault.getMarkdownFiles().filter((file) => {
-			const titleMatch = file.basename.toLowerCase().includes(lowerQuery);
-			const frontmatter =
-				this.app.metadataCache.getFileCache(file)?.frontmatter;
-			const aliasesValue = this.getNormalizedPropertyValue(
-				frontmatter,
-				"aliases",
-			);
-			const aliasMatch =
-				aliasesValue && this.propertyIncludes(aliasesValue, lowerQuery);
-			const idValue = this.getNormalizedPropertyValue(
-				frontmatter,
-				this.idProperty,
-			);
-			const idMatch =
-				idValue && this.propertyIncludes(idValue, lowerQuery);
-			const tocValue = this.getNormalizedPropertyValue(
-				frontmatter,
-				this.tocProperty,
-			);
-			const tocMatch =
-				tocValue && this.propertyIncludes(tocValue, lowerQuery);
-			// Include file if any field matches or query is empty
-			return (
-				titleMatch ||
-				aliasMatch ||
-				idMatch ||
-				tocMatch ||
-				lowerQuery === ""
-			);
-		});
+	getItemText(item: TFile): string {
+		const metadata = this.app.metadataCache.getFileCache(item);
+		const frontmatter = metadata?.frontmatter;
+		const id = this.getFrontmatterValue(frontmatter, this.idProperty);
+		const toc = this.getFrontmatterValue(frontmatter, this.tocProperty);
+		const aliases = frontmatter?.["aliases"] ?? "";
+
+		return `${item.basename} ${id} ${toc} ${aliases}`;
 	}
 
-	private propertyIncludes(value: PropertyValue, query: string): boolean {
-		if (typeof value === "string") {
-			return value.toLowerCase().includes(query);
-		} else if (Array.isArray(value)) {
-			return value.some(
-				(v) => typeof v === "string" && v.toLowerCase().includes(query),
-			);
+	private getFrontmatterValue(
+		frontmatter: FrontMatterCache | undefined,
+		property: string,
+	): string {
+		if (!frontmatter) return "";
+		for (const key in frontmatter) {
+			if (key.toLowerCase() === property.toLowerCase()) {
+				return frontmatter[key];
+			}
 		}
-		return false;
+		return "";
+	}
+
+	getItems(): TFile[] {
+		return this.app.vault.getMarkdownFiles();
 	}
 
 	private getMatchType(
 		file: TFile,
 		query: string,
 	): "title" | "aliases" | "id" | "toc" {
-		const lowerQuery = query.toLowerCase().trim();
-		const titleMatch = file.basename.toLowerCase().includes(lowerQuery);
-
-		if (titleMatch) return "title";
+		if (!query) return "title";
+		if (this.fuzzyMatchIndices(file.basename, query).length) return "title";
 		const frontmatter =
 			this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const aliasMatch =
-			frontmatter &&
-			this.propertyIncludes(frontmatter["aliases"], lowerQuery);
-		if (aliasMatch) return "aliases";
-		const idMatch =
-			frontmatter &&
-			this.propertyIncludes(frontmatter[this.idProperty], lowerQuery);
-		if (idMatch) return "id";
-		const tocMatch =
-			frontmatter &&
-			this.propertyIncludes(frontmatter[this.tocProperty], lowerQuery);
-		if (tocMatch) return "toc";
-		return "title"; // Fallback, e.g., when query is empty
+		if (frontmatter) {
+			if (
+				this.fuzzyMatchIndices(
+					this.getPropertyDisplayValue(frontmatter["aliases"]),
+					query,
+				).length
+			)
+				return "aliases";
+			if (
+				this.fuzzyMatchIndices(
+					this.getPropertyDisplayValue(frontmatter[this.idProperty]),
+					query,
+				).length
+			)
+				return "id";
+			if (
+				this.fuzzyMatchIndices(
+					this.getPropertyDisplayValue(frontmatter[this.tocProperty]),
+					query,
+				).length
+			)
+				return "toc";
+		}
+		return "title";
 	}
 
 	private getPropertyDisplayValue(value: PropertyValue): string {
@@ -829,16 +799,14 @@ class ExtendedSearchModal extends SuggestModal<TFile> {
 		}
 	}
 
-	renderSuggestion(file: TFile, el: HTMLElement): void {
+	renderSuggestion(file: FuzzyMatch<TFile>, el: HTMLElement): void {
 		const query = this.inputEl.value; // Original query for highlighting
 		const lowerQuery = query.toLowerCase().trim();
-		const matchType = this.getMatchType(file, lowerQuery);
-		const frontmatter =
-			this.app.metadataCache.getFileCache(file)?.frontmatter;
-		const idValue = this.getNormalizedPropertyValue(
-			frontmatter,
-			this.idProperty,
-		);
+		const matchType = this.getMatchType(file.item, lowerQuery);
+		const frontmatter = this.app.metadataCache.getFileCache(
+			file.item,
+		)?.frontmatter;
+		const idValue = this.getFrontmatterValue(frontmatter, this.idProperty);
 
 		el.addClass("mod-complex");
 
@@ -847,23 +815,21 @@ class ExtendedSearchModal extends SuggestModal<TFile> {
 		const noteEl = contentEl.createEl("div", { cls: "suggestion-note" });
 
 		if (matchType === "title") {
-			titleEl.innerHTML = this.highlightText(file.basename, query);
+			titleEl.innerHTML = this.highlightText(file.item.basename, query);
 			if (idValue) {
-				noteEl.setText(
-					`${this.idProperty}: ${this.getPropertyDisplayValue(idValue)}`,
-				);
+				noteEl.setText(this.getPropertyDisplayValue(idValue));
 			}
 		} else {
 			let propertyValue: PropertyValue | undefined;
 			if (matchType === "aliases") {
-				propertyValue = this.getNormalizedPropertyValue(
+				propertyValue = this.getFrontmatterValue(
 					frontmatter,
 					"aliases",
 				);
 			} else if (matchType === "id") {
 				propertyValue = idValue;
 			} else if (matchType === "toc") {
-				propertyValue = this.getNormalizedPropertyValue(
+				propertyValue = this.getFrontmatterValue(
 					frontmatter,
 					this.tocProperty,
 				);
@@ -873,21 +839,42 @@ class ExtendedSearchModal extends SuggestModal<TFile> {
 					this.getPropertyDisplayValue(propertyValue),
 					query,
 				);
-				noteEl.setText(file.basename);
+				noteEl.setText(file.item.basename);
 			}
 		}
 	}
 
-	onChooseSuggestion(file: TFile, evt: MouseEvent | KeyboardEvent) {
-		this.app.workspace.openLinkText(file.path, "", true);
+	onChooseItem(item: TFile, evt: MouseEvent | KeyboardEvent): void {
+		this.app.workspace.openLinkText(item.path, "", true);
 	}
 
 	private highlightText(text: string, query: string): string {
 		if (!query) return text;
-		const regex = new RegExp(`(${query})`, "gi");
-		return text.replace(
-			regex,
-			'<span class="suggestion-highlight">$1</span>',
-		);
+		const indices = this.fuzzyMatchIndices(text, query);
+		if (indices.length === 0) return text;
+		let result = "";
+		let lastIndex = 0;
+		indices.forEach((index) => {
+			result +=
+				text.slice(lastIndex, index) +
+				'<span class="suggestion-highlight">' +
+				text[index] +
+				"</span>";
+			lastIndex = index + 1;
+		});
+		result += text.slice(lastIndex);
+		return result;
+	}
+
+	private fuzzyMatchIndices(text: string, query: string): number[] {
+		const indices: number[] = [];
+		let queryIndex = 0;
+		for (let i = 0; i < text.length && queryIndex < query.length; i++) {
+			if (text[i].toLowerCase() === query[queryIndex].toLowerCase()) {
+				indices.push(i);
+				queryIndex++;
+			}
+		}
+		return queryIndex === query.length ? indices : [];
 	}
 }
