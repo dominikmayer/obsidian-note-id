@@ -432,6 +432,7 @@ export default class IDSidePanelPlugin extends Plugin {
 					this.app,
 					this.settings.idField || ID_FIELD_DEFAULT,
 					this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
+					this.noteCache,
 				).open();
 			},
 		});
@@ -719,22 +720,32 @@ type PropertyValue = string | string[];
 class ExtendedSearchModal extends FuzzySuggestModal<TFile> {
 	private idProperty: string;
 	private tocProperty: string;
+	private noteCache: Map<string, NoteMeta>;
 
-	constructor(app: App, idProperty: string, tocProperty: string) {
+	constructor(
+		app: App,
+		idProperty: string,
+		tocProperty: string,
+		noteCache: Map<string, NoteMeta>,
+	) {
 		super(app);
 		this.setPlaceholder("Enter property:value or title");
 		this.idProperty = idProperty;
 		this.tocProperty = tocProperty;
-		console.log(this.idProperty, this.tocProperty);
+		this.noteCache = noteCache;
 	}
 
 	getItemText(item: TFile): string {
+		const noteMeta = this.noteCache.get(item.path);
 		const metadata = this.app.metadataCache.getFileCache(item);
 		const frontmatter = metadata?.frontmatter;
+		const aliases = frontmatter?.["aliases"] ?? "";
+		if (noteMeta) {
+			return `${noteMeta.title} ${noteMeta.id ?? ""} ${noteMeta.tocTitle ?? ""} ${aliases}`;
+		}
+
 		const id = this.getFrontmatterValue(frontmatter, this.idProperty);
 		const toc = this.getFrontmatterValue(frontmatter, this.tocProperty);
-		const aliases = frontmatter?.["aliases"] ?? "";
-
 		return `${item.basename} ${id} ${toc} ${aliases}`;
 	}
 
@@ -752,35 +763,63 @@ class ExtendedSearchModal extends FuzzySuggestModal<TFile> {
 	}
 
 	getItems(): TFile[] {
-		return this.app.vault.getMarkdownFiles();
+		return Array.from(this.noteCache.values()).map(
+			(noteMeta) => noteMeta.file,
+		);
 	}
 
 	private getMatchType(
 		file: TFile,
 		query: string,
 	): "title" | "aliases" | "id" | "toc" {
-		if (!query) return "title";
+		const noteMeta = this.noteCache.get(file.path);
+		if (noteMeta) {
+			if (this.fuzzyMatchIndices(noteMeta.title, query).length)
+				return "title";
+			if (
+				noteMeta.id &&
+				this.fuzzyMatchIndices(String(noteMeta.id), query).length
+			)
+				return "id";
+			if (
+				noteMeta.tocTitle &&
+				this.fuzzyMatchIndices(noteMeta.tocTitle, query).length
+			)
+				return "toc";
+		}
 		if (this.fuzzyMatchIndices(file.basename, query).length) return "title";
 		const frontmatter =
 			this.app.metadataCache.getFileCache(file)?.frontmatter;
 		if (frontmatter) {
+			const aliasesValue = this.getFrontmatterValue(
+				frontmatter,
+				"aliases",
+			);
 			if (
 				this.fuzzyMatchIndices(
-					this.getPropertyDisplayValue(frontmatter["aliases"]),
+					this.getPropertyDisplayValue(aliasesValue),
 					query,
 				).length
 			)
 				return "aliases";
+			const idValue = this.getFrontmatterValue(
+				frontmatter,
+				this.idProperty,
+			);
 			if (
 				this.fuzzyMatchIndices(
-					this.getPropertyDisplayValue(frontmatter[this.idProperty]),
+					this.getPropertyDisplayValue(idValue),
 					query,
 				).length
 			)
 				return "id";
+			const tocValue = this.getFrontmatterValue(
+				frontmatter,
+				this.tocProperty,
+			);
 			if (
 				this.fuzzyMatchIndices(
-					this.getPropertyDisplayValue(frontmatter[this.tocProperty]),
+					this.getPropertyDisplayValue(tocValue),
 					query,
 				).length
 			)
@@ -800,48 +839,69 @@ class ExtendedSearchModal extends FuzzySuggestModal<TFile> {
 	}
 
 	renderSuggestion(file: FuzzyMatch<TFile>, el: HTMLElement): void {
-		const query = this.inputEl.value; // Original query for highlighting
-		const lowerQuery = query.toLowerCase().trim();
-		const matchType = this.getMatchType(file.item, lowerQuery);
-		const frontmatter = this.app.metadataCache.getFileCache(
-			file.item,
-		)?.frontmatter;
-		const idValue = this.getFrontmatterValue(frontmatter, this.idProperty);
+		const query = this.inputEl.value;
+		const matchType = this.getMatchType(file.item, query);
+		const noteMeta = this.noteCache.get(file.item.path);
+
+		// Fallback values from frontmatter if noteMeta isn’t available.
+		const metadata = this.app.metadataCache.getFileCache(file.item);
+		const frontmatter = metadata?.frontmatter;
+		const fallbackTitle = file.item.basename;
+		const fallbackId = this.getFrontmatterValue(
+			frontmatter,
+			this.idProperty,
+		);
+		const fallbackToc = this.getFrontmatterValue(
+			frontmatter,
+			this.tocProperty,
+		);
+		const fallbackAlias = this.getFrontmatterValue(frontmatter, "aliases");
+
+		const title = noteMeta?.title ?? fallbackTitle;
+		const id = noteMeta?.id ?? fallbackId;
+		const toc = noteMeta?.tocTitle ?? fallbackToc;
+		const alias = fallbackAlias;
+
+		let suggestionTitle = "";
+		let noteLeft = "";
+		let noteRight = "";
+
+		if (matchType === "title") {
+			// Show note title in the suggestion title (highlighted).
+			// Note: note is "id: toc title"
+			suggestionTitle = this.highlightText(title, query);
+			noteLeft = id ? String(id) : "";
+			noteRight = toc ? toc : "";
+		} else if (matchType === "aliases" || matchType === "toc") {
+			// Show alias (or toc) in the suggestion title (highlighted).
+			// Note: note is "id: note title"
+			suggestionTitle = this.highlightText(
+				matchType === "aliases" ? alias : toc,
+				query,
+			);
+			noteLeft = id ? String(id) : "";
+			noteRight = title;
+		} else if (matchType === "id") {
+			// Show id in the suggestion title (highlighted).
+			// Note: note is "toc title: note title"
+			suggestionTitle = this.highlightText(String(id), query);
+			noteLeft = toc ? toc : "";
+			noteRight = title;
+		}
+
+		// Only include colon if both note parts exist.
+		const noteText =
+			noteLeft && noteRight
+				? `${noteLeft}: ${noteRight}`
+				: noteLeft || noteRight;
 
 		el.addClass("mod-complex");
-
 		const contentEl = el.createEl("div", { cls: "suggestion-content" });
 		const titleEl = contentEl.createEl("div", { cls: "suggestion-title" });
 		const noteEl = contentEl.createEl("div", { cls: "suggestion-note" });
 
-		if (matchType === "title") {
-			titleEl.innerHTML = this.highlightText(file.item.basename, query);
-			if (idValue) {
-				noteEl.setText(this.getPropertyDisplayValue(idValue));
-			}
-		} else {
-			let propertyValue: PropertyValue | undefined;
-			if (matchType === "aliases") {
-				propertyValue = this.getFrontmatterValue(
-					frontmatter,
-					"aliases",
-				);
-			} else if (matchType === "id") {
-				propertyValue = idValue;
-			} else if (matchType === "toc") {
-				propertyValue = this.getFrontmatterValue(
-					frontmatter,
-					this.tocProperty,
-				);
-			}
-			if (propertyValue) {
-				titleEl.innerHTML = this.highlightText(
-					this.getPropertyDisplayValue(propertyValue),
-					query,
-				);
-				noteEl.setText(file.item.basename);
-			}
-		}
+		titleEl.innerHTML = suggestionTitle;
+		noteEl.setText(noteText);
 	}
 
 	onChooseItem(item: TFile, evt: MouseEvent | KeyboardEvent): void {
