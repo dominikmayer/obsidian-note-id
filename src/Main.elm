@@ -13,6 +13,7 @@ import NoteId
 import Ports exposing (..)
 import Task
 import VirtualList
+import VirtualList.Config
 
 
 
@@ -60,11 +61,9 @@ type alias Model =
 defaultModel : Model
 defaultModel =
     let
-        default =
-            VirtualList.defaultConfig
-
         config =
-            { default | buffer = 10 }
+            VirtualList.Config.default
+                |> VirtualList.Config.setBuffer 10
     in
     { notes = []
     , currentFile = Nothing
