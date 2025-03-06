@@ -735,7 +735,63 @@ class NoteSearchModal extends FuzzySuggestModal<TFile> {
 		this.idProperty = idProperty;
 		this.tocProperty = tocProperty;
 		this.noteCache = noteCache;
+		this.setInstructions([
+			{
+				command: "↑↓",
+				purpose: "navigate",
+			},
+			{
+				command: "↵",
+				purpose: "open",
+			},
+			{
+				command: "⌘ ↵",
+				purpose: "to open in a new tab",
+			},
+			{
+				command: "⌘ ⌥ ↵",
+				purpose: "to open on the right",
+			},
+			{
+				command: "esc",
+				purpose: "cancel",
+			},
+		]);
+		this.limit = 20;
 	}
+
+	onOpen(): void {
+		super.onOpen();
+		this.inputEl.addEventListener("keydown", this.handleKeyDown, true);
+	}
+
+	onClose(): void {
+		super.onClose();
+		this.inputEl.removeEventListener("keydown", this.handleKeyDown, true);
+	}
+
+	private handleKeyDown = (evt: KeyboardEvent): void => {
+		if (
+			evt.key === "Enter" &&
+			(evt.ctrlKey || evt.metaKey || evt.altKey || evt.shiftKey)
+		) {
+			const selectedEl = this.resultContainerEl.querySelector(
+				".suggestion-item.is-selected",
+			);
+			if (!selectedEl) return;
+
+			const path = selectedEl.getAttribute("data-path");
+			if (!path) return;
+
+			const item = this.getItems().find((file) => file.path === path);
+			if (!item) return;
+
+			evt.preventDefault();
+			evt.stopPropagation();
+			this.close();
+			this.onChooseItem(item, evt);
+		}
+	};
 
 	getItemText(item: TFile): string {
 		const noteMeta = this.noteCache.get(item.path);
@@ -897,6 +953,8 @@ class NoteSearchModal extends FuzzySuggestModal<TFile> {
 				? `${noteLeft}: ${noteRight}`
 				: noteLeft || noteRight;
 
+		el.setAttribute("data-path", file.item.path);
+
 		el.addClass("mod-complex");
 		const contentEl = el.createEl("div", { cls: "suggestion-content" });
 		const titleEl = contentEl.createEl("div", { cls: "suggestion-title" });
@@ -907,7 +965,21 @@ class NoteSearchModal extends FuzzySuggestModal<TFile> {
 	}
 
 	onChooseItem(item: TFile, evt: MouseEvent | KeyboardEvent): void {
-		this.app.workspace.openLinkText(item.path, "", true);
+		console.log(evt);
+		const isMod = evt.metaKey || evt.ctrlKey; // Cmd (Mac) or Ctrl (Windows/Linux)
+		const isAlt = evt.altKey; // Alt key
+		const isShift = evt.shiftKey; // Shift key
+		const newLeaf = isMod && !isShift; // Open in a new tab if Cmd/Ctrl is pressed
+		const splitRight = isMod && isAlt && !isShift; // Open on the right if Cmd/Ctrl + Alt is pressed
+		const open = !isMod && !isAlt && !isShift;
+
+		if (splitRight) {
+			this.app.workspace.getLeaf("split").openFile(item);
+		} else if (newLeaf) {
+			this.app.workspace.openLinkText(item.path, "", newLeaf);
+		} else if (open) {
+			this.app.workspace.openLinkText(item.path, "", newLeaf);
+		}
 	}
 
 	private highlightText(text: string, query: string): string {
