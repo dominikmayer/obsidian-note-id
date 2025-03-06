@@ -187,29 +187,43 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	private createNoteFromCommand(subsequence: boolean) {
+		this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
+			if (elmApp.ports.receiveCreateNote) {
+				elmApp.ports.receiveCreateNote.send([
+					currentNote.path,
+					subsequence,
+				]);
+			} else {
+				new Notice("This shouldn't happen. Please file a bug report.");
+			}
+		});
+	}
+
+	private ensureActiveNoteAndElmApp(
+		callback: (elmApp: ElmApp, file: TFile) => void,
+	) {
 		const currentNote = this.app.workspace.getActiveFile();
 		if (!currentNote) {
 			new Notice("No active file");
 			return;
 		}
+		this.ensurePanelAndElmApp((elmApp) => {
+			callback(elmApp, currentNote);
+		});
+	}
 
+	private ensurePanelAndElmApp(callback: (elmApp: ElmApp) => void) {
 		this.getOrCreateActivePanelView().then((panelView) => {
 			if (!panelView) {
 				new Notice("Failed to open the side panel");
 				return;
 			}
 
-			// Wait for Elm app to load before proceeding
-			this.waitForElmApp().then((elmApp) => {
-				if (elmApp && elmApp.ports.receiveCreateNote) {
-					elmApp.ports.receiveCreateNote.send([
-						currentNote.path,
-						subsequence,
-					]);
-				} else {
+			this.waitForElmApp()
+				.then(callback)
+				.catch(() => {
 					new Notice("Please try again");
-				}
-			});
+				});
 		});
 	}
 
