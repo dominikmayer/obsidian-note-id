@@ -2,6 +2,7 @@ import {
 	App,
 	FuzzySuggestModal,
 	FuzzyMatch,
+	Instruction,
 	TFile,
 	FrontMatterCache,
 } from "obsidian";
@@ -9,7 +10,7 @@ import { NoteMeta } from "./types";
 
 type PropertyValue = string | string[];
 
-export class NoteSearchModal extends FuzzySuggestModal<TFile> {
+export abstract class NoteSearchModal extends FuzzySuggestModal<TFile> {
 	private idProperty: string;
 	private tocProperty: string;
 	private noteCache: Map<string, NoteMeta>;
@@ -19,6 +20,7 @@ export class NoteSearchModal extends FuzzySuggestModal<TFile> {
 		idProperty: string,
 		tocProperty: string,
 		noteCache: Map<string, NoteMeta>,
+		instructions: Instruction[],
 	) {
 		super(app);
 		this.setPlaceholder(
@@ -27,27 +29,23 @@ export class NoteSearchModal extends FuzzySuggestModal<TFile> {
 		this.idProperty = idProperty;
 		this.tocProperty = tocProperty;
 		this.noteCache = noteCache;
-		this.setInstructions([
+
+		const navigateInstruction: Instruction[] = [
 			{
 				command: "↑↓",
 				purpose: "navigate",
 			},
-			{
-				command: "↵",
-				purpose: "open",
-			},
-			{
-				command: "⌘ ↵",
-				purpose: "to open in a new tab",
-			},
-			{
-				command: "⌘ ⌥ ↵",
-				purpose: "to open on the right",
-			},
+		];
+		const cancelInstruction: Instruction[] = [
 			{
 				command: "esc",
 				purpose: "cancel",
 			},
+		];
+		this.setInstructions([
+			...navigateInstruction,
+			...instructions,
+			...cancelInstruction,
 		]);
 		this.limit = 20;
 	}
@@ -254,23 +252,6 @@ export class NoteSearchModal extends FuzzySuggestModal<TFile> {
 
 		titleEl.innerHTML = suggestionTitle;
 		noteEl.setText(noteText);
-	}
-
-	onChooseItem(item: TFile, evt: MouseEvent | KeyboardEvent): void {
-		const isMod = evt.metaKey || evt.ctrlKey; // Cmd (Mac) or Ctrl (Windows/Linux)
-		const isAlt = evt.altKey; // Alt key
-		const isShift = evt.shiftKey; // Shift key
-		const newLeaf = isMod && !isShift; // Open in a new tab if Cmd/Ctrl is pressed
-		const splitRight = isMod && isAlt && !isShift; // Open on the right if Cmd/Ctrl + Alt is pressed
-		const open = !isMod && !isAlt && !isShift;
-
-		if (splitRight) {
-			this.app.workspace.getLeaf("split").openFile(item);
-		} else if (newLeaf) {
-			this.app.workspace.openLinkText(item.path, "", newLeaf);
-		} else if (open) {
-			this.app.workspace.openLinkText(item.path, "", newLeaf);
-		}
 	}
 
 	private highlightText(text: string, query: string): string {

@@ -1,6 +1,6 @@
 import { IDSidePanelView } from "./view";
 import { IDSidePanelSettingTab } from "./settings";
-import { NoteSearchModal } from "./searchModal";
+import { OpenNoteModal } from "./openNoteModal";
 import {
 	IDSidePanelSettings,
 	DEFAULT_SETTINGS,
@@ -186,7 +186,7 @@ export default class IDSidePanelPlugin extends Plugin {
 			id: "note-search",
 			name: "Search notes by title, title of contents title or ID",
 			callback: () => {
-				new NoteSearchModal(
+				new OpenNoteModal(
 					this.app,
 					this.settings.idField || ID_FIELD_DEFAULT,
 					this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,

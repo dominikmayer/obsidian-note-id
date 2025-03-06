@@ -13,7 +13,6 @@ import { Elm, ElmApp } from "./Main.elm";
 
 export class IDSidePanelView extends ItemView {
 	plugin: IDSidePanelPlugin;
-	// private virtualList: VirtualList;
 
 	constructor(leaf: WorkspaceLeaf, plugin: IDSidePanelPlugin) {
 		super(leaf);
