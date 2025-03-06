@@ -1,6 +1,7 @@
 import { IDSidePanelView } from "./view";
 import { IDSidePanelSettingTab } from "./settings";
 import { OpenNoteModal } from "./openNoteModal";
+import { ElmApp } from "/.elm";
 import {
 	IDSidePanelSettings,
 	DEFAULT_SETTINGS,
@@ -12,23 +13,12 @@ import {
 	ID_FIELD_DEFAULT,
 	TOC_TITLE_FIELD_DEFAULT,
 } from "./constants";
-import { Plugin, Notice, TAbstractFile, TFile } from "obsidian";
+import { Plugin, Notice, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 
 export default class IDSidePanelPlugin extends Plugin {
 	private scheduleRefreshTimeout: number | null = null;
 	settings: IDSidePanelSettings;
 	noteCache: Map<string, NoteMeta> = new Map();
-
-	private getActivePanelView() {
-		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ID_PANEL);
-		if (leaves.length > 0) {
-			const view = leaves[0].view;
-			if (view instanceof IDSidePanelView) {
-				return view;
-			}
-		}
-		return null;
-	}
 
 	async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
 		const {
@@ -197,20 +187,30 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	private createNoteFromCommand(subsequence: boolean) {
-		const elmApp = this.getElmApp();
 		const currentNote = this.app.workspace.getActiveFile();
 		if (!currentNote) {
 			new Notice("No active file");
 			return;
 		}
-		if (currentNote && elmApp && elmApp.ports.receiveCreateNote) {
-			elmApp.ports.receiveCreateNote.send([
-				currentNote.path,
-				subsequence,
-			]);
-		} else {
-			new Notice("Please open the side panel first");
-		}
+
+		this.getOrCreateActivePanelView().then((panelView) => {
+			if (!panelView) {
+				new Notice("Failed to open the side panel");
+				return;
+			}
+
+			// Wait for Elm app to load before proceeding
+			this.waitForElmApp().then((elmApp) => {
+				if (elmApp && elmApp.ports.receiveCreateNote) {
+					elmApp.ports.receiveCreateNote.send([
+						currentNote.path,
+						subsequence,
+					]);
+				} else {
+					new Notice("Please try again");
+				}
+			});
+		});
 	}
 
 	async handleFileChange(file: TAbstractFile) {
@@ -252,21 +252,63 @@ export default class IDSidePanelPlugin extends Plugin {
 		}, 50);
 	}
 
+	private waitForElmApp(retries = 10, delay = 200): Promise<ElmApp | null> {
+		return new Promise((resolve, reject) => {
+			const checkElmApp = () => {
+				const elmApp = this.getElmApp();
+				if (elmApp) {
+					resolve(elmApp);
+				} else if (retries > 0) {
+					setTimeout(() => checkElmApp(), delay);
+					retries--;
+				} else {
+					reject(new Error("Elm app failed to load"));
+				}
+			};
+			checkElmApp();
+		});
+	}
+
+	private async getOrCreateActivePanelView(): Promise<IDSidePanelView | null> {
+		const leaf = await this.getOrCreateLeaf();
+		return leaf.view as IDSidePanelView;
+	}
+	private getActivePanelView(): IDSidePanelView | null {
+		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_ID_PANEL);
+		if (leaves.length > 0) {
+			const view = leaves[0].view;
+			if (view instanceof IDSidePanelView) {
+				return view;
+			}
+		}
+		return null;
+	}
+
 	async activateView() {
+		const leaf = await this.getOrCreateLeaf();
+		this.app.workspace.revealLeaf(leaf);
+	}
+
+	async getOrCreateLeaf(): Promise<WorkspaceLeaf> {
 		let leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_ID_PANEL)[0];
 
 		if (!leaf) {
-			leaf =
-				this.app.workspace.getRightLeaf(false) ??
-				this.app.workspace.getLeaf(true);
-			await leaf.setViewState({
-				type: VIEW_TYPE_ID_PANEL,
-				active: true,
-			});
+			leaf = await this.createLeaf();
 		}
 
-		this.app.workspace.revealLeaf(leaf);
+		return leaf;
+	}
+
+	async createLeaf(): Promise<WorkspaceLeaf> {
+		const leaf =
+			this.app.workspace.getRightLeaf(false) ??
+			this.app.workspace.getLeaf(true);
+		await leaf.setViewState({
+			type: VIEW_TYPE_ID_PANEL,
+			active: true,
+		});
 		await this.refreshView();
+		return leaf;
 	}
 
 	async refreshView() {
