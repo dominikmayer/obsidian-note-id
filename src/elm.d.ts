@@ -36,6 +36,9 @@ declare module "*.elm" {
 					callback: (data: [number, number, string]) => void,
 				): void;
 			};
+			provideNewIdForNote: {
+				subscribe(callback: (data: [string, string]) => void): void;
+			};
 			toggleTOCButton: {
 				subscribe(callback: (flag: boolean) => void): void;
 			};
@@ -53,6 +56,9 @@ declare module "*.elm" {
 			};
 			receiveFileRenamed: {
 				send(data: [string, string]): void;
+			};
+			receiveGetNewIdForNoteFromNote: {
+				send(data: [string, string, boolean]): void;
 			};
 			receiveSettings: {
 				send(data: Settings): void;

@@ -9,6 +9,8 @@ The [Obsidian](https://www.obsidian.md/) Note ID Plugin displays notes by their 
 - **Support for Zettelkasten**: Ideal for Zettelkasten practitioners looking to position new notes logically and expand existing threads of thought.
 - **Easily Create New Notes:** Use the context menu or a command to seamlessly create new notes that continue an existing sequence (e.g., 1.2 → 1.3) or start a subsequence branching from a note (e.g., 1.2 → 1.2a). This makes it simple to extend ideas and maintain logical connections.
 - **Dedicated Table of Contents View:** The table of contents view functions as a curated index, displaying top-level notes and/or notes explicitly marked with the `toc` property – e.g., `toc: Zettelkasten` for the note that starts the Zettelkasten cluster. Unlike the main note list, which shows all notes, the table of contents view provides a structured way to highlight key topics without cluttering the sidebar
+- **Enhanced Note Search**: Quickly search your notes using fuzzy matching by note title, note ID, or table of contents title for more efficient navigation.
+- **Set Note IDs Based on Other Notes:** Easily set the ID of an existing note to be in sequence or subsequence of another note, helping you reorganize and integrate notes into your clusters.
 
 ## How Clusters Work
 
@@ -73,6 +75,24 @@ Deep work is the ability to focus without distraction on cognitively demanding t
 
 - This note serves as an entry point for the Productivity cluster, so it appears in the table of contents under `Productivity`.
 - Related notes can reference or extend it (e.g., id: 3.1a for a note on time blocking)
+
+### Searching for Notes
+
+You can search for notes with the command `Note ID: Search notes by title, title of contents title or ID`. Assign a [hotkey](https://help.obsidian.md/hotkeys) like Cmd/Ctrl-Shift-O to easily access it.
+
+### Setting Note IDs Based on Other Notes
+
+You can set the ID of an existing note based on another note's ID, either as a sequence or a subsequence. This is useful for reorganizing your notes or integrating new ideas into existing clusters.
+
+To set the ID of the current note:
+
+1. Open the note you want to assign an ID to.
+2. Use the command `Note ID: Set note ID based on another note`. You can assign a hotkey like Cmd/Ctrl-Shift-M (for "move").
+3. In the search modal, find and select the note you want to base the ID on.
+4. Press Enter to set the ID as a subsequence of the selected note (e.g., if the selected note is "1.1", the current note will become "1.1a").
+5. Press Cmd+Enter (or Ctrl+Enter) to set the ID as a sequence following the selected note (e.g., if the selected note is "1.1", the current note will become "1.2").
+
+This feature allows you to quickly integrate notes into your existing structure without manually calculating the next ID.
 
 ## Settings
 

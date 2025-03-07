@@ -13,6 +13,7 @@ import NoteId
 import Ports exposing (..)
 import Task
 import VirtualList
+import VirtualList.Config
 
 
 
@@ -60,11 +61,9 @@ type alias Model =
 defaultModel : Model
 defaultModel =
     let
-        default =
-            VirtualList.defaultConfig
-
         config =
-            { default | buffer = 10 }
+            VirtualList.Config.default
+                |> VirtualList.Config.setBuffer 10
     in
     { notes = []
     , currentFile = Nothing
@@ -160,6 +159,7 @@ type Msg
     | DisplayChanged Bool
     | FileOpened (Maybe String)
     | FileRenamed ( String, String )
+    | NewIdRequestedForNoteFromNote ( String, String, Bool )
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided ( List NoteMeta, List String )
@@ -186,6 +186,15 @@ update msg model =
 
         FileRenamed paths ->
             handleFileRename model paths
+
+        NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
+            let
+                cmd =
+                    getNewIdFromNote model.notes from subsequence
+                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, for ))
+                        |> Maybe.withDefault Cmd.none
+            in
+            ( model, cmd )
 
         NoteCreationRequested ( filePath, child ) ->
             createNote model filePath child
@@ -344,36 +353,35 @@ mapVirtualListResult ( virtualListModel, virtualListCmd ) model =
 createNote : Model -> String -> Bool -> ( Model, Cmd Msg )
 createNote model path child =
     let
-        folder =
-            getPathWithoutFileName path
-
         newPath =
-            folder ++ "/Untitled.md"
-
-        id =
-            getNoteByPath path model.notes
-                |> Maybe.andThen (\noteWithSplit -> noteWithSplit.note.id)
-
-        newId =
-            if child then
-                Maybe.map NoteId.getNewIdInSubsequence id
-
-            else
-                Maybe.map NoteId.getNewIdInSequence id
-
-        newUniqueId =
-            newId
-                |> Maybe.andThen (getUniqueId model.notes)
+            getPathWithoutFileName path ++ "/Untitled.md"
 
         fileContent =
-            case newUniqueId of
-                Just justId ->
-                    createNoteContent model.settings.idField justId
-
-                Nothing ->
-                    ""
+            getNewIdFromNote model.notes path child
+                |> Maybe.map (createNoteContent model.settings.idField)
+                |> Maybe.withDefault ""
     in
     ( model, Ports.createNote ( newPath, fileContent ) )
+
+
+getNewIdFromNote : List NoteWithSplit -> String -> Bool -> Maybe String
+getNewIdFromNote notes path child =
+    let
+        id =
+            getNoteByPath path notes
+                |> Maybe.andThen (\noteWithSplit -> noteWithSplit.note.id)
+    in
+    Maybe.map (getId child) id
+        |> Maybe.andThen (getUniqueId notes)
+
+
+getId : Bool -> String -> String
+getId child id =
+    if child then
+        NoteId.getNewIdInSubsequence id
+
+    else
+        NoteId.getNewIdInSequence id
 
 
 getUniqueId : List NoteWithSplit -> String -> Maybe String
@@ -776,6 +784,7 @@ subscriptions _ =
         , Ports.receiveDisplayIsToc DisplayChanged
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed
+        , Ports.receiveGetNewIdForNoteFromNote NewIdRequestedForNoteFromNote
         , Ports.receiveSettings SettingsChanged
         ]
 
