@@ -1,6 +1,7 @@
 import { IDSidePanelView } from "./view";
 import { IDSidePanelSettingTab } from "./settings";
 import { OpenNoteModal } from "./openNoteModal";
+import { AttachNoteModal } from "./attachNoteModal";
 import { ElmApp } from "/.elm";
 import {
 	IDSidePanelSettings,
@@ -184,6 +185,23 @@ export default class IDSidePanelPlugin extends Plugin {
 				).open();
 			},
 		});
+
+		this.addCommand({
+			id: "attach-note",
+			name: "Set note ID based on another note",
+			callback: () => {
+				this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
+					new AttachNoteModal(
+						this.app,
+						this.settings.idField || ID_FIELD_DEFAULT,
+						this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
+						this.noteCache,
+						currentNote,
+						elmApp,
+					).open();
+				});
+			},
+		});
 	}
 
 	private createNoteFromCommand(subsequence: boolean) {
@@ -204,7 +222,7 @@ export default class IDSidePanelPlugin extends Plugin {
 	) {
 		const currentNote = this.app.workspace.getActiveFile();
 		if (!currentNote) {
-			new Notice("No active file");
+			new Notice("No active note");
 			return;
 		}
 		this.ensurePanelAndElmApp((elmApp) => {

@@ -30,7 +30,8 @@ export class OpenNoteModal extends NoteSearchModal {
 		const isMod = evt.metaKey || evt.ctrlKey; // Cmd (Mac) or Ctrl (Windows/Linux)
 		const isAlt = evt.altKey;
 		const isShift = evt.shiftKey;
-		const newLeaf = isMod && !isShift;
+
+		const newLeaf = isMod && !isAlt && !isShift;
 		const splitRight = isMod && isAlt && !isShift;
 		const open = !isMod && !isAlt && !isShift;
 

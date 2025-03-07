@@ -3,11 +3,12 @@ import {
 	TFile,
 	WorkspaceLeaf,
 	Menu,
+	Notice,
 	normalizePath,
 	setIcon,
 } from "obsidian";
 import IDSidePanelPlugin from "../main";
-import { VIEW_TYPE_ID_PANEL } from "./constants";
+import { ID_FIELD_DEFAULT, VIEW_TYPE_ID_PANEL } from "./constants";
 import { NoteMeta } from "./types";
 import { Elm, ElmApp } from "./Main.elm";
 
@@ -143,6 +144,23 @@ export class IDSidePanelView extends ItemView {
 			},
 		);
 
+		this.elmApp.ports.provideNewIdForNote.subscribe(
+			(data: [string, string]) => {
+				const id = data[0];
+				const filePath = data[1];
+
+				const file = this.app.vault.getAbstractFileByPath(
+					normalizePath(filePath),
+				);
+
+				if (file instanceof TFile) {
+					this.updateId(file, id);
+				} else {
+					new Notice("Couldn't update note");
+				}
+			},
+		);
+
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => {
 				if (this.elmApp && this.elmApp.ports.receiveFileOpen) {
@@ -211,5 +229,17 @@ export class IDSidePanelView extends ItemView {
 
 			this.elmApp.ports.receiveNotes.send([notes, changedFiles]);
 		}
+	}
+
+	private async updateId(file: TFile, newValue: string) {
+		if (!file) {
+			new Notice("Couldn't update note");
+			return;
+		}
+		const idField = this.plugin.settings.idField || ID_FIELD_DEFAULT;
+
+		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+			frontmatter[idField] = newValue;
+		});
 	}
 }

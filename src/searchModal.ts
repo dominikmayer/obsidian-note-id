@@ -11,8 +11,8 @@ import { NoteMeta } from "./types";
 type PropertyValue = string | string[];
 
 export abstract class NoteSearchModal extends FuzzySuggestModal<TFile> {
-	private idProperty: string;
-	private tocProperty: string;
+	idProperty: string;
+	tocProperty: string;
 	private noteCache: Map<string, NoteMeta>;
 
 	constructor(
