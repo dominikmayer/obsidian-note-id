@@ -246,30 +246,32 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	async handleFileChange(file: TAbstractFile) {
-		if (file instanceof TFile && file.extension === "md") {
-			const newMeta = await this.extractNoteMeta(file);
-
-			if (!newMeta) {
-				// If the file is not relevant but was previously cached, remove it
-				if (this.noteCache.has(file.path)) {
-					this.noteCache.delete(file.path);
-					this.queueRefresh();
-				}
-				return;
+		if (!(file instanceof TFile) || file.extension !== "md") {
+			return;
+		}
+		
+		// Extract new metadata
+		const newMeta = await this.extractNoteMeta(file);
+		const oldMeta = this.noteCache.get(file.path);
+		
+		if (!newMeta) {
+			// If file is not relevant but was previously cached, remove it
+			if (oldMeta) {
+				this.noteCache.delete(file.path);
+				this.queueRefresh();
 			}
-
-			const oldMeta = this.noteCache.get(file.path);
-
-			const metaChanged =
-				!oldMeta ||
-				newMeta.id !== oldMeta.id ||
-				newMeta.title !== oldMeta.title ||
-				newMeta.tocTitle !== oldMeta.tocTitle;
-
-			if (metaChanged) {
-				this.noteCache.set(file.path, newMeta);
-				this.queueRefresh([file.path]);
-			}
+			return;
+		}
+		
+		// Check if any visible metadata actually changed
+		const metaChanged = !oldMeta ||
+			newMeta.id !== oldMeta.id ||
+			newMeta.title !== oldMeta.title ||
+			newMeta.tocTitle !== oldMeta.tocTitle;
+			
+		if (metaChanged) {
+			this.noteCache.set(file.path, newMeta);
+			this.queueRefresh([file.path]);
 		}
 	}
 
