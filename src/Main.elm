@@ -12,7 +12,7 @@ import Json.Encode as Encode
 import Metadata
 import NoteId
 import NoteMeta exposing (NoteMeta)
-import Notes exposing (NoteWithSplit, Notes)
+import Notes exposing (Notes)
 import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 import Task
@@ -231,11 +231,8 @@ handleNoteClick model filePath =
 updateDisplay : Model -> DisplayMode -> ( Model, Cmd Msg )
 updateDisplay model newDisplay =
     let
-        newModel =
-            { model | currentDisplayMode = newDisplay }
-
         ( updatedModel, updateCmd ) =
-            updateVirtualList newModel
+            updateVirtualList { model | currentDisplayMode = newDisplay }
 
         cmd =
             Cmd.batch
@@ -334,7 +331,7 @@ updateNotes model changedNotes =
             Vault.filteredContent model.settings model.vault
 
         annotatedNotes =
-            Notes.annotate (sortNotes newNotes)
+            Notes.annotate (NoteMeta.sort newNotes)
 
         affectedIds =
             if Notes.isEmpty model.includedNotes then
@@ -361,46 +358,27 @@ filterNotesForDisplay : DisplayMode -> Maybe Int -> Notes -> Notes
 filterNotesForDisplay display maybeTocLevel notes =
     case display of
         TOC ->
-            Notes.filter
-                (\noteWithSplit ->
-                    let
-                        hasTocField =
-                            noteWithSplit.note.tocTitle /= Nothing
-
-                        noteLevel =
-                            Maybe.withDefault 0 (noteWithSplit.note.id |> Maybe.map NoteId.level)
-                    in
-                    case maybeTocLevel of
-                        Just tocLevel ->
-                            hasTocField || (0 < noteLevel && noteLevel <= tocLevel)
-
-                        Nothing ->
-                            hasTocField
-                )
-                notes
+            Notes.filter (showInToc maybeTocLevel) notes
 
         Notes ->
             notes
 
 
-sortNotes : List NoteMeta -> List NoteMeta
-sortNotes notes =
-    List.sortWith
-        (\a b ->
-            case ( a.id, b.id ) of
-                ( Nothing, Nothing ) ->
-                    compare (String.toLower a.title) (String.toLower b.title)
+showInToc : Maybe Int -> NoteMeta -> Bool
+showInToc maybeTocLevel note =
+    let
+        hasTocField =
+            note.tocTitle /= Nothing
 
-                ( Nothing, Just _ ) ->
-                    GT
+        noteLevel =
+            Maybe.withDefault 0 (note.id |> Maybe.map NoteId.level)
+    in
+    case maybeTocLevel of
+        Just tocLevel ->
+            hasTocField || (0 < noteLevel && noteLevel <= tocLevel)
 
-                ( Just _, Nothing ) ->
-                    LT
-
-                ( Just idA, Just idB ) ->
-                    NoteId.compareId idA idB
-        )
-        notes
+        Nothing ->
+            hasTocField
 
 
 handleFileRename : Model -> ( String, String ) -> ( Model, Cmd Msg )

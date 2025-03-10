@@ -1,6 +1,5 @@
 module Notes exposing
-    ( NoteWithSplit
-    , Notes
+    ( Notes
     , annotate
     , empty
     , filter
@@ -46,9 +45,9 @@ isEmpty (Notes notes) =
     List.isEmpty notes
 
 
-filter : (NoteWithSplit -> Bool) -> Notes -> Notes
+filter : (NoteMeta -> Bool) -> Notes -> Notes
 filter predicate (Notes notes) =
-    Notes (List.filter predicate notes)
+    Notes (List.filter (\noteWithSplit -> predicate noteWithSplit.note) notes)
 
 
 paths : Notes -> List String
@@ -125,17 +124,14 @@ splitChanges { oldNotes, newNotes } =
         |> paths
 
 
-splitHasChanged : { oldNoteMap : Dict String (Maybe Int), newNoteMap : Dict String (Maybe Int) } -> NoteWithSplit -> Bool
-splitHasChanged { oldNoteMap, newNoteMap } noteWithSplit =
+splitHasChanged : { oldNoteMap : Dict String (Maybe Int), newNoteMap : Dict String (Maybe Int) } -> NoteMeta -> Bool
+splitHasChanged { oldNoteMap, newNoteMap } note =
     let
-        filePath =
-            noteWithSplit.note.filePath
-
         oldSplit =
-            Dict.get filePath oldNoteMap
+            Dict.get note.filePath oldNoteMap
 
         newSplit =
-            Dict.get filePath newNoteMap
+            Dict.get note.filePath newNoteMap
     in
     oldSplit /= newSplit
 
