@@ -15,7 +15,7 @@ import NoteMeta exposing (NoteMeta)
 import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 import Task
-import Vault exposing (Vault, filteredContent)
+import Vault exposing (Vault)
 import VirtualList
 import VirtualList.Config
 
@@ -264,21 +264,9 @@ updateDisplay model newDisplay =
 
 handleSettingsChange : Model -> Ports.Settings -> ( Model, Cmd Msg )
 handleSettingsChange model portSettings =
-    let
-        transformedSettings =
-            Settings.fromPort portSettings
-
-        filteredNotes =
-            Vault.filteredContent transformedSettings model.vault
-
-        ( newModel, cmd ) =
-            updateNotes model filteredNotes []
-    in
-    ( { newModel
-        | settings = transformedSettings
-      }
-    , cmd
-    )
+    updateNotes
+        { model | settings = Settings.fromPort portSettings }
+        []
 
 
 updateVirtualList : Model -> ( Model, Cmd Msg )
@@ -398,9 +386,12 @@ getPathWithoutFileName filePath =
     String.join "/" withoutFileName
 
 
-updateNotes : Model -> List NoteMeta -> List String -> ( Model, Cmd Msg )
-updateNotes model newNotes changedNotes =
+updateNotes : Model -> List String -> ( Model, Cmd Msg )
+updateNotes model changedNotes =
     let
+        newNotes =
+            Vault.filteredContent model.settings model.vault
+
         annotatedNotes =
             annotateNotes (sortNotes newNotes)
 
@@ -527,11 +518,8 @@ handleFileRename model ( oldPath, newPath ) =
             else
                 ( updatedModel, Cmd.none )
 
-        notesAsList =
-            Vault.filteredContent model.settings updatedVault
-
         ( finalModel, listCmd ) =
-            updateNotes newModel notesAsList [ oldPath, newPath ]
+            updateNotes newModel [ oldPath, newPath ]
     in
     ( finalModel, Cmd.batch [ scrollCmd, listCmd ] )
 
@@ -764,14 +752,11 @@ handleRawFileMetas model rawMetas =
         vault =
             Vault.fill (fieldNames model.settings) rawMetas
 
-        includedNotes =
-            filteredContent model.settings vault
-
         changedFiles =
-            includedNotes
+            Vault.filteredContent model.settings vault
                 |> List.map .filePath
     in
-    updateNotes { model | vault = vault } includedNotes changedFiles
+    updateNotes { model | vault = vault } changedFiles
 
 
 handleNoteChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
@@ -785,11 +770,8 @@ handleNoteChange model rawMeta =
 
         updatedVault =
             Vault.insert changedNote model.vault
-
-        notesAsList =
-            Vault.filteredContent model.settings updatedVault
     in
-    updateNotes { model | vault = updatedVault } notesAsList [ changedNote.filePath ]
+    updateNotes { model | vault = updatedVault } [ changedNote.filePath ]
 
 
 fieldNames : Settings -> Metadata.FieldNames
@@ -802,11 +784,8 @@ handleFileDeleted model path =
     let
         updatedVault =
             Vault.remove path model.vault
-
-        notesAsList =
-            Vault.filteredContent model.settings updatedVault
     in
-    updateNotes { model | vault = updatedVault } notesAsList []
+    updateNotes { model | vault = updatedVault } []
 
 
 subscriptions : Model -> Sub Msg

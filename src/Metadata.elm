@@ -2,10 +2,8 @@ module Metadata exposing
     ( FieldNames
     , processMetadata
     , processRawNotes
-    , updateNoteCache
     )
 
-import Dict exposing (Dict)
 import Ports exposing (NoteMeta, RawFileMeta)
 import String
 
@@ -55,14 +53,3 @@ processMetadata fieldNames file =
     , id = id
     , filePath = file.path
     }
-
-
-{-| Update the note cache with a new or changed file
--}
-updateNoteCache : FieldNames -> Dict String NoteMeta -> RawFileMeta -> Dict String NoteMeta
-updateNoteCache fieldNames cache rawMeta =
-    let
-        noteMeta =
-            processMetadata fieldNames rawMeta
-    in
-    Dict.insert noteMeta.filePath noteMeta cache
