@@ -1,7 +1,5 @@
 import { IDSidePanelView } from "./view";
 import { IDSidePanelSettingTab } from "./settings";
-import { OpenNoteModal } from "./openNoteModal";
-import { AttachNoteModal } from "./attachNoteModal";
 import { ElmApp } from "/.elm";
 import { IDSidePanelSettings, DEFAULT_SETTINGS, NoteMeta } from "./types";
 import {
@@ -160,12 +158,11 @@ export default class IDSidePanelPlugin extends Plugin {
 			id: "note-search",
 			name: "Search notes by title, title of contents title or ID",
 			callback: () => {
-				new OpenNoteModal(
-					this.app,
-					this.settings.idField || ID_FIELD_DEFAULT,
-					this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
-					this.noteCache,
-				).open();
+				this.ensurePanelAndElmApp((elmApp) => {
+					if (elmApp.ports.receiveRequestSearch) {
+						elmApp.ports.receiveRequestSearch.send(null);
+					}
+				});
 			},
 		});
 
@@ -174,14 +171,11 @@ export default class IDSidePanelPlugin extends Plugin {
 			name: "Set note ID based on another note",
 			callback: () => {
 				this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
-					new AttachNoteModal(
-						this.app,
-						this.settings.idField || ID_FIELD_DEFAULT,
-						this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
-						this.noteCache,
-						currentNote,
-						elmApp,
-					).open();
+					if (elmApp.ports.receiveRequestAttach) {
+						elmApp.ports.receiveRequestAttach.send(
+							currentNote.path,
+						);
+					}
 				});
 			},
 		});
@@ -317,7 +311,6 @@ export default class IDSidePanelPlugin extends Plugin {
 		if (activePanelView) {
 			const elmApp = this.getElmApp();
 
-			// Send raw metadata to Elm if it's available and we have metadata to send
 			if (
 				elmApp &&
 				elmApp.ports.receiveRawFileMeta &&

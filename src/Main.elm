@@ -154,7 +154,8 @@ decodeActiveFile flags =
 
 
 type Msg
-    = ContextMenuTriggered Mouse.Event String
+    = AttachRequested String
+    | ContextMenuTriggered Mouse.Event String
     | DisplayChanged Bool
     | NewIdRequestedForNoteFromNote ( String, String, Bool )
     | NoteChangeReceived RawFileMeta
@@ -164,6 +165,7 @@ type Msg
     | NoteOpened (Maybe String)
     | NoteRenamed ( String, String )
     | RawFileMetaReceived (List RawFileMeta)
+    | SearchRequested
     | ScrollRequested String
     | SettingsChanged Ports.Settings
     | VirtualListMsg VirtualList.Msg
@@ -172,6 +174,14 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        AttachRequested currentNotePath ->
+            let
+                allNotes =
+                    Dict.values model.noteCache
+                        |> List.filter (\note -> note.filePath /= currentNotePath)
+            in
+            ( model, Ports.provideNotesForAttach ( currentNotePath, allNotes ) )
+
         ContextMenuTriggered event path ->
             let
                 ( x, y ) =
@@ -211,6 +221,9 @@ update msg model =
 
         RawFileMetaReceived rawMetas ->
             handleRawFileMetas model rawMetas
+
+        SearchRequested ->
+            ( model, Ports.provideNotesForSearch (Dict.values model.noteCache) )
 
         ScrollRequested path ->
             scrollToNote model path
@@ -888,6 +901,8 @@ subscriptions _ =
         , Ports.receiveFileChange NoteChangeReceived
         , Ports.receiveGetNewIdForNoteFromNote NewIdRequestedForNoteFromNote
         , Ports.receiveSettings SettingsChanged
+        , Ports.receiveRequestSearch (\_ -> SearchRequested)
+        , Ports.receiveRequestAttach AttachRequested
         ]
 
 

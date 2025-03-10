@@ -8,8 +8,12 @@ import {
 	setIcon,
 } from "obsidian";
 import IDSidePanelPlugin from "../main";
-import { ID_FIELD_DEFAULT, VIEW_TYPE_ID_PANEL } from "./constants";
+import { VIEW_TYPE_ID_PANEL } from "./constants";
 import { Elm, ElmApp } from "./Main.elm";
+import { OpenNoteModal } from "./openNoteModal";
+import { AttachNoteModal } from "./attachNoteModal";
+import { NoteMeta } from "./types";
+import { PortNoteMeta } from "/.elm";
 
 export class IDSidePanelView extends ItemView {
 	plugin: IDSidePanelPlugin;
@@ -168,6 +172,52 @@ export class IDSidePanelView extends ItemView {
 				}
 			}),
 		);
+
+		this.elmApp.ports.provideNotesForSearch.subscribe((notes) => {
+			new OpenNoteModal(
+				this.app,
+				this.plugin.getSettings().idField,
+				this.plugin.getSettings().tocField,
+				this.mapPortNoteMeta(notes),
+			).open();
+		});
+
+		this.elmApp.ports.provideNotesForAttach.subscribe(
+			([currentPath, notes]) => {
+				const currentFile = this.app.vault.getAbstractFileByPath(
+					normalizePath(currentPath),
+				);
+				if (currentFile instanceof TFile && this.elmApp) {
+					new AttachNoteModal(
+						this.app,
+						this.plugin.getSettings().idField,
+						this.plugin.getSettings().tocField,
+						this.mapPortNoteMeta(notes),
+						currentFile,
+						this.elmApp,
+					).open();
+				}
+			},
+		);
+	}
+
+	mapPortNoteMeta(notes: PortNoteMeta[]): Map<string, NoteMeta> {
+		const noteMap = new Map<string, NoteMeta>();
+
+		notes.forEach((note) => {
+			const file = this.app.vault.getAbstractFileByPath(
+				normalizePath(note.filePath),
+			);
+			if (file instanceof TFile) {
+				noteMap.set(note.filePath, {
+					title: note.title,
+					tocTitle: note.tocTitle,
+					id: note.id,
+					file: file,
+				});
+			}
+		});
+		return noteMap;
 	}
 
 	getUniqueFilePath(path: string) {
@@ -197,7 +247,7 @@ export class IDSidePanelView extends ItemView {
 			new Notice("Couldn't update note");
 			return;
 		}
-		const idField = this.plugin.settings.idField || ID_FIELD_DEFAULT;
+		const idField = this.plugin.getSettings().idField;
 
 		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			frontmatter[idField] = newValue;

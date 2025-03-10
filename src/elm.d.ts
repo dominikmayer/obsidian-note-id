@@ -1,5 +1,5 @@
 declare module "*.elm" {
-	export interface NoteMeta {
+	export interface PortNoteMeta {
 		title: string;
 		tocTitle: string | null;
 		id: string | null;
@@ -31,6 +31,7 @@ declare module "*.elm" {
 
 	export interface ElmApp {
 		ports: {
+			// Outgoing ports (Elm to TypeScript)
 			createNote: {
 				subscribe(callback: (data: [string, string]) => void): void;
 			};
@@ -45,9 +46,19 @@ declare module "*.elm" {
 			provideNewIdForNote: {
 				subscribe(callback: (data: [string, string]) => void): void;
 			};
+			provideNotesForAttach: {
+				subscribe(
+					callback: (data: [string, PortNoteMeta[]]) => void,
+				): void;
+			};
+			provideNotesForSearch: {
+				subscribe(callback: (data: PortNoteMeta[]) => void): void;
+			};
 			toggleTOCButton: {
 				subscribe(callback: (flag: boolean) => void): void;
 			};
+
+			// Incoming ports (TypeScript to Elm)
 			receiveFileOpen: {
 				send(data: string | null): void;
 			};
@@ -71,6 +82,12 @@ declare module "*.elm" {
 			};
 			receiveGetNewIdForNoteFromNote: {
 				send(data: [string, string, boolean]): void;
+			};
+			receiveRequestAttach: {
+				send(data: string): void;
+			};
+			receiveRequestSearch: {
+				send(data: null): void;
 			};
 			receiveSettings: {
 				send(data: Settings): void;
