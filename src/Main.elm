@@ -156,14 +156,14 @@ decodeActiveFile flags =
 type Msg
     = ContextMenuTriggered Mouse.Event String
     | DisplayChanged Bool
-    | FileOpened (Maybe String)
-    | FileRenamed ( String, String )
-    | FileDeleted String
     | NewIdRequestedForNoteFromNote ( String, String, Bool )
+    | NoteChangeReceived RawFileMeta
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
+    | NoteDeleted String
+    | NoteOpened (Maybe String)
+    | NoteRenamed ( String, String )
     | RawFileMetaReceived (List RawFileMeta)
-    | FileChangeReceived RawFileMeta
     | ScrollRequested String
     | SettingsChanged Ports.Settings
     | VirtualListMsg VirtualList.Msg
@@ -182,15 +182,6 @@ update msg model =
         DisplayChanged tocShown ->
             handleDisplayChange model tocShown
 
-        FileOpened filePath ->
-            fileOpened model filePath
-
-        FileRenamed paths ->
-            handleFileRename model paths
-
-        FileDeleted path ->
-            handleFileDeleted model path
-
         NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
             let
                 cmd =
@@ -200,17 +191,26 @@ update msg model =
             in
             ( model, cmd )
 
-        NoteCreationRequested ( filePath, child ) ->
-            createNote model filePath child
+        NoteChangeReceived rawMeta ->
+            handleNoteChange model rawMeta
 
         NoteClicked filePath ->
             handleNoteClick model filePath
 
+        NoteCreationRequested ( filePath, child ) ->
+            createNote model filePath child
+
+        NoteDeleted path ->
+            handleFileDeleted model path
+
+        NoteOpened filePath ->
+            fileOpened model filePath
+
+        NoteRenamed paths ->
+            handleFileRename model paths
+
         RawFileMetaReceived rawMetas ->
             handleRawFileMetas model rawMetas
-
-        FileChangeReceived rawMeta ->
-            handleFileChange model rawMeta
 
         ScrollRequested path ->
             scrollToNote model path
@@ -844,8 +844,8 @@ handleRawFileMetas model rawMetas =
     updateNotes { model | noteCache = updatedNoteCache } notesWithoutPaths changedFiles
 
 
-handleFileChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
-handleFileChange model rawMeta =
+handleNoteChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
+handleNoteChange model rawMeta =
     let
         updatedNoteCache =
             Metadata.updateNoteCache model.settings model.noteCache rawMeta
@@ -881,11 +881,11 @@ subscriptions _ =
     Sub.batch
         [ Ports.receiveCreateNote NoteCreationRequested
         , Ports.receiveDisplayIsToc DisplayChanged
-        , Ports.receiveFileOpen FileOpened
-        , Ports.receiveFileRenamed FileRenamed
-        , Ports.receiveFileDeleted FileDeleted
+        , Ports.receiveFileOpen NoteOpened
+        , Ports.receiveFileRenamed NoteRenamed
+        , Ports.receiveFileDeleted NoteDeleted
         , Ports.receiveRawFileMeta RawFileMetaReceived
-        , Ports.receiveFileChange FileChangeReceived
+        , Ports.receiveFileChange NoteChangeReceived
         , Ports.receiveGetNewIdForNoteFromNote NewIdRequestedForNoteFromNote
         , Ports.receiveSettings SettingsChanged
         ]
