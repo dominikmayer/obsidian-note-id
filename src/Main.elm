@@ -50,13 +50,13 @@ type Display
 
 
 type alias Model =
-    { notes : List NoteWithSplit
+    { includedNotes : List NoteWithSplit
     , currentFile : Maybe String
     , settings : Settings
     , scrollToNewlyOpenedNote : Bool
     , display : Display
     , virtualList : VirtualList.Model
-    , noteCache : Dict String NoteMeta
+    , allNotes : Dict String NoteMeta
     }
 
 
@@ -67,13 +67,13 @@ defaultModel =
             VirtualList.Config.default
                 |> VirtualList.Config.setBuffer 10
     in
-    { notes = []
+    { includedNotes = []
     , currentFile = Nothing
     , settings = defaultSettings
     , scrollToNewlyOpenedNote = True
     , display = Notes
     , virtualList = VirtualList.initWithConfig config
-    , noteCache = Dict.empty
+    , allNotes = Dict.empty
     }
 
 
@@ -177,7 +177,7 @@ update msg model =
         AttachRequested currentNotePath ->
             let
                 allNotes =
-                    Dict.values model.noteCache
+                    Dict.values model.allNotes
                         |> List.filter (\note -> note.filePath /= currentNotePath)
             in
             ( model, Ports.provideNotesForAttach ( currentNotePath, allNotes ) )
@@ -195,7 +195,7 @@ update msg model =
         NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
             let
                 cmd =
-                    getNewIdFromNote model.notes from subsequence
+                    getNewIdFromNote model.includedNotes from subsequence
                         |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, for ))
                         |> Maybe.withDefault Cmd.none
             in
@@ -223,7 +223,7 @@ update msg model =
             handleRawFileMetas model rawMetas
 
         SearchRequested ->
-            ( model, Ports.provideNotesForSearch (Dict.values model.noteCache) )
+            ( model, Ports.provideNotesForSearch (Dict.values model.allNotes) )
 
         ScrollRequested path ->
             scrollToNote model path
@@ -326,7 +326,7 @@ handleSettingsChange model portSettings =
             }
 
         filteredNotes =
-            Dict.values model.noteCache |> filterNotesAccordingToSettings transformedSettings
+            Dict.values model.allNotes |> filterNotesAccordingToSettings transformedSettings
 
         ( newModel, cmd ) =
             updateNotes model filteredNotes []
@@ -342,7 +342,7 @@ updateVirtualList : Model -> ( Model, Cmd Msg )
 updateVirtualList model =
     let
         ids =
-            model.notes
+            model.includedNotes
                 |> List.map (.note >> .filePath)
     in
     updateVirtualListHelper model ids
@@ -352,7 +352,7 @@ updateVirtualListHelper : Model -> List String -> ( Model, Cmd Msg )
 updateVirtualListHelper model idsToRemeasure =
     let
         filteredNotes =
-            filterNotesForDisplay model.display model.settings.tocLevel model.notes
+            filterNotesForDisplay model.display model.settings.tocLevel model.includedNotes
 
         ids =
             filteredNotes
@@ -380,7 +380,7 @@ createNote model path child =
             getPathWithoutFileName path ++ "/Untitled.md"
 
         fileContent =
-            getNewIdFromNote model.notes path child
+            getNewIdFromNote model.includedNotes path child
                 |> Maybe.map (createNoteContent model.settings.idField)
                 |> Maybe.withDefault ""
     in
@@ -462,19 +462,19 @@ updateNotes model newNotes changedNotes =
             annotateNotes (sortNotes newNotes)
 
         affectedIds =
-            if List.isEmpty model.notes then
+            if List.isEmpty model.includedNotes then
                 -- On initial load, all new notes need to be measured
                 List.map (.note >> .filePath) annotatedNotes
 
             else
                 let
                     changedSplitIds =
-                        findNotesWithSplitChanges { oldNotes = model.notes, newNotes = annotatedNotes }
+                        findNotesWithSplitChanges { oldNotes = model.includedNotes, newNotes = annotatedNotes }
                 in
                 List.append changedSplitIds changedNotes
 
         modelWithSortedNotes =
-            { model | notes = annotatedNotes }
+            { model | includedNotes = annotatedNotes }
 
         ( modelWithUpdatedVirtualList, cmd ) =
             updateVirtualListHelper modelWithSortedNotes affectedIds
@@ -569,24 +569,24 @@ handleFileRename model ( oldPath, newPath ) =
             updateCurrentFile model.currentFile oldPath newPath
 
         updatedNoteCache =
-            case Dict.get oldPath model.noteCache of
+            case Dict.get oldPath model.allNotes of
                 Just note ->
                     let
                         updatedNote =
                             { note | filePath = newPath, title = getBaseName newPath }
                     in
-                    model.noteCache
+                    model.allNotes
                         |> Dict.remove oldPath
                         |> Dict.insert newPath updatedNote
 
                 Nothing ->
-                    model.noteCache
+                    model.allNotes
 
         oldCurrentFile =
             model.currentFile
 
         updatedModel =
-            { model | currentFile = updatedCurrentFile, noteCache = updatedNoteCache }
+            { model | currentFile = updatedCurrentFile, allNotes = updatedNoteCache }
 
         ( newModel, scrollCmd ) =
             if oldCurrentFile == Just oldPath then
@@ -735,7 +735,7 @@ view model =
 
 renderRow : Model -> String -> Html Msg
 renderRow model filePath =
-    case getNoteByPath filePath model.notes of
+    case getNoteByPath filePath model.includedNotes of
         Just noteWithSplit ->
             renderNote model noteWithSplit.note noteWithSplit.splitLevel
 
@@ -857,7 +857,7 @@ handleRawFileMetas model rawMetas =
             processedNotes
                 |> List.map .filePath
     in
-    updateNotes { model | noteCache = updatedNoteCache } includedNotes changedFiles
+    updateNotes { model | allNotes = updatedNoteCache } includedNotes changedFiles
 
 
 filterNotesAccordingToSettings : Settings -> List NoteMeta -> List NoteMeta
@@ -907,7 +907,7 @@ handleNoteChange model rawMeta =
             fieldNames model.settings
 
         updatedNoteCache =
-            Metadata.updateNoteCache fields model.noteCache rawMeta
+            Metadata.updateNoteCache fields model.allNotes rawMeta
 
         changedNote =
             Metadata.processMetadata fields rawMeta
@@ -915,7 +915,7 @@ handleNoteChange model rawMeta =
         notesAsList =
             Dict.values updatedNoteCache
     in
-    updateNotes { model | noteCache = updatedNoteCache } notesAsList [ changedNote.filePath ]
+    updateNotes { model | allNotes = updatedNoteCache } notesAsList [ changedNote.filePath ]
 
 
 fieldNames : Settings -> Metadata.FieldNames
@@ -927,12 +927,12 @@ handleFileDeleted : Model -> String -> ( Model, Cmd Msg )
 handleFileDeleted model path =
     let
         updatedNoteCache =
-            Dict.remove path model.noteCache
+            Dict.remove path model.allNotes
 
         notesAsList =
             Dict.values updatedNoteCache
     in
-    updateNotes { model | noteCache = updatedNoteCache } notesAsList []
+    updateNotes { model | allNotes = updatedNoteCache } notesAsList []
 
 
 subscriptions : Model -> Sub Msg
