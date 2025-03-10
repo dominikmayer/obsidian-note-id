@@ -12,21 +12,13 @@ import Json.Encode as Encode
 import Metadata
 import NoteId
 import NoteMeta exposing (NoteMeta)
+import Notes exposing (NoteWithSplit, Notes)
 import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 import Task
 import Vault exposing (Vault)
 import VirtualList
 import VirtualList.Config
-
-
-
--- CONSTANTS
-
-
-uniqueIdRetries : Int
-uniqueIdRetries =
-    50
 
 
 
@@ -53,7 +45,7 @@ type DisplayMode
 
 
 type alias Model =
-    { includedNotes : List NoteWithSplit
+    { includedNotes : Notes
     , currentFile : Maybe String
     , settings : Settings
     , scrollToNewlyOpenedNote : Bool
@@ -70,19 +62,13 @@ defaultModel =
             VirtualList.Config.default
                 |> VirtualList.Config.setBuffer 10
     in
-    { includedNotes = []
+    { includedNotes = Notes.empty
     , currentFile = Nothing
     , settings = Settings.default
     , scrollToNewlyOpenedNote = True
     , currentDisplayMode = Notes
     , virtualList = VirtualList.initWithConfig config
     , vault = Vault.empty
-    }
-
-
-type alias NoteWithSplit =
-    { note : NoteMeta
-    , splitLevel : Maybe Int
     }
 
 
@@ -151,7 +137,7 @@ update msg model =
         NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
             let
                 cmd =
-                    getNewIdFromNote model.includedNotes from subsequence
+                    Notes.getNewIdFromNote model.includedNotes from subsequence
                         |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, for ))
                         |> Maybe.withDefault Cmd.none
             in
@@ -273,8 +259,7 @@ updateVirtualList : Model -> ( Model, Cmd Msg )
 updateVirtualList model =
     let
         ids =
-            model.includedNotes
-                |> List.map (.note >> .filePath)
+            Notes.paths model.includedNotes
     in
     updateVirtualListHelper model ids
 
@@ -286,8 +271,7 @@ updateVirtualListHelper model idsToRemeasure =
             filterNotesForDisplay model.currentDisplayMode model.settings.tocLevel model.includedNotes
 
         ids =
-            filteredNotes
-                |> List.map (.note >> .filePath)
+            Notes.paths filteredNotes
 
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = idsToRemeasure }
@@ -311,54 +295,11 @@ createNote model path child =
             getPathWithoutFileName path ++ "/Untitled.md"
 
         fileContent =
-            getNewIdFromNote model.includedNotes path child
+            Notes.getNewIdFromNote model.includedNotes path child
                 |> Maybe.map (createNoteContent model.settings.idField)
                 |> Maybe.withDefault ""
     in
     ( model, Ports.createNote ( newPath, fileContent ) )
-
-
-getNewIdFromNote : List NoteWithSplit -> String -> Bool -> Maybe String
-getNewIdFromNote notes path child =
-    let
-        id =
-            getNoteByPath path notes
-                |> Maybe.andThen (\noteWithSplit -> noteWithSplit.note.id)
-    in
-    Maybe.map (getId child) id
-        |> Maybe.andThen (getUniqueId notes)
-
-
-getId : Bool -> String -> String
-getId child id =
-    if child then
-        NoteId.getNewIdInSubsequence id
-
-    else
-        NoteId.getNewIdInSequence id
-
-
-getUniqueId : List NoteWithSplit -> String -> Maybe String
-getUniqueId notes id =
-    -- Prevents infinite loops
-    generateUniqueId notes id uniqueIdRetries
-
-
-generateUniqueId : List NoteWithSplit -> String -> Int -> Maybe String
-generateUniqueId notes id remainingAttempts =
-    if remainingAttempts <= 0 then
-        Nothing
-
-    else if isNoteIdTaken notes id then
-        generateUniqueId notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
-
-    else
-        Just id
-
-
-isNoteIdTaken : List NoteWithSplit -> String -> Bool
-isNoteIdTaken notes noteId =
-    List.any (\noteWithSplit -> noteWithSplit.note.id == Just noteId) notes
 
 
 createNoteContent : String -> String -> String
@@ -393,17 +334,17 @@ updateNotes model changedNotes =
             Vault.filteredContent model.settings model.vault
 
         annotatedNotes =
-            annotateNotes (sortNotes newNotes)
+            Notes.annotate (sortNotes newNotes)
 
         affectedIds =
-            if List.isEmpty model.includedNotes then
+            if Notes.isEmpty model.includedNotes then
                 -- On initial load, all new notes need to be measured
-                List.map (.note >> .filePath) annotatedNotes
+                Notes.paths annotatedNotes
 
             else
                 let
                     changedSplitIds =
-                        findNotesWithSplitChanges { oldNotes = model.includedNotes, newNotes = annotatedNotes }
+                        Notes.splitChanges { oldNotes = model.includedNotes, newNotes = annotatedNotes }
                 in
                 List.append changedSplitIds changedNotes
 
@@ -416,45 +357,11 @@ updateNotes model changedNotes =
     ( modelWithUpdatedVirtualList, cmd )
 
 
-findNotesWithSplitChanges : { oldNotes : List NoteWithSplit, newNotes : List NoteWithSplit } -> List String
-findNotesWithSplitChanges { oldNotes, newNotes } =
-    newNotes
-        |> List.filter
-            (splitHasChanged
-                { oldNoteMap = createSplitMap oldNotes
-                , newNoteMap = createSplitMap newNotes
-                }
-            )
-        |> List.map (.note >> .filePath)
-
-
-createSplitMap : List NoteWithSplit -> Dict String (Maybe Int)
-createSplitMap notes =
-    notes
-        |> List.map (\noteWithSplit -> ( noteWithSplit.note.filePath, noteWithSplit.splitLevel ))
-        |> Dict.fromList
-
-
-splitHasChanged : { oldNoteMap : Dict String (Maybe Int), newNoteMap : Dict String (Maybe Int) } -> NoteWithSplit -> Bool
-splitHasChanged { oldNoteMap, newNoteMap } noteWithSplit =
-    let
-        filePath =
-            noteWithSplit.note.filePath
-
-        oldSplit =
-            Dict.get filePath oldNoteMap
-
-        newSplit =
-            Dict.get filePath newNoteMap
-    in
-    oldSplit /= newSplit
-
-
-filterNotesForDisplay : DisplayMode -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
+filterNotesForDisplay : DisplayMode -> Maybe Int -> Notes -> Notes
 filterNotesForDisplay display maybeTocLevel notes =
     case display of
         TOC ->
-            List.filter
+            Notes.filter
                 (\noteWithSplit ->
                     let
                         hasTocField =
@@ -533,13 +440,6 @@ updateCurrentFile current oldPath newPath =
         current
 
 
-getNoteByPath : String -> List NoteWithSplit -> Maybe NoteWithSplit
-getNoteByPath path notes =
-    notes
-        |> List.filter (\noteWithSplit -> noteWithSplit.note.filePath == path)
-        |> List.head
-
-
 fileOpened : Model -> Maybe String -> ( Model, Cmd Msg )
 fileOpened model filePath =
     case filePath of
@@ -585,55 +485,6 @@ scrollToCurrentNote model =
 -- VIEW
 
 
-annotateNotes : List NoteMeta -> List NoteWithSplit
-annotateNotes notes =
-    let
-        annotate xs =
-            case xs of
-                [] ->
-                    []
-
-                first :: rest ->
-                    let
-                        initialSplit =
-                            case first.id of
-                                Nothing ->
-                                    Just 1
-
-                                Just _ ->
-                                    Nothing
-                    in
-                    { note = first, splitLevel = initialSplit }
-                        :: annotateRest first rest
-
-        annotateRest prev xs =
-            case xs of
-                [] ->
-                    []
-
-                current :: rest ->
-                    let
-                        computedSplit =
-                            case ( prev.id, current.id ) of
-                                ( Just prevId, Just currId ) ->
-                                    NoteId.splitLevel prevId currId
-
-                                ( Just _, Nothing ) ->
-                                    Just 1
-
-                                ( Nothing, Just _ ) ->
-                                    Just 1
-
-                                ( Nothing, Nothing ) ->
-                                    -- If two consecutive notes lack an id, assume they belong to the same block.
-                                    Nothing
-                    in
-                    { note = current, splitLevel = computedSplit }
-                        :: annotateRest current rest
-    in
-    annotate notes
-
-
 view : Model -> Html Msg
 view model =
     VirtualList.view (lazy (renderRow model)) model.virtualList VirtualListMsg
@@ -641,7 +492,7 @@ view model =
 
 renderRow : Model -> String -> Html Msg
 renderRow model filePath =
-    case getNoteByPath filePath model.includedNotes of
+    case Notes.getNoteByPath filePath model.includedNotes of
         Just noteWithSplit ->
             renderNote model noteWithSplit.note noteWithSplit.splitLevel
 
