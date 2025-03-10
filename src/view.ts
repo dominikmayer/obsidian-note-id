@@ -201,7 +201,7 @@ export class IDSidePanelView extends ItemView {
 		);
 	}
 
-	mapPortNoteMeta(notes: PortNoteMeta[]): Map<string, NoteMeta> {
+	private mapPortNoteMeta(notes: PortNoteMeta[]): Map<string, NoteMeta> {
 		const noteMap = new Map<string, NoteMeta>();
 
 		notes.forEach((note) => {
@@ -220,7 +220,7 @@ export class IDSidePanelView extends ItemView {
 		return noteMap;
 	}
 
-	getUniqueFilePath(path: string) {
+	private getUniqueFilePath(path: string) {
 		let counter = 1;
 		const ext = path.includes(".")
 			? path.substring(path.lastIndexOf("."))

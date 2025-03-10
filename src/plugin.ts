@@ -1,7 +1,7 @@
 import { IDSidePanelView } from "./view";
 import { IDSidePanelSettingTab } from "./settings";
 import { ElmApp } from "/.elm";
-import { IDSidePanelSettings, DEFAULT_SETTINGS, NoteMeta } from "./types";
+import { IDSidePanelSettings, DEFAULT_SETTINGS } from "./types";
 import {
 	VIEW_TYPE_ID_PANEL,
 	ID_FIELD_DEFAULT,
@@ -11,7 +11,6 @@ import { Plugin, Notice, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 
 export default class IDSidePanelPlugin extends Plugin {
 	settings: IDSidePanelSettings;
-	noteCache: Map<string, NoteMeta> = new Map();
 	private rawMetadata: Array<{
 		path: string;
 		basename: string;
@@ -50,7 +49,6 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	async initializeCache() {
-		this.noteCache.clear();
 		const markdownFiles = this.app.vault.getMarkdownFiles();
 
 		// Extract raw metadata from all files
@@ -104,7 +102,6 @@ export default class IDSidePanelPlugin extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("rename", async (file, oldPath) => {
-				this.noteCache.delete(oldPath);
 				await this.handleFileChange(file);
 				// Sending this after the files are reloaded so scrolling works
 				const elmApp = this.getElmApp();
