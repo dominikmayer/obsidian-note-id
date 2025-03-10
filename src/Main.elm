@@ -552,14 +552,51 @@ handleFileRename model ( oldPath, newPath ) =
         updatedCurrentFile =
             updateCurrentFile model.currentFile oldPath newPath
 
-        ( newModel, cmd ) =
-            if model.currentFile == Just oldPath then
-                scrollToNote model newPath
+        updatedNoteCache =
+            case Dict.get oldPath model.noteCache of
+                Just note ->
+                    let
+                        updatedNote =
+                            { note | filePath = newPath, title = getBaseName newPath }
+                    in
+                    model.noteCache
+                        |> Dict.remove oldPath
+                        |> Dict.insert newPath updatedNote
+
+                Nothing ->
+                    model.noteCache
+
+        oldCurrentFile =
+            model.currentFile
+
+        updatedModel =
+            { model | currentFile = updatedCurrentFile, noteCache = updatedNoteCache }
+
+        ( newModel, scrollCmd ) =
+            if oldCurrentFile == Just oldPath then
+                scrollToNote updatedModel newPath
 
             else
-                ( model, Cmd.none )
+                ( updatedModel, Cmd.none )
+
+        notesAsList =
+            Dict.values updatedNoteCache
+
+        ( finalModel, listCmd ) =
+            updateNotes newModel notesAsList [ oldPath, newPath ]
     in
-    ( { newModel | currentFile = updatedCurrentFile }, cmd )
+    ( finalModel, Cmd.batch [ scrollCmd, listCmd ] )
+
+
+getBaseName : String -> String
+getBaseName path =
+    path
+        |> String.replace "\\" "/"
+        |> String.split "/"
+        |> List.reverse
+        |> List.head
+        |> Maybe.withDefault ""
+        |> String.replace ".md" ""
 
 
 updateCurrentFile : Maybe String -> String -> String -> Maybe String
