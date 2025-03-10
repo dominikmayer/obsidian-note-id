@@ -762,11 +762,8 @@ handleRawFileMetas model rawMetas =
 handleNoteChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
 handleNoteChange model rawMeta =
     let
-        fields =
-            fieldNames model.settings
-
         changedNote =
-            Metadata.processMetadata fields rawMeta
+            Metadata.processMetadata (fieldNames model.settings) rawMeta
 
         updatedVault =
             Vault.insert changedNote model.vault
