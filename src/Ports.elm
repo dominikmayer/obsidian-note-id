@@ -37,9 +37,6 @@ port receiveFileOpen : (Maybe String -> msg) -> Sub msg
 port receiveGetNewIdForNoteFromNote : (( String, String, Bool ) -> msg) -> Sub msg
 
 
-port receiveNotes : (( List NoteMeta, List String ) -> msg) -> Sub msg
-
-
 port receiveRawFileMeta : (List RawFileMeta -> msg) -> Sub msg
 
 

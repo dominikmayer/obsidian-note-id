@@ -129,10 +129,6 @@ init flags =
     scrollToCurrentNote model
 
 
-
--- ( model, Cmd.none )
-
-
 decodeSettings : Settings -> Decode.Value -> Settings
 decodeSettings settings newSettings =
     case Decode.decodeValue (Decode.field "settings" partialSettingsDecoder) newSettings of
@@ -166,7 +162,6 @@ type Msg
     | NewIdRequestedForNoteFromNote ( String, String, Bool )
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
-    | NotesProvided ( List NoteMeta, List String )
     | RawFileMetaReceived (List RawFileMeta)
     | FileChangeReceived RawFileMeta
     | ScrollRequested String
@@ -210,9 +205,6 @@ update msg model =
 
         NoteClicked filePath ->
             handleNoteClick model filePath
-
-        NotesProvided ( notes, changedNotes ) ->
-            updateNotes model notes changedNotes
 
         RawFileMetaReceived rawMetas ->
             handleRawFileMetas model rawMetas
@@ -850,8 +842,7 @@ handleFileDeleted model path =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Ports.receiveNotes NotesProvided
-        , Ports.receiveCreateNote NoteCreationRequested
+        [ Ports.receiveCreateNote NoteCreationRequested
         , Ports.receiveDisplayIsToc DisplayChanged
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed

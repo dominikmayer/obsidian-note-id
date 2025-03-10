@@ -48,9 +48,6 @@ declare module "*.elm" {
 			toggleTOCButton: {
 				subscribe(callback: (flag: boolean) => void): void;
 			};
-			receiveNotes: {
-				send(data: [NoteMeta[], string[]]): void;
-			};
 			receiveFileOpen: {
 				send(data: string | null): void;
 			};

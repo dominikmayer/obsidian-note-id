@@ -1,6 +1,6 @@
 module Metadata exposing
-    ( processRawNotes
-    , processMetadata
+    ( processMetadata
+    , processRawNotes
     , updateNoteCache
     )
 
@@ -37,7 +37,10 @@ processMetadata : Settings -> RawFileMeta -> Maybe NoteMeta
 processMetadata settings file =
     let
         filePath =
-            String.toLower file.path
+            file.path
+                |> String.replace "\\" "/"
+                -- convert Windows backslashes to forward slashes
+                |> String.toLower
 
         -- Normalize folder paths to remove trailing slashes and convert to lowercase
         normInclude =
@@ -68,7 +71,7 @@ processMetadata settings file =
         -- Find a value in the frontmatter list by key
         findInFrontmatter key fm =
             fm
-                |> List.filter (\(k, _) -> k == key)
+                |> List.filter (\( k, _ ) -> k == key)
                 |> List.head
                 |> Maybe.map Tuple.second
 
