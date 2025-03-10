@@ -3,6 +3,7 @@ module Vault exposing (Vault, empty, fill, filteredContent, insert, remove, rena
 import Dict exposing (Dict)
 import Metadata exposing (FieldNames)
 import NoteMeta exposing (NoteMeta)
+import Path exposing (Path(..))
 import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 
@@ -24,7 +25,7 @@ fill : FieldNames -> List RawFileMeta -> Vault
 fill fieldNames notes =
     notes
         |> Metadata.processRawNotes fieldNames
-        |> List.foldl (\note cache -> Dict.insert note.filePath note cache) Dict.empty
+        |> List.foldl (\note cache -> Dict.insert (Path.toString note.filePath) note cache) Dict.empty
         |> Vault
 
 
@@ -50,6 +51,7 @@ isIncluded settings note =
     let
         filePath =
             note.filePath
+                |> Path.toString
                 |> String.replace "\\" "/"
                 -- convert Windows backslashes to forward slashes
                 |> String.toLower
@@ -79,25 +81,25 @@ isIncluded settings note =
         True
 
 
-rename : Vault -> { oldPath : String, newPath : String } -> Vault
+rename : Vault -> { oldPath : Path, newPath : Path } -> Vault
 rename (Vault vault) { oldPath, newPath } =
-    case Dict.get oldPath vault of
+    case Dict.get (Path.toString oldPath) vault of
         Just note ->
             let
                 updatedNote =
                     { note | filePath = newPath, title = getBaseName newPath }
             in
             vault
-                |> Dict.remove oldPath
-                |> Dict.insert newPath updatedNote
+                |> Dict.remove (Path.toString oldPath)
+                |> Dict.insert (Path.toString newPath) updatedNote
                 |> Vault
 
         Nothing ->
             Vault vault
 
 
-getBaseName : String -> String
-getBaseName path =
+getBaseName : Path -> String
+getBaseName (Path path) =
     path
         |> String.replace "\\" "/"
         |> String.split "/"
@@ -107,15 +109,15 @@ getBaseName path =
         |> String.replace ".md" ""
 
 
-remove : String -> Vault -> Vault
+remove : Path -> Vault -> Vault
 remove path (Vault vault) =
     vault
-        |> Dict.remove path
+        |> Dict.remove (Path.toString path)
         |> Vault
 
 
 insert : NoteMeta -> Vault -> Vault
 insert meta (Vault vault) =
     vault
-        |> Dict.insert meta.filePath meta
+        |> Dict.insert (Path.toString meta.filePath) meta
         |> Vault

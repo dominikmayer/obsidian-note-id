@@ -4,7 +4,9 @@ module Metadata exposing
     , processRawNotes
     )
 
-import Ports exposing (NoteMeta, RawFileMeta)
+import NoteMeta exposing (NoteMeta)
+import Path exposing (Path(..))
+import Ports exposing (RawFileMeta)
 import String
 
 
@@ -51,5 +53,5 @@ processMetadata fieldNames file =
     { title = file.basename
     , tocTitle = tocTitle
     , id = id
-    , filePath = file.path
+    , filePath = Path file.path
     }

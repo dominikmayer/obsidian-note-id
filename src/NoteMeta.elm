@@ -1,13 +1,24 @@
-module NoteMeta exposing (NoteMeta, sort)
+module NoteMeta exposing (NoteMeta, forPort, sort)
 
 import NoteId
+import Path exposing (Path)
+import Ports
 
 
 type alias NoteMeta =
     { title : String
     , tocTitle : Maybe String
     , id : Maybe String
-    , filePath : String
+    , filePath : Path
+    }
+
+
+forPort : NoteMeta -> Ports.NoteMeta
+forPort note =
+    { title = note.title
+    , tocTitle = note.tocTitle
+    , id = note.id
+    , filePath = Path.toString note.filePath
     }
 
 

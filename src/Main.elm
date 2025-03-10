@@ -13,6 +13,7 @@ import Metadata
 import NoteId
 import NoteMeta exposing (NoteMeta)
 import Notes exposing (Notes)
+import Path exposing (Path(..))
 import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 import Task
@@ -46,7 +47,7 @@ type DisplayMode
 
 type alias Model =
     { includedNotes : Notes
-    , currentFile : Maybe String
+    , currentFile : Maybe Path
     , settings : Settings
     , scrollToNewlyOpenedNote : Bool
     , currentDisplayMode : DisplayMode
@@ -85,10 +86,11 @@ init flags =
     scrollToCurrentNote model
 
 
-decodeActiveFile : Encode.Value -> Maybe String
+decodeActiveFile : Encode.Value -> Maybe Path
 decodeActiveFile flags =
     Decode.decodeValue (Decode.field "activeFile" Decode.string) flags
         |> Result.toMaybe
+        |> Maybe.map Path
 
 
 
@@ -96,19 +98,19 @@ decodeActiveFile flags =
 
 
 type Msg
-    = AttachRequested String
-    | ContextMenuTriggered Mouse.Event String
+    = AttachRequested Path
+    | ContextMenuTriggered Mouse.Event Path
     | DisplayChanged Bool
-    | NewIdRequestedForNoteFromNote ( String, String, Bool )
+    | NewIdRequestedForNoteFromNote ( Path, Path, Bool )
     | NoteChangeReceived RawFileMeta
-    | NoteClicked String
-    | NoteCreationRequested ( String, Bool )
-    | NoteDeleted String
-    | NoteOpened (Maybe String)
-    | NoteRenamed ( String, String )
+    | NoteClicked Path
+    | NoteCreationRequested ( Path, Bool )
+    | NoteDeleted Path
+    | NoteOpened (Maybe Path)
+    | NoteRenamed ( Path, Path )
     | RawFileMetaReceived (List RawFileMeta)
     | SearchRequested
-    | ScrollRequested String
+    | ScrollRequested Path
     | SettingsChanged Ports.Settings
     | VirtualListMsg VirtualList.Msg
 
@@ -121,15 +123,16 @@ update msg model =
                 allNotes =
                     Vault.filteredContent model.settings model.vault
                         |> List.filter (\note -> note.filePath /= currentNotePath)
+                        |> List.map NoteMeta.forPort
             in
-            ( model, Ports.provideNotesForAttach ( currentNotePath, allNotes ) )
+            ( model, Ports.provideNotesForAttach ( Path.toString currentNotePath, allNotes ) )
 
         ContextMenuTriggered event path ->
             let
                 ( x, y ) =
                     event.clientPos
             in
-            ( model, Ports.openContextMenu ( x, y, path ) )
+            ( model, Ports.openContextMenu ( x, y, Path.toString path ) )
 
         DisplayChanged tocShown ->
             handleDisplayChange model tocShown
@@ -138,7 +141,7 @@ update msg model =
             let
                 cmd =
                     Notes.getNewIdFromNote model.includedNotes from subsequence
-                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, for ))
+                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, Path.toString for ))
                         |> Maybe.withDefault Cmd.none
             in
             ( model, cmd )
@@ -165,7 +168,10 @@ update msg model =
             handleRawFileMetas model rawMetas
 
         SearchRequested ->
-            ( model, Ports.provideNotesForSearch (Vault.filteredContent model.settings model.vault) )
+            ( model
+            , Ports.provideNotesForSearch
+                (Vault.filteredContent model.settings model.vault |> List.map NoteMeta.forPort)
+            )
 
         ScrollRequested path ->
             scrollToNote model path
@@ -202,7 +208,7 @@ reloadNotesAndScroll model newDisplay =
     ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
 
 
-handleNoteClick : Model -> String -> ( Model, Cmd Msg )
+handleNoteClick : Model -> Path -> ( Model, Cmd Msg )
 handleNoteClick model filePath =
     let
         ( newModel, updateCmd ) =
@@ -220,7 +226,7 @@ handleNoteClick model filePath =
                 Task.perform (\_ -> ScrollRequested filePath) (Task.succeed ())
 
             else
-                Ports.openFile filePath
+                Ports.openFile (Path.toString filePath)
 
         cmd =
             Cmd.batch [ fileCmd, updateCmd ]
@@ -254,24 +260,21 @@ handleSettingsChange model portSettings =
 
 updateVirtualList : Model -> ( Model, Cmd Msg )
 updateVirtualList model =
-    let
-        ids =
-            Notes.paths model.includedNotes
-    in
-    updateVirtualListHelper model ids
+    Notes.paths model.includedNotes
+        |> updateVirtualListHelper model
 
 
-updateVirtualListHelper : Model -> List String -> ( Model, Cmd Msg )
+updateVirtualListHelper : Model -> List Path -> ( Model, Cmd Msg )
 updateVirtualListHelper model idsToRemeasure =
     let
         filteredNotes =
             filterNotesForDisplay model.currentDisplayMode model.settings.tocLevel model.includedNotes
 
-        ids =
-            Notes.paths filteredNotes
-
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.setItemsAndRemeasure model.virtualList { newIds = ids, idsToRemeasure = idsToRemeasure }
+            VirtualList.setItemsAndRemeasure model.virtualList
+                { newIds = Notes.paths filteredNotes |> List.map Path.toString
+                , idsToRemeasure = idsToRemeasure |> List.map Path.toString
+                }
     in
     ( { model
         | virtualList = newVirtualList
@@ -285,11 +288,11 @@ mapVirtualListResult ( virtualListModel, virtualListCmd ) model =
     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
 
-createNote : Model -> String -> Bool -> ( Model, Cmd Msg )
+createNote : Model -> Path -> Bool -> ( Model, Cmd Msg )
 createNote model path child =
     let
         newPath =
-            getPathWithoutFileName path ++ "/Untitled.md"
+            Path.withoutFileName path ++ "/Untitled.md"
 
         fileContent =
             Notes.getNewIdFromNote model.includedNotes path child
@@ -312,19 +315,7 @@ createNoteContent idNameFromSettings id =
     "---\n" ++ idName ++ ": " ++ id ++ "\n---"
 
 
-getPathWithoutFileName : String -> String
-getPathWithoutFileName filePath =
-    let
-        components =
-            String.split "/" filePath
-
-        withoutFileName =
-            List.take (List.length components - 1) components
-    in
-    String.join "/" withoutFileName
-
-
-updateNotes : Model -> List String -> ( Model, Cmd Msg )
+updateNotes : Model -> List Path -> ( Model, Cmd Msg )
 updateNotes model changedNotes =
     let
         newNotes =
@@ -381,7 +372,7 @@ showInToc maybeTocLevel note =
             hasTocField
 
 
-handleFileRename : Model -> ( String, String ) -> ( Model, Cmd Msg )
+handleFileRename : Model -> ( Path, Path ) -> ( Model, Cmd Msg )
 handleFileRename model ( oldPath, newPath ) =
     let
         updatedCurrentFile =
@@ -409,7 +400,7 @@ handleFileRename model ( oldPath, newPath ) =
     ( finalModel, Cmd.batch [ scrollCmd, listCmd ] )
 
 
-updateCurrentFile : Maybe String -> String -> String -> Maybe String
+updateCurrentFile : Maybe Path -> Path -> Path -> Maybe Path
 updateCurrentFile current oldPath newPath =
     if current == Just oldPath then
         Just newPath
@@ -418,7 +409,7 @@ updateCurrentFile current oldPath newPath =
         current
 
 
-fileOpened : Model -> Maybe String -> ( Model, Cmd Msg )
+fileOpened : Model -> Maybe Path -> ( Model, Cmd Msg )
 fileOpened model filePath =
     case filePath of
         Just path ->
@@ -432,7 +423,7 @@ fileOpened model filePath =
             ( model, Cmd.none )
 
 
-scrollToExternallyOpenedNote : Model -> String -> ( Model, Cmd Msg )
+scrollToExternallyOpenedNote : Model -> Path -> ( Model, Cmd Msg )
 scrollToExternallyOpenedNote model path =
     if model.scrollToNewlyOpenedNote then
         scrollToNote model path
@@ -441,11 +432,11 @@ scrollToExternallyOpenedNote model path =
         ( { model | scrollToNewlyOpenedNote = True }, Cmd.none )
 
 
-scrollToNote : Model -> String -> ( Model, Cmd Msg )
+scrollToNote : Model -> Path -> ( Model, Cmd Msg )
 scrollToNote model path =
     let
         ( newVirtualList, virtualListCmd ) =
-            VirtualList.scrollToItem model.virtualList path VirtualList.Center
+            VirtualList.scrollToItem model.virtualList (Path.toString path) VirtualList.Center
     in
     ( { model | virtualList = newVirtualList }
     , Cmd.map VirtualListMsg virtualListCmd
@@ -470,7 +461,7 @@ view model =
 
 renderRow : Model -> String -> Html Msg
 renderRow model filePath =
-    case Notes.getNoteByPath filePath model.includedNotes of
+    case Notes.getNoteByPath (Path filePath) model.includedNotes of
         Just noteWithSplit ->
             renderNote model noteWithSplit.note noteWithSplit.splitLevel
 
@@ -523,7 +514,7 @@ renderNote model note maybeSplit =
             , ( "is-clickable", True )
             , ( "is-active", Just note.filePath == model.currentFile )
             ]
-         , Html.Attributes.attribute "data-path" note.filePath
+         , Html.Attributes.attribute "data-path" (Path.toString note.filePath)
          , onClick (NoteClicked note.filePath)
          , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
          ]
@@ -605,7 +596,7 @@ fieldNames settings =
     { id = settings.idField, toc = settings.tocField }
 
 
-handleFileDeleted : Model -> String -> ( Model, Cmd Msg )
+handleFileDeleted : Model -> Path -> ( Model, Cmd Msg )
 handleFileDeleted model path =
     let
         updatedVault =
@@ -617,15 +608,15 @@ handleFileDeleted model path =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Ports.receiveCreateNote NoteCreationRequested
+        [ Ports.receiveCreateNote (\( path, subsequence ) -> NoteCreationRequested ( Path path, subsequence ))
         , Ports.receiveDisplayIsToc DisplayChanged
-        , Ports.receiveFileOpen NoteOpened
-        , Ports.receiveFileRenamed NoteRenamed
-        , Ports.receiveFileDeleted NoteDeleted
+        , Ports.receiveFileOpen (\path -> NoteOpened (Maybe.map Path path))
+        , Ports.receiveFileRenamed (\( from, to ) -> NoteRenamed ( Path from, Path to ))
+        , Ports.receiveFileDeleted (\path -> NoteDeleted (Path path))
         , Ports.receiveRawFileMeta RawFileMetaReceived
         , Ports.receiveFileChange NoteChangeReceived
-        , Ports.receiveGetNewIdForNoteFromNote NewIdRequestedForNoteFromNote
+        , Ports.receiveGetNewIdForNoteFromNote (\( for, from, subsequence ) -> NewIdRequestedForNoteFromNote ( Path for, Path from, subsequence ))
         , Ports.receiveSettings SettingsChanged
         , Ports.receiveRequestSearch (\_ -> SearchRequested)
-        , Ports.receiveRequestAttach AttachRequested
+        , Ports.receiveRequestAttach (\path -> AttachRequested (Path path))
         ]

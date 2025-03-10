@@ -14,6 +14,7 @@ import Dict exposing (Dict)
 import List
 import NoteId
 import NoteMeta exposing (NoteMeta)
+import Path exposing (Path)
 
 
 
@@ -50,12 +51,12 @@ filter predicate (Notes notes) =
     Notes (List.filter (\noteWithSplit -> predicate noteWithSplit.note) notes)
 
 
-paths : Notes -> List String
+paths : Notes -> List Path
 paths (Notes notes) =
     List.map (.note >> .filePath) notes
 
 
-getNewIdFromNote : Notes -> String -> Bool -> Maybe String
+getNewIdFromNote : Notes -> Path -> Bool -> Maybe String
 getNewIdFromNote (Notes notes) path child =
     let
         id =
@@ -98,7 +99,7 @@ isNoteIdTaken notes noteId =
     List.any (\noteWithSplit -> noteWithSplit.note.id == Just noteId) notes
 
 
-getNoteByPath : String -> Notes -> Maybe NoteWithSplit
+getNoteByPath : Path -> Notes -> Maybe NoteWithSplit
 getNoteByPath path (Notes notes) =
     notes
         |> List.filter (\noteWithSplit -> noteWithSplit.note.filePath == path)
@@ -108,11 +109,11 @@ getNoteByPath path (Notes notes) =
 splitMap : Notes -> Dict String (Maybe Int)
 splitMap (Notes notes) =
     notes
-        |> List.map (\noteWithSplit -> ( noteWithSplit.note.filePath, noteWithSplit.splitLevel ))
+        |> List.map (\noteWithSplit -> ( Path.toString noteWithSplit.note.filePath, noteWithSplit.splitLevel ))
         |> Dict.fromList
 
 
-splitChanges : { oldNotes : Notes, newNotes : Notes } -> List String
+splitChanges : { oldNotes : Notes, newNotes : Notes } -> List Path
 splitChanges { oldNotes, newNotes } =
     newNotes
         |> filter
@@ -128,10 +129,10 @@ splitHasChanged : { oldNoteMap : Dict String (Maybe Int), newNoteMap : Dict Stri
 splitHasChanged { oldNoteMap, newNoteMap } note =
     let
         oldSplit =
-            Dict.get note.filePath oldNoteMap
+            Dict.get (Path.toString note.filePath) oldNoteMap
 
         newSplit =
-            Dict.get note.filePath newNoteMap
+            Dict.get (Path.toString note.filePath) newNoteMap
     in
     oldSplit /= newSplit
 
