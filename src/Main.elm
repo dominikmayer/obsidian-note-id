@@ -11,7 +11,7 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Metadata
 import NoteId
-import Ports exposing (..)
+import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 import Task
 import VirtualList
@@ -107,12 +107,8 @@ init flags =
 
 decodeActiveFile : Encode.Value -> Maybe String
 decodeActiveFile flags =
-    case Decode.decodeValue (Decode.field "activeFile" Decode.string) flags of
-        Ok path ->
-            Just path
-
-        Err _ ->
-            Nothing
+    Decode.decodeValue (Decode.field "activeFile" Decode.string) flags
+        |> Result.toMaybe
 
 
 
@@ -620,12 +616,9 @@ scrollToNote model path =
 
 scrollToCurrentNote : Model -> ( Model, Cmd Msg )
 scrollToCurrentNote model =
-    case model.currentFile of
-        Just path ->
-            scrollToNote model path
-
-        Nothing ->
-            ( model, Cmd.none )
+    model.currentFile
+        |> Maybe.map (scrollToNote model)
+        |> Maybe.withDefault ( model, Cmd.none )
 
 
 
