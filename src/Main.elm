@@ -9,6 +9,7 @@ import Html.Events.Extra.Mouse as Mouse
 import Html.Lazy exposing (lazy)
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Metadata
 import NoteId
 import Ports exposing (..)
 import Task
@@ -55,6 +56,7 @@ type alias Model =
     , scrollToNewlyOpenedNote : Bool
     , display : Display
     , virtualList : VirtualList.Model
+    , noteCache : Dict String NoteMeta
     }
 
 
@@ -71,6 +73,7 @@ defaultModel =
     , scrollToNewlyOpenedNote = True
     , display = Notes
     , virtualList = VirtualList.initWithConfig config
+    , noteCache = Dict.empty
     }
 
 
@@ -159,10 +162,13 @@ type Msg
     | DisplayChanged Bool
     | FileOpened (Maybe String)
     | FileRenamed ( String, String )
+    | FileDeleted String
     | NewIdRequestedForNoteFromNote ( String, String, Bool )
     | NoteClicked String
     | NoteCreationRequested ( String, Bool )
     | NotesProvided ( List NoteMeta, List String )
+    | RawFileMetaReceived (List RawFileMeta)
+    | FileChangeReceived RawFileMeta
     | ScrollRequested String
     | SettingsChanged Ports.Settings
     | VirtualListMsg VirtualList.Msg
@@ -187,6 +193,9 @@ update msg model =
         FileRenamed paths ->
             handleFileRename model paths
 
+        FileDeleted path ->
+            handleFileDeleted model path
+
         NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
             let
                 cmd =
@@ -204,6 +213,12 @@ update msg model =
 
         NotesProvided ( notes, changedNotes ) ->
             updateNotes model notes changedNotes
+
+        RawFileMetaReceived rawMetas ->
+            handleRawFileMetas model rawMetas
+
+        FileChangeReceived rawMeta ->
+            handleFileChange model rawMeta
 
         ScrollRequested path ->
             scrollToNote model path
@@ -776,6 +791,62 @@ marginLeft level =
     Html.Attributes.style "margin-left" ("calc(var(--size-2-3) * " ++ String.fromFloat level ++ ")")
 
 
+
+-- New handlers for raw metadata
+
+
+handleRawFileMetas : Model -> List RawFileMeta -> ( Model, Cmd Msg )
+handleRawFileMetas model rawMetas =
+    let
+        processedNotes =
+            Metadata.processRawNotes model.settings rawMetas
+
+        updatedNoteCache =
+            processedNotes
+                |> List.foldl (\note cache -> Dict.insert note.filePath note cache) Dict.empty
+
+        notesWithoutPaths =
+            processedNotes
+
+        changedFiles =
+            processedNotes
+                |> List.map .filePath
+    in
+    updateNotes { model | noteCache = updatedNoteCache } notesWithoutPaths changedFiles
+
+
+handleFileChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
+handleFileChange model rawMeta =
+    let
+        updatedNoteCache =
+            Metadata.updateNoteCache model.settings model.noteCache rawMeta
+
+        changedNote =
+            Metadata.processMetadata model.settings rawMeta
+
+        changedFiles =
+            changedNote
+                |> Maybe.map (\note -> [ note.filePath ])
+                |> Maybe.withDefault []
+
+        notesAsList =
+            Dict.values updatedNoteCache
+    in
+    updateNotes { model | noteCache = updatedNoteCache } notesAsList changedFiles
+
+
+handleFileDeleted : Model -> String -> ( Model, Cmd Msg )
+handleFileDeleted model path =
+    let
+        updatedNoteCache =
+            Dict.remove path model.noteCache
+
+        notesAsList =
+            Dict.values updatedNoteCache
+    in
+    updateNotes { model | noteCache = updatedNoteCache } notesAsList []
+
+
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
@@ -784,6 +855,9 @@ subscriptions _ =
         , Ports.receiveDisplayIsToc DisplayChanged
         , Ports.receiveFileOpen FileOpened
         , Ports.receiveFileRenamed FileRenamed
+        , Ports.receiveFileDeleted FileDeleted
+        , Ports.receiveRawFileMeta RawFileMetaReceived
+        , Ports.receiveFileChange FileChangeReceived
         , Ports.receiveGetNewIdForNoteFromNote NewIdRequestedForNoteFromNote
         , Ports.receiveSettings SettingsChanged
         ]

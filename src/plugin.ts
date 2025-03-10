@@ -3,12 +3,7 @@ import { IDSidePanelSettingTab } from "./settings";
 import { OpenNoteModal } from "./openNoteModal";
 import { AttachNoteModal } from "./attachNoteModal";
 import { ElmApp } from "/.elm";
-import {
-	IDSidePanelSettings,
-	DEFAULT_SETTINGS,
-	NoteMeta,
-	FrontmatterValue,
-} from "./types";
+import { IDSidePanelSettings, DEFAULT_SETTINGS, NoteMeta } from "./types";
 import {
 	VIEW_TYPE_ID_PANEL,
 	ID_FIELD_DEFAULT,
@@ -20,77 +15,54 @@ export default class IDSidePanelPlugin extends Plugin {
 	private scheduleRefreshTimeout: number | null = null;
 	settings: IDSidePanelSettings;
 	noteCache: Map<string, NoteMeta> = new Map();
+	private rawMetadata: Array<{
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	}> = [];
 
-	async extractNoteMeta(file: TFile): Promise<NoteMeta | null> {
-		const {
-			includeFolders,
-			excludeFolders,
-			showNotesWithoutId,
-			idField,
-			tocField,
-		} = this.settings;
-		const filePath = file.path.toLowerCase();
-
-		// Normalize folder paths to remove trailing slashes and lower case them
-		const normInclude = includeFolders.map((f) =>
-			f.replace(/\/+$/, "").toLowerCase(),
-		);
-		const normExclude = excludeFolders.map((f) =>
-			f.replace(/\/+$/, "").toLowerCase(),
-		);
-
-		const included =
-			normInclude.length === 0 ||
-			normInclude.some((folder) => filePath.startsWith(folder + "/"));
-		const excluded = normExclude.some((folder) =>
-			filePath.startsWith(folder + "/"),
-		);
-
-		if (!included || excluded) return null;
-
+	async extractRawFileMeta(file: TFile): Promise<{
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	}> {
 		const cache = this.app.metadataCache.getFileCache(file);
-		let id = null;
-		let tocTitle = null;
-		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
-			const frontmatter: Record<string, FrontmatterValue> =
-				cache?.frontmatter ?? {};
-			const frontmatterKeys = Object.keys(frontmatter).reduce<
-				Record<string, FrontmatterValue>
-			>((acc, key) => {
-				acc[key.toLowerCase()] = frontmatter[key];
-				return acc;
-			}, {});
-			const normalizedIdField = idField.toLowerCase() || ID_FIELD_DEFAULT;
-			id =
-				frontmatterKeys[normalizedIdField] != null
-					? String(frontmatterKeys[normalizedIdField])
-					: null;
+		let frontmatter = null;
 
-			const normalizedTocTitleField =
-				tocField.toLowerCase() || TOC_TITLE_FIELD_DEFAULT;
-			tocTitle =
-				frontmatterKeys[normalizedTocTitleField] != null
-					? String(frontmatterKeys[normalizedTocTitleField])
-					: null;
+		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
+			// Convert frontmatter object to array of key/value pairs with string values for Elm
+			frontmatter = Object.entries(cache.frontmatter).map(
+				([key, value]) => {
+					// Convert all values to strings for simplicity
+					const stringValue =
+						value === null
+							? ""
+							: typeof value === "object"
+								? JSON.stringify(value)
+								: String(value);
+					return [key, stringValue] as [string, string];
+				},
+			);
 		}
 
-		if (id === null && !showNotesWithoutId) return null;
-
-		return { title: file.basename, tocTitle, id, file };
+		return {
+			path: file.path,
+			basename: file.basename,
+			frontmatter,
+		};
 	}
 
 	async initializeCache() {
 		this.noteCache.clear();
 		const markdownFiles = this.app.vault.getMarkdownFiles();
 
+		// Extract raw metadata from all files
 		const metaPromises = markdownFiles.map((file) =>
-			this.extractNoteMeta(file),
+			this.extractRawFileMeta(file),
 		);
-		const metaResults = await Promise.all(metaPromises); // Parallel processing
+		this.rawMetadata = await Promise.all(metaPromises); // Parallel processing
 
-		metaResults.forEach((meta, index) => {
-			if (meta) this.noteCache.set(markdownFiles[index].path, meta);
-		});
+		// The raw metadata will be sent to Elm when refreshView is called
 	}
 
 	private getElmApp() {
@@ -159,8 +131,16 @@ export default class IDSidePanelPlugin extends Plugin {
 		this.registerEvent(
 			this.app.vault.on("delete", async (file) => {
 				if (file instanceof TFile && file.extension === "md") {
-					if (this.noteCache.has(file.path)) {
-						this.noteCache.delete(file.path);
+					// Update our cached raw metadata
+					this.rawMetadata = this.rawMetadata.filter(
+						(item) => item.path !== file.path,
+					);
+
+					const elmApp = this.getElmApp();
+					if (elmApp && elmApp.ports.receiveFileDeleted) {
+						elmApp.ports.receiveFileDeleted.send(file.path);
+					} else {
+						// Fall back to traditional refresh if Elm is not available
 						this.queueRefresh();
 					}
 				}
@@ -249,28 +229,26 @@ export default class IDSidePanelPlugin extends Plugin {
 		if (!(file instanceof TFile) || file.extension !== "md") {
 			return;
 		}
-		
-		// Extract new metadata
-		const newMeta = await this.extractNoteMeta(file);
-		const oldMeta = this.noteCache.get(file.path);
-		
-		if (!newMeta) {
-			// If file is not relevant but was previously cached, remove it
-			if (oldMeta) {
-				this.noteCache.delete(file.path);
-				this.queueRefresh();
-			}
-			return;
+
+		// Extract raw metadata
+		const rawMeta = await this.extractRawFileMeta(file);
+
+		// Update our cached raw metadata
+		const index = this.rawMetadata.findIndex(
+			(item) => item.path === file.path,
+		);
+		if (index >= 0) {
+			this.rawMetadata[index] = rawMeta;
+		} else {
+			this.rawMetadata.push(rawMeta);
 		}
-		
-		// Check if any visible metadata actually changed
-		const metaChanged = !oldMeta ||
-			newMeta.id !== oldMeta.id ||
-			newMeta.title !== oldMeta.title ||
-			newMeta.tocTitle !== oldMeta.tocTitle;
-			
-		if (metaChanged) {
-			this.noteCache.set(file.path, newMeta);
+
+		// Send the changed file metadata to Elm for processing
+		const elmApp = this.getElmApp();
+		if (elmApp && elmApp.ports.receiveFileChange) {
+			elmApp.ports.receiveFileChange.send(rawMeta);
+		} else {
+			// If Elm is not available, fall back to traditional refresh
 			this.queueRefresh([file.path]);
 		}
 	}
@@ -348,20 +326,41 @@ export default class IDSidePanelPlugin extends Plugin {
 	async refreshView() {
 		const activePanelView = this.getActivePanelView();
 		if (activePanelView) {
-			activePanelView.renderNotes();
+			const elmApp = this.getElmApp();
+
+			// Send raw metadata to Elm if it's available and we have metadata to send
+			if (
+				elmApp &&
+				elmApp.ports.receiveRawFileMeta &&
+				this.rawMetadata.length > 0
+			) {
+				elmApp.ports.receiveRawFileMeta.send(this.rawMetadata);
+			} else {
+				// Fall back to the old way if we can't use raw metadata
+				activePanelView.renderNotes();
+			}
 		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-		this.sendSettingsToElm(this.settings);
+		this.sendSettingsToElm(this.getSettings());
 		await this.initializeCache();
 		await this.refreshView();
+	}
+
+	getSettings(): IDSidePanelSettings {
+		return {
+			...this.settings,
+			idField: this.settings.idField || ID_FIELD_DEFAULT,
+			tocField: this.settings.tocField || TOC_TITLE_FIELD_DEFAULT,
+		};
 	}
 
 	private sendSettingsToElm(settings: IDSidePanelSettings) {
 		const elmApp = this.getElmApp();
 		if (elmApp && elmApp.ports.receiveSettings) {
+			console.log("Sending settings to Elm:", settings);
 			elmApp.ports.receiveSettings.send(settings);
 		}
 	}

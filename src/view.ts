@@ -51,7 +51,7 @@ export class IDSidePanelView extends ItemView {
 		this.elmApp = Elm.Main.init({
 			node: elmContainer,
 			flags: {
-				settings: this.plugin.settings,
+				settings: this.plugin.getSettings(),
 				activeFile: activeFile ? activeFile.path : null,
 			},
 		});

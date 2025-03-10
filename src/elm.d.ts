@@ -6,6 +6,12 @@ declare module "*.elm" {
 		filePath: string;
 	}
 
+	export interface RawFileMeta {
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	}
+
 	export interface Settings {
 		includeFolders: string[];
 		excludeFolders: string[];
@@ -56,6 +62,15 @@ declare module "*.elm" {
 			};
 			receiveFileRenamed: {
 				send(data: [string, string]): void;
+			};
+			receiveFileDeleted: {
+				send(data: string): void;
+			};
+			receiveRawFileMeta: {
+				send(data: RawFileMeta[]): void;
+			};
+			receiveFileChange: {
+				send(data: RawFileMeta): void;
 			};
 			receiveGetNewIdForNoteFromNote: {
 				send(data: [string, string, boolean]): void;

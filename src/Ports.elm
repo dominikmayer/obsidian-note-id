@@ -40,7 +40,23 @@ port receiveGetNewIdForNoteFromNote : (( String, String, Bool ) -> msg) -> Sub m
 port receiveNotes : (( List NoteMeta, List String ) -> msg) -> Sub msg
 
 
+port receiveRawFileMeta : (List RawFileMeta -> msg) -> Sub msg
+
+
+port receiveFileChange : (RawFileMeta -> msg) -> Sub msg
+
+
+port receiveFileDeleted : (String -> msg) -> Sub msg
+
+
 port receiveSettings : (Settings -> msg) -> Sub msg
+
+
+type alias RawFileMeta =
+    { path : String
+    , basename : String
+    , frontmatter : Maybe (List ( String, String ))
+    }
 
 
 type alias NoteMeta =
