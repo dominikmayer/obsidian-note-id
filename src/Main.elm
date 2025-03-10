@@ -12,6 +12,7 @@ import Json.Encode as Encode
 import Metadata
 import NoteId
 import Ports exposing (..)
+import Settings exposing (Settings)
 import Task
 import VirtualList
 import VirtualList.Config
@@ -44,7 +45,7 @@ main =
 -- MODEL
 
 
-type Display
+type DisplayMode
     = TOC
     | Notes
 
@@ -54,7 +55,7 @@ type alias Model =
     , currentFile : Maybe String
     , settings : Settings
     , scrollToNewlyOpenedNote : Bool
-    , display : Display
+    , currentDisplayMode : DisplayMode
     , virtualList : VirtualList.Model
     , allNotesByPath : Dict String NoteMeta
     }
@@ -69,9 +70,9 @@ defaultModel =
     in
     { includedNotes = []
     , currentFile = Nothing
-    , settings = defaultSettings
+    , settings = Settings.default
     , scrollToNewlyOpenedNote = True
-    , display = Notes
+    , currentDisplayMode = Notes
     , virtualList = VirtualList.initWithConfig config
     , allNotesByPath = Dict.empty
     }
@@ -91,52 +92,17 @@ type alias NoteWithSplit =
     }
 
 
-type alias Settings =
-    { includeFolders : List String
-    , excludeFolders : List String
-    , showNotesWithoutId : Bool
-    , idField : String
-    , tocField : String
-    , tocLevel : Maybe Int
-    , splitLevel : Int
-    , indentation : Bool
-    }
-
-
-defaultSettings : Settings
-defaultSettings =
-    { includeFolders = []
-    , excludeFolders = []
-    , showNotesWithoutId = True
-    , idField = "id"
-    , tocField = "toc"
-    , tocLevel = Just 1
-    , splitLevel = 0
-    , indentation = False
-    }
-
-
 init : Encode.Value -> ( Model, Cmd Msg )
 init flags =
     let
         model =
             { defaultModel
-                | settings = decodeSettings defaultSettings flags
+                | settings = Settings.decode Settings.default flags
                 , currentFile = decodeActiveFile flags
             }
     in
-    -- Won't find the note yet but initiate the future scroll
+    -- Won't find the note yet but will initiate the future scroll
     scrollToCurrentNote model
-
-
-decodeSettings : Settings -> Decode.Value -> Settings
-decodeSettings settings newSettings =
-    case Decode.decodeValue (Decode.field "settings" partialSettingsDecoder) newSettings of
-        Ok decoded ->
-            decoded settings
-
-        Err _ ->
-            settings
 
 
 decodeActiveFile : Encode.Value -> Maybe String
@@ -248,7 +214,7 @@ handleDisplayChange model tocShown =
     reloadNotesAndScroll model newDisplay
 
 
-reloadNotesAndScroll : Model -> Display -> ( Model, Cmd Msg )
+reloadNotesAndScroll : Model -> DisplayMode -> ( Model, Cmd Msg )
 reloadNotesAndScroll model newDisplay =
     let
         ( newModelPre, displayCmd ) =
@@ -264,7 +230,7 @@ handleNoteClick : Model -> String -> ( Model, Cmd Msg )
 handleNoteClick model filePath =
     let
         ( newModel, updateCmd ) =
-            if model.display == TOC then
+            if model.currentDisplayMode == TOC then
                 updateDisplay model Notes
 
             else
@@ -283,14 +249,14 @@ handleNoteClick model filePath =
         cmd =
             Cmd.batch [ fileCmd, updateCmd ]
     in
-    ( { newModel | scrollToNewlyOpenedNote = model.display == TOC }, cmd )
+    ( { newModel | scrollToNewlyOpenedNote = model.currentDisplayMode == TOC }, cmd )
 
 
-updateDisplay : Model -> Display -> ( Model, Cmd Msg )
+updateDisplay : Model -> DisplayMode -> ( Model, Cmd Msg )
 updateDisplay model newDisplay =
     let
         newModel =
-            { model | display = newDisplay }
+            { model | currentDisplayMode = newDisplay }
 
         ( updatedModel, updateCmd ) =
             updateVirtualList newModel
@@ -310,20 +276,7 @@ handleSettingsChange : Model -> Ports.Settings -> ( Model, Cmd Msg )
 handleSettingsChange model portSettings =
     let
         transformedSettings =
-            { includeFolders = portSettings.includeFolders
-            , excludeFolders = portSettings.excludeFolders
-            , showNotesWithoutId = portSettings.showNotesWithoutId
-            , idField = portSettings.idField
-            , tocField = portSettings.tocField
-            , tocLevel =
-                if portSettings.autoToc then
-                    Just portSettings.tocLevel
-
-                else
-                    Nothing
-            , splitLevel = portSettings.splitLevel
-            , indentation = portSettings.indentation
-            }
+            Settings.fromPort portSettings
 
         filteredNotes =
             Dict.values model.allNotesByPath |> filterNotesAccordingToSettings transformedSettings
@@ -352,7 +305,7 @@ updateVirtualListHelper : Model -> List String -> ( Model, Cmd Msg )
 updateVirtualListHelper model idsToRemeasure =
     let
         filteredNotes =
-            filterNotesForDisplay model.display model.settings.tocLevel model.includedNotes
+            filterNotesForDisplay model.currentDisplayMode model.settings.tocLevel model.includedNotes
 
         ids =
             filteredNotes
@@ -516,7 +469,7 @@ splitHasChanged { oldNoteMap, newNoteMap } noteWithSplit =
     oldSplit /= newSplit
 
 
-filterNotesForDisplay : Display -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
+filterNotesForDisplay : DisplayMode -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
 filterNotesForDisplay display maybeTocLevel notes =
     case display of
         TOC ->
@@ -747,7 +700,7 @@ renderNote : Model -> NoteMeta -> Maybe Int -> Html Msg
 renderNote model note maybeSplit =
     let
         marginTopStyle =
-            if model.display == TOC then
+            if model.currentDisplayMode == TOC then
                 []
 
             else
@@ -776,7 +729,7 @@ renderNote model note maybeSplit =
                 []
 
         title =
-            if model.display == TOC then
+            if model.currentDisplayMode == TOC then
                 Maybe.withDefault note.title note.tocTitle
 
             else
@@ -950,42 +903,3 @@ subscriptions _ =
         , Ports.receiveRequestSearch (\_ -> SearchRequested)
         , Ports.receiveRequestAttach AttachRequested
         ]
-
-
-tocLevelDecoder : Decode.Decoder (Maybe Int)
-tocLevelDecoder =
-    Decode.map2
-        (\autoToc tocLevel ->
-            if autoToc then
-                tocLevel
-
-            else
-                Nothing
-        )
-        (Decode.field "autoToc" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault True))
-        (Decode.field "tocLevel" Decode.int |> Decode.maybe)
-
-
-partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
-partialSettingsDecoder =
-    Decode.map8
-        (\includeFolders excludeFolders showNotesWithoutId idField tocField newTocLevel splitLevel indentation settings ->
-            { settings
-                | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
-                , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
-                , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
-                , idField = idField |> Maybe.withDefault settings.idField
-                , tocField = tocField |> Maybe.withDefault settings.tocField
-                , tocLevel = newTocLevel
-                , splitLevel = splitLevel |> Maybe.withDefault settings.splitLevel
-                , indentation = indentation |> Maybe.withDefault settings.indentation
-            }
-        )
-        (Decode.field "includeFolders" (Decode.list Decode.string) |> Decode.maybe)
-        (Decode.field "excludeFolders" (Decode.list Decode.string) |> Decode.maybe)
-        (Decode.field "showNotesWithoutId" Decode.bool |> Decode.maybe)
-        (Decode.field "idField" Decode.string |> Decode.maybe)
-        (Decode.field "tocField" Decode.string |> Decode.maybe)
-        tocLevelDecoder
-        (Decode.field "splitLevel" Decode.int |> Decode.maybe)
-        (Decode.field "indentation" Decode.bool |> Decode.maybe)
