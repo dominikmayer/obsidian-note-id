@@ -11,9 +11,11 @@ import Json.Decode as Decode
 import Json.Encode as Encode
 import Metadata
 import NoteId
+import NoteMeta exposing (NoteMeta)
 import Ports exposing (RawFileMeta)
 import Settings exposing (Settings)
 import Task
+import Vault exposing (Vault, filteredContent)
 import VirtualList
 import VirtualList.Config
 
@@ -57,7 +59,7 @@ type alias Model =
     , scrollToNewlyOpenedNote : Bool
     , currentDisplayMode : DisplayMode
     , virtualList : VirtualList.Model
-    , allNotesByPath : Dict String NoteMeta
+    , vault : Vault
     }
 
 
@@ -74,15 +76,7 @@ defaultModel =
     , scrollToNewlyOpenedNote = True
     , currentDisplayMode = Notes
     , virtualList = VirtualList.initWithConfig config
-    , allNotesByPath = Dict.empty
-    }
-
-
-type alias NoteMeta =
-    { title : String
-    , tocTitle : Maybe String
-    , id : Maybe String
-    , filePath : String
+    , vault = Vault.empty
     }
 
 
@@ -139,7 +133,7 @@ update msg model =
         AttachRequested currentNotePath ->
             let
                 allNotes =
-                    Dict.values model.allNotesByPath
+                    Vault.filteredContent model.settings model.vault
                         |> List.filter (\note -> note.filePath /= currentNotePath)
             in
             ( model, Ports.provideNotesForAttach ( currentNotePath, allNotes ) )
@@ -185,7 +179,7 @@ update msg model =
             handleRawFileMetas model rawMetas
 
         SearchRequested ->
-            ( model, Ports.provideNotesForSearch (Dict.values model.allNotesByPath) )
+            ( model, Ports.provideNotesForSearch (Vault.filteredContent model.settings model.vault) )
 
         ScrollRequested path ->
             scrollToNote model path
@@ -275,7 +269,7 @@ handleSettingsChange model portSettings =
             Settings.fromPort portSettings
 
         filteredNotes =
-            Dict.values model.allNotesByPath |> filterNotesAccordingToSettings transformedSettings
+            Vault.filteredContent transformedSettings model.vault
 
         ( newModel, cmd ) =
             updateNotes model filteredNotes []
@@ -517,25 +511,14 @@ handleFileRename model ( oldPath, newPath ) =
         updatedCurrentFile =
             updateCurrentFile model.currentFile oldPath newPath
 
-        updatedNoteCache =
-            case Dict.get oldPath model.allNotesByPath of
-                Just note ->
-                    let
-                        updatedNote =
-                            { note | filePath = newPath, title = getBaseName newPath }
-                    in
-                    model.allNotesByPath
-                        |> Dict.remove oldPath
-                        |> Dict.insert newPath updatedNote
-
-                Nothing ->
-                    model.allNotesByPath
+        updatedVault =
+            Vault.rename model.vault { oldPath = oldPath, newPath = newPath }
 
         oldCurrentFile =
             model.currentFile
 
         updatedModel =
-            { model | currentFile = updatedCurrentFile, allNotesByPath = updatedNoteCache }
+            { model | currentFile = updatedCurrentFile, vault = updatedVault }
 
         ( newModel, scrollCmd ) =
             if oldCurrentFile == Just oldPath then
@@ -545,23 +528,12 @@ handleFileRename model ( oldPath, newPath ) =
                 ( updatedModel, Cmd.none )
 
         notesAsList =
-            Dict.values updatedNoteCache
+            Vault.filteredContent model.settings updatedVault
 
         ( finalModel, listCmd ) =
             updateNotes newModel notesAsList [ oldPath, newPath ]
     in
     ( finalModel, Cmd.batch [ scrollCmd, listCmd ] )
-
-
-getBaseName : String -> String
-getBaseName path =
-    path
-        |> String.replace "\\" "/"
-        |> String.split "/"
-        |> List.reverse
-        |> List.head
-        |> Maybe.withDefault ""
-        |> String.replace ".md" ""
 
 
 updateCurrentFile : Maybe String -> String -> String -> Maybe String
@@ -789,61 +761,17 @@ marginLeft level =
 handleRawFileMetas : Model -> List RawFileMeta -> ( Model, Cmd Msg )
 handleRawFileMetas model rawMetas =
     let
-        processedNotes =
-            Metadata.processRawNotes (fieldNames model.settings) rawMetas
+        vault =
+            Vault.fill (fieldNames model.settings) rawMetas
 
         includedNotes =
-            filterNotesAccordingToSettings model.settings processedNotes
-
-        updatedNoteCache =
-            processedNotes
-                |> List.foldl (\note cache -> Dict.insert note.filePath note cache) Dict.empty
+            filteredContent model.settings vault
 
         changedFiles =
-            processedNotes
+            includedNotes
                 |> List.map .filePath
     in
-    updateNotes { model | allNotesByPath = updatedNoteCache } includedNotes changedFiles
-
-
-filterNotesAccordingToSettings : Settings -> List NoteMeta -> List NoteMeta
-filterNotesAccordingToSettings settings notes =
-    notes
-        |> List.filter (isIncluded settings)
-
-
-isIncluded : Settings -> NoteMeta -> Bool
-isIncluded settings note =
-    let
-        filePath =
-            note.filePath
-                |> String.replace "\\" "/"
-                -- convert Windows backslashes to forward slashes
-                |> String.toLower
-
-        normInclude =
-            settings.includeFolders
-                |> List.map (\f -> f |> String.replace "/+" "" |> String.toLower)
-
-        normExclude =
-            settings.excludeFolders
-                |> List.map (\f -> f |> String.replace "/+" "" |> String.toLower)
-
-        included =
-            List.isEmpty normInclude
-                || List.any (\folder -> String.startsWith (folder ++ "/") filePath) normInclude
-
-        excluded =
-            List.any (\folder -> String.startsWith (folder ++ "/") filePath) normExclude
-    in
-    if not included || excluded then
-        False
-
-    else if note.id == Nothing && not settings.showNotesWithoutId then
-        False
-
-    else
-        True
+    updateNotes { model | vault = vault } includedNotes changedFiles
 
 
 handleNoteChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
@@ -852,16 +780,16 @@ handleNoteChange model rawMeta =
         fields =
             fieldNames model.settings
 
-        updatedNoteCache =
-            Metadata.updateNoteCache fields model.allNotesByPath rawMeta
-
         changedNote =
             Metadata.processMetadata fields rawMeta
 
+        updatedVault =
+            Vault.insert changedNote model.vault
+
         notesAsList =
-            Dict.values updatedNoteCache
+            Vault.filteredContent model.settings updatedVault
     in
-    updateNotes { model | allNotesByPath = updatedNoteCache } notesAsList [ changedNote.filePath ]
+    updateNotes { model | vault = updatedVault } notesAsList [ changedNote.filePath ]
 
 
 fieldNames : Settings -> Metadata.FieldNames
@@ -872,13 +800,13 @@ fieldNames settings =
 handleFileDeleted : Model -> String -> ( Model, Cmd Msg )
 handleFileDeleted model path =
     let
-        updatedNoteCache =
-            Dict.remove path model.allNotesByPath
+        updatedVault =
+            Vault.remove path model.vault
 
         notesAsList =
-            Dict.values updatedNoteCache
+            Vault.filteredContent model.settings updatedVault
     in
-    updateNotes { model | allNotesByPath = updatedNoteCache } notesAsList []
+    updateNotes { model | vault = updatedVault } notesAsList []
 
 
 subscriptions : Model -> Sub Msg
