@@ -56,7 +56,7 @@ type alias Model =
     , scrollToNewlyOpenedNote : Bool
     , display : Display
     , virtualList : VirtualList.Model
-    , allNotes : Dict String NoteMeta
+    , allNotesByPath : Dict String NoteMeta
     }
 
 
@@ -73,7 +73,7 @@ defaultModel =
     , scrollToNewlyOpenedNote = True
     , display = Notes
     , virtualList = VirtualList.initWithConfig config
-    , allNotes = Dict.empty
+    , allNotesByPath = Dict.empty
     }
 
 
@@ -177,7 +177,7 @@ update msg model =
         AttachRequested currentNotePath ->
             let
                 allNotes =
-                    Dict.values model.allNotes
+                    Dict.values model.allNotesByPath
                         |> List.filter (\note -> note.filePath /= currentNotePath)
             in
             ( model, Ports.provideNotesForAttach ( currentNotePath, allNotes ) )
@@ -223,7 +223,7 @@ update msg model =
             handleRawFileMetas model rawMetas
 
         SearchRequested ->
-            ( model, Ports.provideNotesForSearch (Dict.values model.allNotes) )
+            ( model, Ports.provideNotesForSearch (Dict.values model.allNotesByPath) )
 
         ScrollRequested path ->
             scrollToNote model path
@@ -326,7 +326,7 @@ handleSettingsChange model portSettings =
             }
 
         filteredNotes =
-            Dict.values model.allNotes |> filterNotesAccordingToSettings transformedSettings
+            Dict.values model.allNotesByPath |> filterNotesAccordingToSettings transformedSettings
 
         ( newModel, cmd ) =
             updateNotes model filteredNotes []
@@ -569,24 +569,24 @@ handleFileRename model ( oldPath, newPath ) =
             updateCurrentFile model.currentFile oldPath newPath
 
         updatedNoteCache =
-            case Dict.get oldPath model.allNotes of
+            case Dict.get oldPath model.allNotesByPath of
                 Just note ->
                     let
                         updatedNote =
                             { note | filePath = newPath, title = getBaseName newPath }
                     in
-                    model.allNotes
+                    model.allNotesByPath
                         |> Dict.remove oldPath
                         |> Dict.insert newPath updatedNote
 
                 Nothing ->
-                    model.allNotes
+                    model.allNotesByPath
 
         oldCurrentFile =
             model.currentFile
 
         updatedModel =
-            { model | currentFile = updatedCurrentFile, allNotes = updatedNoteCache }
+            { model | currentFile = updatedCurrentFile, allNotesByPath = updatedNoteCache }
 
         ( newModel, scrollCmd ) =
             if oldCurrentFile == Just oldPath then
@@ -857,7 +857,7 @@ handleRawFileMetas model rawMetas =
             processedNotes
                 |> List.map .filePath
     in
-    updateNotes { model | allNotes = updatedNoteCache } includedNotes changedFiles
+    updateNotes { model | allNotesByPath = updatedNoteCache } includedNotes changedFiles
 
 
 filterNotesAccordingToSettings : Settings -> List NoteMeta -> List NoteMeta
@@ -907,7 +907,7 @@ handleNoteChange model rawMeta =
             fieldNames model.settings
 
         updatedNoteCache =
-            Metadata.updateNoteCache fields model.allNotes rawMeta
+            Metadata.updateNoteCache fields model.allNotesByPath rawMeta
 
         changedNote =
             Metadata.processMetadata fields rawMeta
@@ -915,7 +915,7 @@ handleNoteChange model rawMeta =
         notesAsList =
             Dict.values updatedNoteCache
     in
-    updateNotes { model | allNotes = updatedNoteCache } notesAsList [ changedNote.filePath ]
+    updateNotes { model | allNotesByPath = updatedNoteCache } notesAsList [ changedNote.filePath ]
 
 
 fieldNames : Settings -> Metadata.FieldNames
@@ -927,12 +927,12 @@ handleFileDeleted : Model -> String -> ( Model, Cmd Msg )
 handleFileDeleted model path =
     let
         updatedNoteCache =
-            Dict.remove path model.allNotes
+            Dict.remove path model.allNotesByPath
 
         notesAsList =
             Dict.values updatedNoteCache
     in
-    updateNotes { model | allNotes = updatedNoteCache } notesAsList []
+    updateNotes { model | allNotesByPath = updatedNoteCache } notesAsList []
 
 
 subscriptions : Model -> Sub Msg
