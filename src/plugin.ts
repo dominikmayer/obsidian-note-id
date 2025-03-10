@@ -12,7 +12,6 @@ import {
 import { Plugin, Notice, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
 
 export default class IDSidePanelPlugin extends Plugin {
-	private scheduleRefreshTimeout: number | null = null;
 	settings: IDSidePanelSettings;
 	noteCache: Map<string, NoteMeta> = new Map();
 	private rawMetadata: Array<{
@@ -94,22 +93,11 @@ export default class IDSidePanelPlugin extends Plugin {
 			this.refreshView();
 		});
 
-		this.addCommand({
-			id: "open-id-side-panel",
-			name: "Open side panel",
-			callback: () => this.activateView(),
-		});
-		this.addCommand({
-			id: "create-note-in-sequence",
-			name: "Create new note in sequence",
-			callback: () => this.createNoteFromCommand(false),
-		});
-		this.addCommand({
-			id: "create-note-in-subsequence",
-			name: "Create new note in subsequence",
-			callback: () => this.createNoteFromCommand(true),
-		});
+		this.registerEvents();
+		this.addCommands();
+	}
 
+	private registerEvents() {
 		this.registerEvent(
 			this.app.vault.on("modify", async (file) => {
 				await this.handleFileChange(file);
@@ -149,6 +137,24 @@ export default class IDSidePanelPlugin extends Plugin {
 				await this.handleFileChange(file);
 			}),
 		);
+	}
+
+	private addCommands() {
+		this.addCommand({
+			id: "open-id-side-panel",
+			name: "Open side panel",
+			callback: () => this.activateView(),
+		});
+		this.addCommand({
+			id: "create-note-in-sequence",
+			name: "Create new note in sequence",
+			callback: () => this.createNoteFromCommand(false),
+		});
+		this.addCommand({
+			id: "create-note-in-subsequence",
+			name: "Create new note in subsequence",
+			callback: () => this.createNoteFromCommand(true),
+		});
 
 		this.addCommand({
 			id: "note-search",
