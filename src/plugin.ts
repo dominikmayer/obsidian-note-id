@@ -139,9 +139,6 @@ export default class IDSidePanelPlugin extends Plugin {
 					const elmApp = this.getElmApp();
 					if (elmApp && elmApp.ports.receiveFileDeleted) {
 						elmApp.ports.receiveFileDeleted.send(file.path);
-					} else {
-						// Fall back to traditional refresh if Elm is not available
-						this.queueRefresh();
 					}
 				}
 			}),
@@ -247,21 +244,7 @@ export default class IDSidePanelPlugin extends Plugin {
 		const elmApp = this.getElmApp();
 		if (elmApp && elmApp.ports.receiveFileChange) {
 			elmApp.ports.receiveFileChange.send(rawMeta);
-		} else {
-			// If Elm is not available, fall back to traditional refresh
-			this.queueRefresh([file.path]);
 		}
-	}
-
-	private queueRefresh(changedFiles: string[] = []): void {
-		if (this.scheduleRefreshTimeout) {
-			clearTimeout(this.scheduleRefreshTimeout);
-		}
-		this.scheduleRefreshTimeout = window.setTimeout(() => {
-			this.scheduleRefreshTimeout = null;
-			const activePanelView = this.getActivePanelView();
-			if (activePanelView) activePanelView.renderNotes(changedFiles);
-		}, 50);
 	}
 
 	private waitForElmApp(retries = 10, delay = 200): Promise<ElmApp | null> {
@@ -335,9 +318,6 @@ export default class IDSidePanelPlugin extends Plugin {
 				this.rawMetadata.length > 0
 			) {
 				elmApp.ports.receiveRawFileMeta.send(this.rawMetadata);
-			} else {
-				// Fall back to the old way if we can't use raw metadata
-				activePanelView.renderNotes();
 			}
 		}
 	}

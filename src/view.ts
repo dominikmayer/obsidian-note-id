@@ -9,7 +9,6 @@ import {
 } from "obsidian";
 import IDSidePanelPlugin from "../main";
 import { ID_FIELD_DEFAULT, VIEW_TYPE_ID_PANEL } from "./constants";
-import { NoteMeta } from "./types";
 import { Elm, ElmApp } from "./Main.elm";
 
 export class IDSidePanelView extends ItemView {
@@ -191,44 +190,6 @@ export class IDSidePanelView extends ItemView {
 
 	getElmApp() {
 		return this.elmApp;
-	}
-
-	renderNotes(changedFiles: string[] = []) {
-		const { showNotesWithoutId } = this.plugin.settings;
-		const allNotes = Array.from(this.plugin.noteCache.values());
-
-		const notesWithID = allNotes
-			.filter((n) => n.id !== null)
-			.sort((a, b) => {
-				if (a.id === null) return 1;
-				if (b.id === null) return -1;
-				return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-			});
-
-		const notesWithoutID = allNotes
-			.filter((n) => n.id === null)
-			.sort((a, b) => a.title.localeCompare(b.title));
-
-		let combined: NoteMeta[] = [];
-		combined = combined.concat(notesWithID);
-		if (showNotesWithoutId) {
-			combined = combined.concat(notesWithoutID);
-		}
-
-		if (
-			this.elmApp &&
-			this.elmApp.ports &&
-			this.elmApp.ports.receiveNotes
-		) {
-			const notes = combined.map((note) => ({
-				title: note.title,
-				tocTitle: note.tocTitle,
-				id: note.id ? note.id.toString() : null, // Convert Maybe to a string
-				filePath: note.file.path,
-			}));
-
-			this.elmApp.ports.receiveNotes.send([notes, changedFiles]);
-		}
 	}
 
 	private async updateId(file: TFile, newValue: string) {
