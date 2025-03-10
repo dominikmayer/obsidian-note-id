@@ -1,5 +1,6 @@
 import {
 	ItemView,
+	TAbstractFile,
 	TFile,
 	WorkspaceLeaf,
 	Menu,
@@ -17,6 +18,11 @@ import { PortNoteMeta } from "/.elm";
 
 export class IDSidePanelView extends ItemView {
 	plugin: IDSidePanelPlugin;
+	private rawMetadata: Array<{
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	}> = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: IDSidePanelPlugin) {
 		super(leaf);
@@ -59,6 +65,17 @@ export class IDSidePanelView extends ItemView {
 			},
 		});
 
+		this.initializeCache();
+
+		if (
+			this.elmApp &&
+			this.elmApp.ports.receiveRawFileMeta &&
+			this.rawMetadata.length > 0
+		) {
+			this.elmApp.ports.receiveRawFileMeta.send(this.rawMetadata);
+		}
+
+		this.registerEvents();
 		this.elmApp.ports.openFile.subscribe((filePath: string) => {
 			const file = this.app.vault.getAbstractFileByPath(
 				normalizePath(filePath),
@@ -164,15 +181,6 @@ export class IDSidePanelView extends ItemView {
 			},
 		);
 
-		this.registerEvent(
-			this.app.workspace.on("file-open", (file) => {
-				if (this.elmApp && this.elmApp.ports.receiveFileOpen) {
-					const filePath = file?.path || null;
-					this.elmApp.ports.receiveFileOpen.send(filePath);
-				}
-			}),
-		);
-
 		this.elmApp.ports.provideNotesForSearch.subscribe((notes) => {
 			new OpenNoteModal(
 				this.app,
@@ -199,6 +207,76 @@ export class IDSidePanelView extends ItemView {
 				}
 			},
 		);
+	}
+
+	private registerEvents() {
+		this.registerEvent(
+			this.app.vault.on("modify", async (file) => {
+				await this.handleFileChange(file);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("rename", async (file, oldPath) => {
+				if (this.elmApp && this.elmApp.ports.receiveFileRenamed) {
+					this.elmApp.ports.receiveFileRenamed.send([
+						oldPath,
+						file.path,
+					]);
+				}
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("delete", async (file) => {
+				if (file instanceof TFile && file.extension === "md") {
+					if (this.elmApp && this.elmApp.ports.receiveFileDeleted) {
+						this.elmApp.ports.receiveFileDeleted.send(file.path);
+					}
+				}
+			}),
+		);
+
+		this.registerEvent(
+			this.app.metadataCache.on("changed", async (file) => {
+				await this.handleFileChange(file);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.workspace.on("file-open", (file) => {
+				const elmApp = this.getElmApp();
+				if (elmApp && elmApp.ports.receiveFileOpen) {
+					const filePath = file?.path || null;
+					elmApp.ports.receiveFileOpen.send(filePath);
+				}
+			}),
+		);
+	}
+
+	async handleFileChange(file: TAbstractFile) {
+		if (!(file instanceof TFile) || file.extension !== "md") {
+			return;
+		}
+
+		// Extract raw metadata
+		const rawMeta = await this.extractRawFileMeta(file);
+
+		// Update our cached raw metadata
+		const index = this.rawMetadata.findIndex(
+			(item) => item.path === file.path,
+		);
+		if (index >= 0) {
+			this.rawMetadata[index] = rawMeta;
+		} else {
+			this.rawMetadata.push(rawMeta);
+		}
+
+		// Send the changed file metadata to Elm for processing
+		const elmApp = this.getElmApp();
+		if (elmApp && elmApp.ports.receiveFileChange) {
+			elmApp.ports.receiveFileChange.send(rawMeta);
+		}
 	}
 
 	private mapPortNoteMeta(notes: PortNoteMeta[]): Map<string, NoteMeta> {
@@ -252,5 +330,42 @@ export class IDSidePanelView extends ItemView {
 		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			frontmatter[idField] = newValue;
 		});
+	}
+
+	private extractRawFileMeta(file: TFile): {
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	} {
+		const cache = this.app.metadataCache.getFileCache(file);
+		let frontmatter = null;
+
+		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
+			// Convert frontmatter object to array of key/value pairs with string values for Elm
+			frontmatter = Object.entries(cache.frontmatter).map(
+				([key, value]) => {
+					// Convert all values to strings for simplicity
+					const stringValue =
+						value === null
+							? ""
+							: typeof value === "object"
+								? JSON.stringify(value)
+								: String(value);
+					return [key, stringValue] as [string, string];
+				},
+			);
+		}
+
+		return {
+			path: file.path,
+			basename: file.basename,
+			frontmatter,
+		};
+	}
+
+	private initializeCache() {
+		this.rawMetadata = this.app.vault
+			.getMarkdownFiles()
+			.map((file) => this.extractRawFileMeta(file));
 	}
 }

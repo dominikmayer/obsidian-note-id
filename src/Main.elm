@@ -325,8 +325,11 @@ handleSettingsChange model portSettings =
             , indentation = portSettings.indentation
             }
 
+        filteredNotes =
+            Dict.values model.noteCache |> filterNotesAccordingToSettings transformedSettings
+
         ( newModel, cmd ) =
-            updateVirtualList model
+            updateNotes model filteredNotes []
     in
     ( { newModel
         | settings = transformedSettings
@@ -349,7 +352,7 @@ updateVirtualListHelper : Model -> List String -> ( Model, Cmd Msg )
 updateVirtualListHelper model idsToRemeasure =
     let
         filteredNotes =
-            filterNotes model.display model.settings.tocLevel model.notes
+            filterNotesForDisplay model.display model.settings.tocLevel model.notes
 
         ids =
             filteredNotes
@@ -513,8 +516,8 @@ splitHasChanged { oldNoteMap, newNoteMap } noteWithSplit =
     oldSplit /= newSplit
 
 
-filterNotes : Display -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
-filterNotes display maybeTocLevel notes =
+filterNotesForDisplay : Display -> Maybe Int -> List NoteWithSplit -> List NoteWithSplit
+filterNotesForDisplay display maybeTocLevel notes =
     case display of
         TOC ->
             List.filter
@@ -841,40 +844,83 @@ handleRawFileMetas : Model -> List RawFileMeta -> ( Model, Cmd Msg )
 handleRawFileMetas model rawMetas =
     let
         processedNotes =
-            Metadata.processRawNotes model.settings rawMetas
+            Metadata.processRawNotes (fieldNames model.settings) rawMetas
+
+        includedNotes =
+            filterNotesAccordingToSettings model.settings processedNotes
 
         updatedNoteCache =
             processedNotes
                 |> List.foldl (\note cache -> Dict.insert note.filePath note cache) Dict.empty
 
-        notesWithoutPaths =
-            processedNotes
-
         changedFiles =
             processedNotes
                 |> List.map .filePath
     in
-    updateNotes { model | noteCache = updatedNoteCache } notesWithoutPaths changedFiles
+    updateNotes { model | noteCache = updatedNoteCache } includedNotes changedFiles
+
+
+filterNotesAccordingToSettings : Settings -> List NoteMeta -> List NoteMeta
+filterNotesAccordingToSettings settings notes =
+    notes
+        |> List.filter (isIncluded settings)
+
+
+isIncluded : Settings -> NoteMeta -> Bool
+isIncluded settings note =
+    let
+        filePath =
+            note.filePath
+                |> String.replace "\\" "/"
+                -- convert Windows backslashes to forward slashes
+                |> String.toLower
+
+        normInclude =
+            settings.includeFolders
+                |> List.map (\f -> f |> String.replace "/+" "" |> String.toLower)
+
+        normExclude =
+            settings.excludeFolders
+                |> List.map (\f -> f |> String.replace "/+" "" |> String.toLower)
+
+        included =
+            List.isEmpty normInclude
+                || List.any (\folder -> String.startsWith (folder ++ "/") filePath) normInclude
+
+        excluded =
+            List.any (\folder -> String.startsWith (folder ++ "/") filePath) normExclude
+    in
+    if not included || excluded then
+        False
+
+    else if note.id == Nothing && not settings.showNotesWithoutId then
+        False
+
+    else
+        True
 
 
 handleNoteChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
 handleNoteChange model rawMeta =
     let
+        fields =
+            fieldNames model.settings
+
         updatedNoteCache =
-            Metadata.updateNoteCache model.settings model.noteCache rawMeta
+            Metadata.updateNoteCache fields model.noteCache rawMeta
 
         changedNote =
-            Metadata.processMetadata model.settings rawMeta
-
-        changedFiles =
-            changedNote
-                |> Maybe.map (\note -> [ note.filePath ])
-                |> Maybe.withDefault []
+            Metadata.processMetadata fields rawMeta
 
         notesAsList =
             Dict.values updatedNoteCache
     in
-    updateNotes { model | noteCache = updatedNoteCache } notesAsList changedFiles
+    updateNotes { model | noteCache = updatedNoteCache } notesAsList [ changedNote.filePath ]
+
+
+fieldNames : Settings -> Metadata.FieldNames
+fieldNames settings =
+    { id = settings.idField, toc = settings.tocField }
 
 
 handleFileDeleted : Model -> String -> ( Model, Cmd Msg )

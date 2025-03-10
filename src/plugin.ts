@@ -7,58 +7,10 @@ import {
 	ID_FIELD_DEFAULT,
 	TOC_TITLE_FIELD_DEFAULT,
 } from "./constants";
-import { Plugin, Notice, TAbstractFile, TFile, WorkspaceLeaf } from "obsidian";
+import { Plugin, Notice, TFile, WorkspaceLeaf } from "obsidian";
 
 export default class IDSidePanelPlugin extends Plugin {
 	settings: IDSidePanelSettings;
-	private rawMetadata: Array<{
-		path: string;
-		basename: string;
-		frontmatter: Array<[string, string]> | null;
-	}> = [];
-
-	async extractRawFileMeta(file: TFile): Promise<{
-		path: string;
-		basename: string;
-		frontmatter: Array<[string, string]> | null;
-	}> {
-		const cache = this.app.metadataCache.getFileCache(file);
-		let frontmatter = null;
-
-		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
-			// Convert frontmatter object to array of key/value pairs with string values for Elm
-			frontmatter = Object.entries(cache.frontmatter).map(
-				([key, value]) => {
-					// Convert all values to strings for simplicity
-					const stringValue =
-						value === null
-							? ""
-							: typeof value === "object"
-								? JSON.stringify(value)
-								: String(value);
-					return [key, stringValue] as [string, string];
-				},
-			);
-		}
-
-		return {
-			path: file.path,
-			basename: file.basename,
-			frontmatter,
-		};
-	}
-
-	async initializeCache() {
-		const markdownFiles = this.app.vault.getMarkdownFiles();
-
-		// Extract raw metadata from all files
-		const metaPromises = markdownFiles.map((file) =>
-			this.extractRawFileMeta(file),
-		);
-		this.rawMetadata = await Promise.all(metaPromises); // Parallel processing
-
-		// The raw metadata will be sent to Elm when refreshView is called
-	}
 
 	private getElmApp() {
 		const activePanelView = this.getActivePanelView();
@@ -84,54 +36,7 @@ export default class IDSidePanelPlugin extends Plugin {
 			this.activateView(),
 		);
 
-		this.app.workspace.onLayoutReady(async () => {
-			await this.initializeCache();
-			this.refreshView();
-		});
-
-		this.registerEvents();
 		this.addCommands();
-	}
-
-	private registerEvents() {
-		this.registerEvent(
-			this.app.vault.on("modify", async (file) => {
-				await this.handleFileChange(file);
-			}),
-		);
-
-		this.registerEvent(
-			this.app.vault.on("rename", async (file, oldPath) => {
-				await this.handleFileChange(file);
-				// Sending this after the files are reloaded so scrolling works
-				const elmApp = this.getElmApp();
-				if (elmApp && elmApp.ports.receiveFileRenamed) {
-					elmApp.ports.receiveFileRenamed.send([oldPath, file.path]);
-				}
-			}),
-		);
-
-		this.registerEvent(
-			this.app.vault.on("delete", async (file) => {
-				if (file instanceof TFile && file.extension === "md") {
-					// Update our cached raw metadata
-					this.rawMetadata = this.rawMetadata.filter(
-						(item) => item.path !== file.path,
-					);
-
-					const elmApp = this.getElmApp();
-					if (elmApp && elmApp.ports.receiveFileDeleted) {
-						elmApp.ports.receiveFileDeleted.send(file.path);
-					}
-				}
-			}),
-		);
-
-		this.registerEvent(
-			this.app.metadataCache.on("changed", async (file) => {
-				await this.handleFileChange(file);
-			}),
-		);
 	}
 
 	private addCommands() {
@@ -219,31 +124,6 @@ export default class IDSidePanelPlugin extends Plugin {
 		});
 	}
 
-	async handleFileChange(file: TAbstractFile) {
-		if (!(file instanceof TFile) || file.extension !== "md") {
-			return;
-		}
-
-		// Extract raw metadata
-		const rawMeta = await this.extractRawFileMeta(file);
-
-		// Update our cached raw metadata
-		const index = this.rawMetadata.findIndex(
-			(item) => item.path === file.path,
-		);
-		if (index >= 0) {
-			this.rawMetadata[index] = rawMeta;
-		} else {
-			this.rawMetadata.push(rawMeta);
-		}
-
-		// Send the changed file metadata to Elm for processing
-		const elmApp = this.getElmApp();
-		if (elmApp && elmApp.ports.receiveFileChange) {
-			elmApp.ports.receiveFileChange.send(rawMeta);
-		}
-	}
-
 	private waitForElmApp(retries = 10, delay = 200): Promise<ElmApp | null> {
 		return new Promise((resolve, reject) => {
 			const checkElmApp = () => {
@@ -299,30 +179,12 @@ export default class IDSidePanelPlugin extends Plugin {
 			type: VIEW_TYPE_ID_PANEL,
 			active: true,
 		});
-		await this.refreshView();
 		return leaf;
-	}
-
-	async refreshView() {
-		const activePanelView = this.getActivePanelView();
-		if (activePanelView) {
-			const elmApp = this.getElmApp();
-
-			if (
-				elmApp &&
-				elmApp.ports.receiveRawFileMeta &&
-				this.rawMetadata.length > 0
-			) {
-				elmApp.ports.receiveRawFileMeta.send(this.rawMetadata);
-			}
-		}
 	}
 
 	async saveSettings() {
 		await this.saveData(this.settings);
 		this.sendSettingsToElm(this.getSettings());
-		await this.initializeCache();
-		await this.refreshView();
 	}
 
 	getSettings(): IDSidePanelSettings {
@@ -336,7 +198,6 @@ export default class IDSidePanelPlugin extends Plugin {
 	private sendSettingsToElm(settings: IDSidePanelSettings) {
 		const elmApp = this.getElmApp();
 		if (elmApp && elmApp.ports.receiveSettings) {
-			console.log("Sending settings to Elm:", settings);
 			elmApp.ports.receiveSettings.send(settings);
 		}
 	}
