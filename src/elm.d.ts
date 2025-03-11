@@ -94,7 +94,7 @@ declare module "*.elm" {
 	}
 
 	export const Elm: {
-		Main: {
+		NoteId: {
 			init(options: { node?: HTMLElement | null; flags: Flags }): ElmApp;
 		};
 	};

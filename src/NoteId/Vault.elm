@@ -1,11 +1,11 @@
-module Vault exposing (Vault, empty, fill, filteredContent, insert, remove, rename)
+module NoteId.Vault exposing (Vault, empty, fill, filteredContent, insert, remove, rename)
 
 import Dict exposing (Dict)
-import Metadata exposing (FieldNames)
-import NoteMeta exposing (NoteMeta)
-import Path exposing (Path(..))
-import Ports exposing (RawFileMeta)
-import Settings exposing (Settings)
+import NoteId.Metadata as Metadata exposing (FieldNames)
+import NoteId.NoteMeta exposing (NoteMeta)
+import NoteId.Path as Path exposing (Path(..))
+import NoteId.Ports exposing (RawFileMeta)
+import NoteId.Settings exposing (Settings)
 
 
 type Vault

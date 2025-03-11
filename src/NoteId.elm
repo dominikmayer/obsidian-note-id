@@ -1,373 +1,622 @@
-module NoteId exposing (getNewIdInSequence, getNewIdInSubsequence, parts, IdPart(..), toString, compareId, splitLevel, level)
-
-import List.Extra
-import Parser exposing (Parser, (|.), (|=), succeed, oneOf, map, chompWhile, getChompedString, problem, andThen)
-
-
-getNewIdInSequence : String -> String
-getNewIdInSequence id =
-    case parts id of
-        Ok idParts ->
-            case List.reverse idParts of
-                (Number n) :: rest ->
-                    toString (List.reverse (Number (n + 1) :: rest))
-
-                (Letters s) :: rest ->
-                    case incrementString s of
-                        Just newLetters ->
-                            toString (List.reverse (Letters newLetters :: rest))
-
-                        Nothing ->
-                            id
-
-                (Delimiter _) :: _ ->
-                    id
-
-                [] ->
-                    id
-
-        Err _ ->
-            id
-
-
-getNewIdInSubsequence : String -> String
-getNewIdInSubsequence id =
-    case parts id of
-        Ok idParts ->
-            let
-                updatedParts =
-                    case List.Extra.last idParts of
-                        Just (Number _) ->
-                            idParts ++ [ Letters "a" ]
-
-                        Just (Letters _) ->
-                            idParts ++ [ Number 1 ]
-
-                        _ ->
-                            idParts
-            in
-                toString updatedParts
-
-        Err _ ->
-            id
-
-
-incrementString : String -> Maybe String
-incrementString str =
-    if str == "" then
-        Nothing
-    else
-        str
-            |> String.reverse
-            |> incrementChars
-            |> Maybe.map String.reverse
-
-
-incrementChars : String -> Maybe String
-incrementChars str =
-    case String.toList str of
-        [] ->
-            Nothing
-
-        chars ->
-            let
-                ( reversedNewString, carry ) =
-                    propagateCarry chars
-            in
-                if carry then
-                    Just ("a" ++ reversedNewString)
-                else
-                    Just reversedNewString
-
-
-propagateCarry : List Char -> ( String, Bool )
-propagateCarry chars =
-    case chars of
-        [] ->
-            ( "", True )
-
-        head :: tail ->
-            let
-                ( nextChar, carry ) =
-                    incrementChar head
-            in
-                if carry then
-                    let
-                        ( incrementedTail, nextCarry ) =
-                            propagateCarry tail
-                    in
-                        ( nextChar ++ incrementedTail, nextCarry )
-                else
-                    ( nextChar ++ String.fromList tail, False )
-
-
-incrementChar : Char -> ( String, Bool )
-incrementChar char =
-    if char == 'z' then
-        ( "a", True )
-        -- Overflow to 'a', with carry
-    else
-        ( String.fromChar (Char.fromCode (Char.toCode char + 1)), False )
-
-
-type IdPart
-    = Number Int
-    | Letters String
-    | Delimiter String
-
-
-isDelimiter : IdPart -> Bool
-isDelimiter part =
-    case part of
-        Number _ ->
-            False
-
-        Letters _ ->
-            False
-
-        Delimiter _ ->
-            True
-
-
-parts : String -> Result String (List IdPart)
-parts id =
-    case Parser.run idParser id of
-        Ok result ->
-            Ok result
-
-        Err _ ->
-            Err "Failed to parse ID"
-
-
-idParser : Parser (List IdPart)
-idParser =
-    Parser.loop [] parseParts
-
-
-parseParts : List IdPart -> Parser (Parser.Step (List IdPart) (List IdPart))
-parseParts parsed =
-    oneOf
-        [ parseNumber |> map (\p -> Parser.Loop (p :: parsed))
-        , parseLetters |> map (\p -> Parser.Loop (p :: parsed))
-        , parseDelimiter |> map (\p -> Parser.Loop (p :: parsed))
-        , succeed (Parser.Done (List.reverse parsed))
-        ]
-
-
-parseNumber : Parser IdPart
-parseNumber =
-    getChompedString (chompWhile Char.isDigit)
-        |> andThen
-            (\s ->
-                case String.toInt s of
-                    Just n ->
-                        succeed (Number n)
-
-                    Nothing ->
-                        problem "Invalid number"
-            )
-
-
-parseLetters : Parser IdPart
-parseLetters =
-    getChompedString (chompWhile Char.isAlpha)
-        |> andThen
-            (\s ->
-                if s == "" then
-                    problem "Expected letters"
-                else
-                    succeed (Letters s)
-            )
-
-
-parseDelimiter : Parser IdPart
-parseDelimiter =
-    getChompedString (chompWhile (\c -> not (Char.isAlpha c || Char.isDigit c)))
-        |> andThen
-            (\s ->
-                if s == "" then
-                    problem "Expected delimiter"
-                else
-                    succeed (Delimiter s)
-            )
-
-
-toString : List IdPart -> String
-toString idParts =
-    idParts
-        |> List.map idPartToString
-        |> String.concat
-
-
-idPartToString : IdPart -> String
-idPartToString part =
-    case part of
-        Number n ->
-            String.fromInt n
-
-        Letters s ->
-            s
-
-        Delimiter s ->
-            s
-
-
-compareId : String -> String -> Order
-compareId a b =
-    case ( parts a, parts b ) of
-        ( Ok partsA, Ok partsB ) ->
-            compareIdParts partsA partsB
-
-        ( Err _, Ok _ ) ->
-            LT
-
-        ( Ok _, Err _ ) ->
-            GT
-
-        ( Err _, Err _ ) ->
-            EQ
-
-
-compareIdParts : List IdPart -> List IdPart -> Order
-compareIdParts id1 id2 =
-    List.Extra.findMap
-        (\( p1, p2 ) ->
-            let
-                order =
-                    compareIdPart p1 p2
-            in
-                if order == EQ then
-                    Nothing
-                else
-                    Just order
-        )
-        (List.Extra.zip id1 id2)
-        |> Maybe.withDefault (compare (List.length id1) (List.length id2))
-
-
-compareIdPart : IdPart -> IdPart -> Order
-compareIdPart a b =
-    case ( a, b ) of
-        ( Number n1, Number n2 ) ->
-            compare n1 n2
-
-        ( Number _, Letters _ ) ->
-            LT
-
-        ( Letters _, Number _ ) ->
-            GT
-
-        ( Letters s1, Letters s2 ) ->
-            case compare (String.length s1) (String.length s2) of
-                EQ ->
-                    compare s1 s2
-
-                order ->
-                    order
-
-        ( Delimiter delimiterA, Delimiter delimiterB ) ->
-            compare delimiterA delimiterB
-
-        ( Delimiter _, _ ) ->
-            LT
-
-        ( _, Delimiter _ ) ->
-            GT
-
-
-type alias Level =
-    { value : IdPart
-    , delimiter : Maybe String
+module NoteId exposing (main)
+
+import Browser
+import Dict exposing (Dict)
+import Html exposing (Html, div)
+import Html.Attributes
+import Html.Events exposing (onClick)
+import Html.Events.Extra.Mouse as Mouse
+import Html.Lazy exposing (lazy)
+import Json.Decode as Decode
+import Json.Encode as Encode
+import NoteId.Id as Id
+import NoteId.Metadata as Metadata
+import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
+import NoteId.Notes as Notes exposing (Notes)
+import NoteId.Path as Path exposing (Path(..))
+import NoteId.Ports as Ports exposing (RawFileMeta)
+import NoteId.Settings as Settings exposing (Settings)
+import NoteId.Vault as Vault exposing (Vault)
+import Task
+import VirtualList
+import VirtualList.Config
+
+
+
+-- MAIN
+
+
+main : Program Encode.Value Model Msg
+main =
+    Browser.element
+        { init = init
+        , update = update
+        , view = view
+        , subscriptions = subscriptions
+        }
+
+
+
+-- MODEL
+
+
+type DisplayMode
+    = TOC
+    | Notes
+
+
+type alias Model =
+    { includedNotes : Notes
+    , currentFile : Maybe Path
+    , settings : Settings
+    , scrollToNewlyOpenedNote : Bool
+    , currentDisplayMode : DisplayMode
+    , virtualList : VirtualList.Model
+    , vault : Vault
     }
 
 
-groupLevels : List IdPart -> List Level
-groupLevels tokens =
-    case tokens of
-        [] ->
-            []
-
-        t :: rest ->
-            case t of
-                Delimiter _ ->
-                    groupLevels rest
-
-                _ ->
-                    let
-                        ( delim, remaining ) =
-                            case rest of
-                                t2 :: rest2 ->
-                                    case t2 of
-                                        Delimiter s ->
-                                            ( Just s, rest2 )
-
-                                        _ ->
-                                            ( Nothing, rest )
-
-                                [] ->
-                                    ( Nothing, [] )
-                    in
-                        { value = t, delimiter = delim }
-                            :: groupLevels remaining
-
-
-compareLevels : List Level -> List Level -> Maybe Int
-compareLevels levels1 levels2 =
+defaultModel : Model
+defaultModel =
     let
-        helper l1 l2 index =
-            case ( l1, l2 ) of
-                ( x :: xs, y :: ys ) ->
-                    if levelEquals x y then
-                        helper xs ys (index + 1)
-                    else
-                        Just index
-
-                _ ->
-                    Nothing
+        config =
+            VirtualList.Config.default
+                |> VirtualList.Config.setBuffer 10
     in
-        case ( levels1, levels2 ) of
-            ( [], [] ) ->
-                Nothing
-
-            ( [], _ ) ->
-                Just 1
-
-            ( _, [] ) ->
-                Just 1
-
-            _ ->
-                helper levels1 levels2 1
+    { includedNotes = Notes.empty
+    , currentFile = Nothing
+    , settings = Settings.default
+    , scrollToNewlyOpenedNote = True
+    , currentDisplayMode = Notes
+    , virtualList = VirtualList.initWithConfig config
+    , vault = Vault.empty
+    }
 
 
-levelEquals : Level -> Level -> Bool
-levelEquals l1 l2 =
-    (l1.value == l2.value)
-        && ((l1.delimiter == l2.delimiter)
-                || (l1.delimiter == Nothing)
-                || (l2.delimiter == Nothing)
-           )
+init : Encode.Value -> ( Model, Cmd Msg )
+init flags =
+    let
+        model =
+            { defaultModel
+                | settings = Settings.decode Settings.default flags
+                , currentFile = decodeActiveFile flags
+            }
+    in
+    -- Won't find the note yet but will initiate the future scroll
+    scrollToCurrentNote model
 
 
-splitLevel : String -> String -> Maybe Int
-splitLevel id1 id2 =
-    case ( parts id1, parts id2 ) of
-        ( Ok tokens1, Ok tokens2 ) ->
+decodeActiveFile : Encode.Value -> Maybe Path
+decodeActiveFile flags =
+    Decode.decodeValue (Decode.field "activeFile" Decode.string) flags
+        |> Result.toMaybe
+        |> Maybe.map Path
+
+
+
+-- UPDATE
+
+
+type Msg
+    = AttachRequested Path
+    | ContextMenuTriggered Mouse.Event Path
+    | DisplayChanged Bool
+    | NewIdRequestedForNoteFromNote ( Path, Path, Bool )
+    | NoteChangeReceived RawFileMeta
+    | NoteClicked Path
+    | NoteCreationRequested ( Path, Bool )
+    | NoteDeleted Path
+    | NoteOpened (Maybe Path)
+    | NoteRenamed ( Path, Path )
+    | RawFileMetaReceived (List RawFileMeta)
+    | SearchRequested
+    | ScrollRequested Path
+    | SettingsChanged Ports.Settings
+    | VirtualListMsg VirtualList.Msg
+
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    case msg of
+        AttachRequested currentNotePath ->
             let
-                levels1 =
-                    groupLevels tokens1
-
-                levels2 =
-                    groupLevels tokens2
+                allNotes =
+                    Vault.filteredContent model.settings model.vault
+                        |> List.filter (\note -> note.filePath /= currentNotePath)
+                        |> List.map NoteMeta.forPort
             in
-                compareLevels levels1 levels2
+            ( model, Ports.provideNotesForAttach ( Path.toString currentNotePath, allNotes ) )
 
-        _ ->
-            Nothing
+        ContextMenuTriggered event path ->
+            let
+                ( x, y ) =
+                    event.clientPos
+            in
+            ( model, Ports.openContextMenu ( x, y, Path.toString path ) )
+
+        DisplayChanged tocShown ->
+            handleDisplayChange model tocShown
+
+        NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
+            let
+                cmd =
+                    Notes.getNewIdFromNote model.includedNotes from subsequence
+                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, Path.toString for ))
+                        |> Maybe.withDefault Cmd.none
+            in
+            ( model, cmd )
+
+        NoteChangeReceived rawMeta ->
+            handleNoteChange model rawMeta
+
+        NoteClicked filePath ->
+            handleNoteClick model filePath
+
+        NoteCreationRequested ( filePath, child ) ->
+            createNote model filePath child
+
+        NoteDeleted path ->
+            handleFileDeleted model path
+
+        NoteOpened filePath ->
+            fileOpened model filePath
+
+        NoteRenamed paths ->
+            handleFileRename model paths
+
+        RawFileMetaReceived rawMetas ->
+            handleRawFileMetas model rawMetas
+
+        SearchRequested ->
+            ( model
+            , Ports.provideNotesForSearch
+                (Vault.filteredContent model.settings model.vault |> List.map NoteMeta.forPort)
+            )
+
+        ScrollRequested path ->
+            scrollToNote model path
+
+        SettingsChanged settings ->
+            handleSettingsChange model settings
+
+        VirtualListMsg virtualListMsg ->
+            mapVirtualListResult (VirtualList.update virtualListMsg model.virtualList) model
 
 
-level : String -> Int
-level id =
-    parts id
-        |> Result.map (List.filter (not << isDelimiter))
-        |> Result.map List.length
-        |> Result.withDefault 0
+handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
+handleDisplayChange model tocShown =
+    let
+        newDisplay =
+            if tocShown then
+                TOC
+
+            else
+                Notes
+    in
+    reloadNotesAndScroll model newDisplay
+
+
+reloadNotesAndScroll : Model -> DisplayMode -> ( Model, Cmd Msg )
+reloadNotesAndScroll model newDisplay =
+    let
+        ( newModelPre, displayCmd ) =
+            updateDisplay model newDisplay
+
+        ( newModel, scrollCmd ) =
+            scrollToCurrentNote newModelPre
+    in
+    ( newModel, Cmd.batch [ displayCmd, scrollCmd ] )
+
+
+handleNoteClick : Model -> Path -> ( Model, Cmd Msg )
+handleNoteClick model filePath =
+    let
+        ( newModel, updateCmd ) =
+            if model.currentDisplayMode == TOC then
+                updateDisplay model Notes
+
+            else
+                ( model, Cmd.none )
+
+        fileIsAlreadyOpen =
+            Maybe.map ((==) filePath) model.currentFile |> Maybe.withDefault False
+
+        fileCmd =
+            if fileIsAlreadyOpen then
+                Task.perform (\_ -> ScrollRequested filePath) (Task.succeed ())
+
+            else
+                Ports.openFile (Path.toString filePath)
+
+        cmd =
+            Cmd.batch [ fileCmd, updateCmd ]
+    in
+    ( { newModel | scrollToNewlyOpenedNote = model.currentDisplayMode == TOC }, cmd )
+
+
+updateDisplay : Model -> DisplayMode -> ( Model, Cmd Msg )
+updateDisplay model newDisplay =
+    let
+        ( updatedModel, updateCmd ) =
+            updateVirtualList { model | currentDisplayMode = newDisplay }
+
+        cmd =
+            Cmd.batch
+                [ updateCmd
+                , Ports.toggleTOCButton (newDisplay == TOC)
+                ]
+    in
+    ( updatedModel
+    , cmd
+    )
+
+
+handleSettingsChange : Model -> Ports.Settings -> ( Model, Cmd Msg )
+handleSettingsChange model portSettings =
+    updateNotes
+        { model | settings = Settings.fromPort portSettings }
+        []
+
+
+updateVirtualList : Model -> ( Model, Cmd Msg )
+updateVirtualList model =
+    Notes.paths model.includedNotes
+        |> updateVirtualListHelper model
+
+
+updateVirtualListHelper : Model -> List Path -> ( Model, Cmd Msg )
+updateVirtualListHelper model idsToRemeasure =
+    let
+        filteredNotes =
+            filterNotesForDisplay model.currentDisplayMode model.settings.tocLevel model.includedNotes
+
+        ( newVirtualList, virtualListCmd ) =
+            VirtualList.setItemsAndRemeasure model.virtualList
+                { newIds = Notes.paths filteredNotes |> List.map Path.toString
+                , idsToRemeasure = idsToRemeasure |> List.map Path.toString
+                }
+    in
+    ( { model
+        | virtualList = newVirtualList
+      }
+    , Cmd.map VirtualListMsg virtualListCmd
+    )
+
+
+mapVirtualListResult : ( VirtualList.Model, Cmd VirtualList.Msg ) -> Model -> ( Model, Cmd Msg )
+mapVirtualListResult ( virtualListModel, virtualListCmd ) model =
+    ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
+
+
+createNote : Model -> Path -> Bool -> ( Model, Cmd Msg )
+createNote model path child =
+    let
+        newPath =
+            Path.withoutFileName path ++ "/Untitled.md"
+
+        fileContent =
+            Notes.getNewIdFromNote model.includedNotes path child
+                |> Maybe.map (createNoteContent model.settings.idField)
+                |> Maybe.withDefault ""
+    in
+    ( model, Ports.createNote ( newPath, fileContent ) )
+
+
+createNoteContent : String -> String -> String
+createNoteContent idNameFromSettings id =
+    let
+        idName =
+            if String.isEmpty idNameFromSettings then
+                "id"
+
+            else
+                idNameFromSettings
+    in
+    "---\n" ++ idName ++ ": " ++ id ++ "\n---"
+
+
+updateNotes : Model -> List Path -> ( Model, Cmd Msg )
+updateNotes model changedNotes =
+    let
+        newNotes =
+            Vault.filteredContent model.settings model.vault
+
+        annotatedNotes =
+            Notes.annotate (NoteMeta.sort newNotes)
+
+        affectedIds =
+            if Notes.isEmpty model.includedNotes then
+                -- On initial load, all new notes need to be measured
+                Notes.paths annotatedNotes
+
+            else
+                let
+                    changedSplitIds =
+                        Notes.splitChanges { oldNotes = model.includedNotes, newNotes = annotatedNotes }
+                in
+                List.append changedSplitIds changedNotes
+
+        modelWithSortedNotes =
+            { model | includedNotes = annotatedNotes }
+
+        ( modelWithUpdatedVirtualList, cmd ) =
+            updateVirtualListHelper modelWithSortedNotes affectedIds
+    in
+    ( modelWithUpdatedVirtualList, cmd )
+
+
+filterNotesForDisplay : DisplayMode -> Maybe Int -> Notes -> Notes
+filterNotesForDisplay display maybeTocLevel notes =
+    case display of
+        TOC ->
+            Notes.filter (showInToc maybeTocLevel) notes
+
+        Notes ->
+            notes
+
+
+showInToc : Maybe Int -> NoteMeta -> Bool
+showInToc maybeTocLevel note =
+    let
+        hasTocField =
+            note.tocTitle /= Nothing
+
+        noteLevel =
+            Maybe.withDefault 0 (note.id |> Maybe.map Id.level)
+    in
+    case maybeTocLevel of
+        Just tocLevel ->
+            hasTocField || (0 < noteLevel && noteLevel <= tocLevel)
+
+        Nothing ->
+            hasTocField
+
+
+handleFileRename : Model -> ( Path, Path ) -> ( Model, Cmd Msg )
+handleFileRename model ( oldPath, newPath ) =
+    let
+        updatedCurrentFile =
+            updateCurrentFile model.currentFile oldPath newPath
+
+        updatedVault =
+            Vault.rename model.vault { oldPath = oldPath, newPath = newPath }
+
+        oldCurrentFile =
+            model.currentFile
+
+        updatedModel =
+            { model | currentFile = updatedCurrentFile, vault = updatedVault }
+
+        ( newModel, scrollCmd ) =
+            if oldCurrentFile == Just oldPath then
+                scrollToNote updatedModel newPath
+
+            else
+                ( updatedModel, Cmd.none )
+
+        ( finalModel, listCmd ) =
+            updateNotes newModel [ oldPath, newPath ]
+    in
+    ( finalModel, Cmd.batch [ scrollCmd, listCmd ] )
+
+
+updateCurrentFile : Maybe Path -> Path -> Path -> Maybe Path
+updateCurrentFile current oldPath newPath =
+    if current == Just oldPath then
+        Just newPath
+
+    else
+        current
+
+
+fileOpened : Model -> Maybe Path -> ( Model, Cmd Msg )
+fileOpened model filePath =
+    case filePath of
+        Just path ->
+            let
+                ( updatedModel, scrollCmd ) =
+                    scrollToExternallyOpenedNote model path
+            in
+            ( { updatedModel | currentFile = Just path }, scrollCmd )
+
+        Nothing ->
+            ( model, Cmd.none )
+
+
+scrollToExternallyOpenedNote : Model -> Path -> ( Model, Cmd Msg )
+scrollToExternallyOpenedNote model path =
+    if model.scrollToNewlyOpenedNote then
+        scrollToNote model path
+
+    else
+        ( { model | scrollToNewlyOpenedNote = True }, Cmd.none )
+
+
+scrollToNote : Model -> Path -> ( Model, Cmd Msg )
+scrollToNote model path =
+    let
+        ( newVirtualList, virtualListCmd ) =
+            VirtualList.scrollToItem model.virtualList (Path.toString path) VirtualList.Center
+    in
+    ( { model | virtualList = newVirtualList }
+    , Cmd.map VirtualListMsg virtualListCmd
+    )
+
+
+scrollToCurrentNote : Model -> ( Model, Cmd Msg )
+scrollToCurrentNote model =
+    model.currentFile
+        |> Maybe.map (scrollToNote model)
+        |> Maybe.withDefault ( model, Cmd.none )
+
+
+
+-- VIEW
+
+
+view : Model -> Html Msg
+view model =
+    VirtualList.view (lazy (renderRow model)) model.virtualList VirtualListMsg
+
+
+renderRow : Model -> String -> Html Msg
+renderRow model filePath =
+    case Notes.getNoteByPath (Path filePath) model.includedNotes of
+        Just noteWithSplit ->
+            renderNote model noteWithSplit.note noteWithSplit.splitLevel
+
+        Nothing ->
+            div [] []
+
+
+renderNote : Model -> NoteMeta -> Maybe Int -> Html Msg
+renderNote model note maybeSplit =
+    let
+        marginTopStyle =
+            if model.currentDisplayMode == TOC then
+                []
+
+            else
+                case maybeSplit of
+                    Just splitLevel ->
+                        if 0 < splitLevel && splitLevel <= model.settings.splitLevel then
+                            adaptedMarginTopStyle model.settings.splitLevel splitLevel
+
+                        else
+                            []
+
+                    Nothing ->
+                        []
+
+        level =
+            note.id
+                |> Maybe.map Id.level
+                |> Maybe.withDefault 0
+                |> toFloat
+
+        marginLeftStyle =
+            if model.settings.indentation then
+                [ marginLeft level ]
+
+            else
+                []
+
+        title =
+            if model.currentDisplayMode == TOC then
+                Maybe.withDefault note.title note.tocTitle
+
+            else
+                note.title
+    in
+    div
+        ([ Html.Attributes.classList
+            [ ( "tree-item-self", True )
+            , ( "is-clickable", True )
+            , ( "is-active", Just note.filePath == model.currentFile )
+            ]
+         , Html.Attributes.attribute "data-path" (Path.toString note.filePath)
+         , onClick (NoteClicked note.filePath)
+         , Mouse.onContextMenu (\event -> ContextMenuTriggered event note.filePath)
+         ]
+            ++ marginTopStyle
+        )
+        [ div
+            (Html.Attributes.class "tree-item-inner" :: marginLeftStyle)
+            (case note.id of
+                Just id ->
+                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                    , Html.text title
+                    ]
+
+                Nothing ->
+                    [ Html.text title ]
+            )
+        ]
+
+
+adaptedMarginTopStyle : Int -> Int -> List (Html.Attribute msg)
+adaptedMarginTopStyle splitLevelSetting level =
+    let
+        availableSizes =
+            [ "--size-4-8"
+            , "--size-4-9"
+            , "--size-4-12"
+            , "--size-4-16"
+            , "--size-4-18"
+            ]
+
+        sizeMap : Dict Int String
+        sizeMap =
+            List.indexedMap (\i size -> ( splitLevelSetting - i, size )) availableSizes
+                |> Dict.fromList
+
+        marginSize =
+            Dict.get level sizeMap
+                |> Maybe.withDefault "--size-4-18"
+    in
+    [ Html.Attributes.style "margin-top" ("var(" ++ marginSize ++ ")") ]
+
+
+marginLeft : Float -> Html.Attribute msg
+marginLeft level =
+    Html.Attributes.style "margin-left" ("calc(var(--size-2-3) * " ++ String.fromFloat level ++ ")")
+
+
+
+-- New handlers for raw metadata
+
+
+handleRawFileMetas : Model -> List RawFileMeta -> ( Model, Cmd Msg )
+handleRawFileMetas model rawMetas =
+    let
+        vault =
+            Vault.fill (fieldNames model.settings) rawMetas
+
+        changedFiles =
+            Vault.filteredContent model.settings vault
+                |> List.map .filePath
+    in
+    updateNotes { model | vault = vault } changedFiles
+
+
+handleNoteChange : Model -> RawFileMeta -> ( Model, Cmd Msg )
+handleNoteChange model rawMeta =
+    let
+        changedNote =
+            Metadata.processMetadata (fieldNames model.settings) rawMeta
+
+        updatedVault =
+            Vault.insert changedNote model.vault
+    in
+    updateNotes { model | vault = updatedVault } [ changedNote.filePath ]
+
+
+fieldNames : Settings -> Metadata.FieldNames
+fieldNames settings =
+    { id = settings.idField, toc = settings.tocField }
+
+
+handleFileDeleted : Model -> Path -> ( Model, Cmd Msg )
+handleFileDeleted model path =
+    let
+        updatedVault =
+            Vault.remove path model.vault
+    in
+    updateNotes { model | vault = updatedVault } []
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.batch
+        [ Ports.receiveCreateNote (\( path, subsequence ) -> NoteCreationRequested ( Path path, subsequence ))
+        , Ports.receiveDisplayIsToc DisplayChanged
+        , Ports.receiveFileOpen (\path -> NoteOpened (Maybe.map Path path))
+        , Ports.receiveFileRenamed (\( from, to ) -> NoteRenamed ( Path from, Path to ))
+        , Ports.receiveFileDeleted (\path -> NoteDeleted (Path path))
+        , Ports.receiveRawFileMeta RawFileMetaReceived
+        , Ports.receiveFileChange NoteChangeReceived
+        , Ports.receiveGetNewIdForNoteFromNote (\( for, from, subsequence ) -> NewIdRequestedForNoteFromNote ( Path for, Path from, subsequence ))
+        , Ports.receiveSettings SettingsChanged
+        , Ports.receiveRequestSearch (\_ -> SearchRequested)
+        , Ports.receiveRequestAttach (\path -> AttachRequested (Path path))
+        ]

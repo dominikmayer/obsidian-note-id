@@ -10,7 +10,7 @@ import {
 } from "obsidian";
 import IDSidePanelPlugin from "../main";
 import { VIEW_TYPE_ID_PANEL } from "./constants";
-import { Elm, ElmApp } from "./Main.elm";
+import { Elm, ElmApp } from "./NoteId.elm";
 import { OpenNoteModal } from "./openNoteModal";
 import { AttachNoteModal } from "./attachNoteModal";
 import { NoteMeta } from "./types";
@@ -57,7 +57,7 @@ export class IDSidePanelView extends ItemView {
 
 		const activeFile = this.app.workspace.getActiveFile();
 
-		this.elmApp = Elm.Main.init({
+		this.elmApp = Elm.NoteId.init({
 			node: elmContainer,
 			flags: {
 				settings: this.plugin.getSettings(),

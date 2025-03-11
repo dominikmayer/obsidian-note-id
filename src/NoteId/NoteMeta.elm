@@ -1,8 +1,8 @@
-module NoteMeta exposing (NoteMeta, forPort, sort)
+module NoteId.NoteMeta exposing (NoteMeta, forPort, sort)
 
-import NoteId
-import Path exposing (Path)
-import Ports
+import NoteId.Id
+import NoteId.Path as Path exposing (Path)
+import NoteId.Ports as Ports
 
 
 type alias NoteMeta =
@@ -37,6 +37,6 @@ sort notes =
                     LT
 
                 ( Just idA, Just idB ) ->
-                    NoteId.compareId idA idB
+                    NoteId.Id.compareId idA idB
         )
         notes

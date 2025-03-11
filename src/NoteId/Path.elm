@@ -1,4 +1,8 @@
-module Path exposing (Path(..), toString, withoutFileName)
+module NoteId.Path exposing
+    ( Path(..)
+    , toString
+    , withoutFileName
+    )
 
 
 type Path

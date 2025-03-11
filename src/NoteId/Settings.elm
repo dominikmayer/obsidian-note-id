@@ -1,7 +1,12 @@
-module Settings exposing (Settings, decode, default, fromPort)
+module NoteId.Settings exposing
+    ( Settings
+    , decode
+    , default
+    , fromPort
+    )
 
 import Json.Decode as Decode
-import Ports
+import NoteId.Ports as Ports
 
 
 type alias Settings =

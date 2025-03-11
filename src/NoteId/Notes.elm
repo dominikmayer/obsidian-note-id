@@ -1,4 +1,4 @@
-module Notes exposing
+module NoteId.Notes exposing
     ( Notes
     , annotate
     , empty
@@ -12,9 +12,9 @@ module Notes exposing
 
 import Dict exposing (Dict)
 import List
-import NoteId
-import NoteMeta exposing (NoteMeta)
-import Path exposing (Path)
+import NoteId.Id as Id
+import NoteId.NoteMeta exposing (NoteMeta)
+import NoteId.Path as Path exposing (Path)
 
 
 
@@ -70,10 +70,10 @@ getNewIdFromNote (Notes notes) path child =
 getId : Bool -> String -> String
 getId child id =
     if child then
-        NoteId.getNewIdInSubsequence id
+        Id.getNewIdInSubsequence id
 
     else
-        NoteId.getNewIdInSequence id
+        Id.getNewIdInSequence id
 
 
 getUniqueId : List NoteWithSplit -> String -> Maybe String
@@ -88,7 +88,7 @@ generateUniqueId notes id remainingAttempts =
         Nothing
 
     else if isNoteIdTaken notes id then
-        generateUniqueId notes (NoteId.getNewIdInSequence id) (remainingAttempts - 1)
+        generateUniqueId notes (Id.getNewIdInSequence id) (remainingAttempts - 1)
 
     else
         Just id
@@ -168,7 +168,7 @@ annotate notes =
                         computedSplit =
                             case ( prev.id, current.id ) of
                                 ( Just prevId, Just currId ) ->
-                                    NoteId.splitLevel prevId currId
+                                    Id.splitLevel prevId currId
 
                                 ( Just _, Nothing ) ->
                                     Just 1

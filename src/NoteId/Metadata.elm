@@ -1,12 +1,12 @@
-module Metadata exposing
+module NoteId.Metadata exposing
     ( FieldNames
     , processMetadata
     , processRawNotes
     )
 
-import NoteMeta exposing (NoteMeta)
-import Path exposing (Path(..))
-import Ports exposing (RawFileMeta)
+import NoteId.NoteMeta exposing (NoteMeta)
+import NoteId.Path exposing (Path(..))
+import NoteId.Ports exposing (RawFileMeta)
 import String
 
 
