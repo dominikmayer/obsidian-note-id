@@ -141,10 +141,6 @@ update msg model =
             handleDisplayChange model tocShown
 
         FilterSet filter ->
-            let
-                _ =
-                    Debug.log "filter" filter
-            in
             updateVirtualList { model | filter = filter }
 
         NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
