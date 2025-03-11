@@ -52,6 +52,7 @@ export class IDSidePanelView extends ItemView {
 				this.elmApp.ports.receiveDisplayIsToc.send(tocShown);
 			}
 		});
+		this.addSearch(header, toolbar);
 
 		const elmContainer = container.createDiv();
 
@@ -260,7 +261,7 @@ export class IDSidePanelView extends ItemView {
 		}
 
 		// Extract raw metadata
-		const rawMeta = await this.extractRawFileMeta(file);
+		const rawMeta = this.extractRawFileMeta(file);
 
 		// Update our cached raw metadata
 		const index = this.rawMetadata.findIndex(
@@ -276,6 +277,58 @@ export class IDSidePanelView extends ItemView {
 		const elmApp = this.getElmApp();
 		if (elmApp && elmApp.ports.receiveFileChange) {
 			elmApp.ports.receiveFileChange.send(rawMeta);
+		}
+	}
+
+	private addSearch(header: HTMLDivElement, toolbar: HTMLDivElement) {
+		const searchButton = toolbar.createDiv(
+			"clickable-icon nav-action-button",
+		);
+		setIcon(searchButton, "search");
+
+		const search = header.createDiv("search-input-container");
+		search.style.display = "none"; // Initially hidden
+
+		const searchInput = search.createEl("input");
+		searchInput.placeholder = "Enter search term…";
+		searchInput.spellcheck = false;
+		searchInput.enterKeyHint = "search";
+		searchInput.type = "search";
+
+		const searchClearButton = search.createDiv("search-input-clear-button");
+		searchClearButton.setText("Clear search");
+		setIcon(searchClearButton, "close");
+
+		searchButton.addEventListener("click", () => {
+			const isVisible = search.style.display !== "none";
+			searchButton.classList.toggle("is-active", !isVisible);
+			if (isVisible) {
+				search.style.display = "none";
+				searchInput.value = "";
+				this.handleSearchInputChanged("");
+			} else {
+				search.style.display = "block";
+				searchInput.focus();
+			}
+		});
+
+		searchInput.addEventListener("input", () => {
+			this.handleSearchInputChanged(searchInput.value);
+		});
+
+		searchClearButton.addEventListener("click", () => {
+			searchInput.value = "";
+			searchInput.focus();
+			this.handleSearchInputChanged("");
+		});
+	}
+
+	private handleSearchInputChanged(text: string) {
+		console.log("Search input changed:", text);
+		if (this.elmApp && this.elmApp.ports.receiveFilter) {
+			this.elmApp.ports.receiveFilter.send(
+				text.trim() === "" ? null : text,
+			);
 		}
 	}
 

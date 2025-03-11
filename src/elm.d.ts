@@ -73,6 +73,9 @@ declare module "*.elm" {
 		receiveFileDeleted: {
 			send(data: string): void;
 		};
+		receiveFilter: {
+			send(data: string | null): void;
+		};
 		receiveRawFileMeta: {
 			send(data: RawFileMeta[]): void;
 		};

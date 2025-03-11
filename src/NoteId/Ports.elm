@@ -40,6 +40,9 @@ port receiveFileRenamed : (( String, String ) -> msg) -> Sub msg
 port receiveFileOpen : (Maybe String -> msg) -> Sub msg
 
 
+port receiveFilter : (Maybe String -> msg) -> Sub msg
+
+
 port receiveGetNewIdForNoteFromNote : (( String, String, Bool ) -> msg) -> Sub msg
 
 

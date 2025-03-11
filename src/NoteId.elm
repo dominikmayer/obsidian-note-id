@@ -48,6 +48,7 @@ type DisplayMode
 type alias Model =
     { includedNotes : Notes
     , currentFile : Maybe Path
+    , filter : Maybe String
     , settings : Settings
     , scrollToNewlyOpenedNote : Bool
     , currentDisplayMode : DisplayMode
@@ -65,6 +66,7 @@ defaultModel =
     in
     { includedNotes = Notes.empty
     , currentFile = Nothing
+    , filter = Nothing
     , settings = Settings.default
     , scrollToNewlyOpenedNote = True
     , currentDisplayMode = Notes
@@ -101,6 +103,7 @@ type Msg
     = AttachRequested Path
     | ContextMenuTriggered Mouse.Event Path
     | DisplayChanged Bool
+    | FilterSet (Maybe String)
     | NewIdRequestedForNoteFromNote ( Path, Path, Id.Progression )
     | NoteChangeReceived RawFileMeta
     | NoteClicked Path
@@ -136,6 +139,13 @@ update msg model =
 
         DisplayChanged tocShown ->
             handleDisplayChange model tocShown
+
+        FilterSet filter ->
+            let
+                _ =
+                    Debug.log "filter" filter
+            in
+            updateVirtualList { model | filter = filter }
 
         NewIdRequestedForNoteFromNote ( for, from, subsequence ) ->
             let
@@ -268,7 +278,7 @@ updateVirtualListHelper : Model -> List Path -> ( Model, Cmd Msg )
 updateVirtualListHelper model idsToRemeasure =
     let
         filteredNotes =
-            filterNotesForDisplay model.currentDisplayMode model.settings.tocLevel model.includedNotes
+            filterNotesForDisplay model.currentDisplayMode model.settings.tocLevel model.filter model.includedNotes
 
         ( newVirtualList, virtualListCmd ) =
             VirtualList.setItemsAndRemeasure model.virtualList
@@ -345,14 +355,21 @@ updateNotes model changedNotes =
     ( modelWithUpdatedVirtualList, cmd )
 
 
-filterNotesForDisplay : DisplayMode -> TocLevel -> Notes -> Notes
-filterNotesForDisplay display tocLevel notes =
-    case display of
-        TOC ->
-            Notes.filter (showInToc tocLevel) notes
+filterNotesForDisplay : DisplayMode -> TocLevel -> Maybe String -> Notes -> Notes
+filterNotesForDisplay display tocLevel filter notes =
+    let
+        displayNotes =
+            case display of
+                TOC ->
+                    Notes.filter (showInToc tocLevel) notes
 
-        Notes ->
-            notes
+                Notes ->
+                    notes
+
+        filterFn =
+            Maybe.map matchesFilter filter |> Maybe.withDefault (\_ -> True)
+    in
+    displayNotes |> Notes.filter filterFn
 
 
 showInToc : TocLevel -> NoteMeta -> Bool
@@ -370,6 +387,20 @@ showInToc tocLevel note =
 
         NoAutoToc ->
             hasTocField
+
+
+matchesFilter : String -> NoteMeta -> Bool
+matchesFilter query note =
+    let
+        lowerQuery =
+            String.toLower query
+
+        check field =
+            Maybe.map (String.toLower >> String.contains lowerQuery) field |> Maybe.withDefault False
+    in
+    String.contains lowerQuery (String.toLower note.title)
+        || check note.tocTitle
+        || check (Maybe.map (\(Id idString) -> idString) note.id)
 
 
 handleFileRename : Model -> ( Path, Path ) -> ( Model, Cmd Msg )
@@ -613,6 +644,7 @@ subscriptions _ =
         , Ports.receiveFileOpen (\path -> NoteOpened (Maybe.map Path path))
         , Ports.receiveFileRenamed (\( from, to ) -> NoteRenamed ( Path from, Path to ))
         , Ports.receiveFileDeleted (\path -> NoteDeleted (Path path))
+        , Ports.receiveFilter FilterSet
         , Ports.receiveRawFileMeta RawFileMetaReceived
         , Ports.receiveFileChange NoteChangeReceived
         , Ports.receiveGetNewIdForNoteFromNote (\( for, from, subsequence ) -> NewIdRequestedForNoteFromNote ( Path for, Path from, Id.isSubsequenceToProgression subsequence ))
