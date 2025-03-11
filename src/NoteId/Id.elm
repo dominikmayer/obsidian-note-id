@@ -1,9 +1,11 @@
 module NoteId.Id exposing
     ( Id(..)
     , IdPart(..)
+    , Progression(..)
     , compareId
     , getNewIdInSequence
     , getNewIdInSubsequence
+    , isSubsequenceToProgression
     , level
     , parts
     , partsToString
@@ -29,6 +31,20 @@ import Parser
 
 type Id
     = Id String
+
+
+type Progression
+    = Sequence
+    | Subsequence
+
+
+isSubsequenceToProgression : Bool -> Progression
+isSubsequenceToProgression isSubsequence =
+    if isSubsequence then
+        Subsequence
+
+    else
+        Sequence
 
 
 toString : Id -> String

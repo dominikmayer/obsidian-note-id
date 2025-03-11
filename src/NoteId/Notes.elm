@@ -12,7 +12,7 @@ module NoteId.Notes exposing
 
 import Dict exposing (Dict)
 import List
-import NoteId.Id as Id exposing (Id)
+import NoteId.Id as Id exposing (Id, Progression(..))
 import NoteId.NoteMeta exposing (NoteMeta)
 import NoteId.Path as Path exposing (Path)
 
@@ -56,7 +56,7 @@ paths (Notes notes) =
     List.map (.note >> .filePath) notes
 
 
-getNewIdFromNote : Notes -> Path -> Bool -> Maybe Id
+getNewIdFromNote : Notes -> Path -> Progression -> Maybe Id
 getNewIdFromNote (Notes notes) path child =
     let
         id =
@@ -67,13 +67,14 @@ getNewIdFromNote (Notes notes) path child =
         |> Maybe.andThen (getUniqueId notes)
 
 
-getId : Bool -> Id -> Id
-getId child id =
-    if child then
-        Id.getNewIdInSubsequence id
+getId : Progression -> Id -> Id
+getId progression id =
+    case progression of
+        Subsequence ->
+            Id.getNewIdInSubsequence id
 
-    else
-        Id.getNewIdInSequence id
+        Sequence ->
+            Id.getNewIdInSequence id
 
 
 getUniqueId : List NoteWithSplit -> Id -> Maybe Id

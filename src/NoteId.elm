@@ -101,10 +101,10 @@ type Msg
     = AttachRequested Path
     | ContextMenuTriggered Mouse.Event Path
     | DisplayChanged Bool
-    | NewIdRequestedForNoteFromNote ( Path, Path, Bool )
+    | NewIdRequestedForNoteFromNote ( Path, Path, Id.Progression )
     | NoteChangeReceived RawFileMeta
     | NoteClicked Path
-    | NoteCreationRequested ( Path, Bool )
+    | NoteCreationRequested ( Path, Id.Progression )
     | NoteDeleted Path
     | NoteOpened (Maybe Path)
     | NoteRenamed ( Path, Path )
@@ -152,8 +152,8 @@ update msg model =
         NoteClicked filePath ->
             handleNoteClick model filePath
 
-        NoteCreationRequested ( filePath, child ) ->
-            createNote model filePath child
+        NoteCreationRequested ( filePath, progression ) ->
+            createNote model filePath progression
 
         NoteDeleted path ->
             handleFileDeleted model path
@@ -288,14 +288,14 @@ mapVirtualListResult ( virtualListModel, virtualListCmd ) model =
     ( { model | virtualList = virtualListModel }, Cmd.map VirtualListMsg virtualListCmd )
 
 
-createNote : Model -> Path -> Bool -> ( Model, Cmd Msg )
-createNote model path child =
+createNote : Model -> Path -> Id.Progression -> ( Model, Cmd Msg )
+createNote model path progression =
     let
         newPath =
             Path.withoutFileName path ++ "/Untitled.md"
 
         fileContent =
-            Notes.getNewIdFromNote model.includedNotes path child
+            Notes.getNewIdFromNote model.includedNotes path progression
                 |> Maybe.map (createNoteContent model.settings.idField)
                 |> Maybe.withDefault ""
     in
@@ -608,14 +608,14 @@ handleFileDeleted model path =
 subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
-        [ Ports.receiveCreateNote (\( path, subsequence ) -> NoteCreationRequested ( Path path, subsequence ))
+        [ Ports.receiveCreateNote (\( path, subsequence ) -> NoteCreationRequested ( Path path, Id.isSubsequenceToProgression subsequence ))
         , Ports.receiveDisplayIsToc DisplayChanged
         , Ports.receiveFileOpen (\path -> NoteOpened (Maybe.map Path path))
         , Ports.receiveFileRenamed (\( from, to ) -> NoteRenamed ( Path from, Path to ))
         , Ports.receiveFileDeleted (\path -> NoteDeleted (Path path))
         , Ports.receiveRawFileMeta RawFileMetaReceived
         , Ports.receiveFileChange NoteChangeReceived
-        , Ports.receiveGetNewIdForNoteFromNote (\( for, from, subsequence ) -> NewIdRequestedForNoteFromNote ( Path for, Path from, subsequence ))
+        , Ports.receiveGetNewIdForNoteFromNote (\( for, from, subsequence ) -> NewIdRequestedForNoteFromNote ( Path for, Path from, Id.isSubsequenceToProgression subsequence ))
         , Ports.receiveSettings SettingsChanged
         , Ports.receiveRequestSearch (\_ -> SearchRequested)
         , Ports.receiveRequestAttach (\path -> AttachRequested (Path path))
