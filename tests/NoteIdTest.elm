@@ -1,9 +1,8 @@
 module NoteIdTest exposing (all)
 
-import Test exposing (Test, describe, test)
 import Expect
-import NoteId exposing (getNewIdInSequence, getNewIdInSubsequence)
-import NoteId exposing (IdPart(..), parts)
+import NoteId.Id as Id exposing (Id(..), IdPart(..), getNewIdInSequence, getNewIdInSubsequence, parts)
+import Test exposing (Test, describe, test)
 
 
 all : Test
@@ -100,7 +99,7 @@ testGetNewIdInSequence : ( String, String ) -> Test
 testGetNewIdInSequence ( id, expectedIncrementedId ) =
     test (id ++ " should be incremented to " ++ expectedIncrementedId) <|
         \_ ->
-            Expect.equal expectedIncrementedId (getNewIdInSequence id)
+            Expect.equal (Id expectedIncrementedId) (getNewIdInSequence (Id id))
 
 
 testGetNewIdsInSubsequence : List ( String, String ) -> List Test
@@ -112,7 +111,7 @@ testGetNewIdInSubsequence : ( String, String ) -> Test
 testGetNewIdInSubsequence ( id, expectedIncrementedId ) =
     test (id ++ " should get a subsequence of " ++ expectedIncrementedId) <|
         \_ ->
-            Expect.equal expectedIncrementedId (getNewIdInSubsequence id)
+            Expect.equal (Id expectedIncrementedId) (getNewIdInSubsequence (Id id))
 
 
 testParts : List ( String, List IdPart ) -> List Test
@@ -124,20 +123,20 @@ testSingleParts : ( String, List IdPart ) -> List Test
 testSingleParts ( id, expectedSplit ) =
     let
         idParts =
-            case parts id of
+            case parts (Id id) of
                 Ok partsList ->
                     partsList
 
                 Err _ ->
                     []
     in
-        [ test (id ++ " split incorrectly") <|
-            \_ ->
-                Expect.equal expectedSplit idParts
-        , test (id ++ " not being put together correctly") <|
-            \_ ->
-                Expect.equal id (NoteId.toString idParts)
-        ]
+    [ test (id ++ " split incorrectly") <|
+        \_ ->
+            Expect.equal expectedSplit idParts
+    , test (id ++ " not being put together correctly") <|
+        \_ ->
+            Expect.equal id (Id.partsToString idParts)
+    ]
 
 
 testCompare : List ( String, String, Order ) -> List Test
@@ -149,7 +148,7 @@ testSingleCompare : ( String, String, Order ) -> List Test
 testSingleCompare ( a, b, order ) =
     [ test (a ++ " and " ++ b ++ " ordered incorrectly") <|
         \_ ->
-            Expect.equal (NoteId.compareId a b) order
+            Expect.equal (Id.compareId (Id a) (Id b)) order
     ]
 
 
@@ -162,7 +161,7 @@ testBranchLevel : ( String, String, Maybe Int ) -> List Test
 testBranchLevel ( a, b, level ) =
     [ test ("The branch of " ++ a ++ " and " ++ b ++ " is recognized incorrectly") <|
         \_ ->
-            Expect.equal (NoteId.splitLevel a b) level
+            Expect.equal (Id.splitLevel (Id a) (Id b)) level
     ]
 
 
@@ -175,5 +174,5 @@ testLevel : ( String, Int ) -> List Test
 testLevel ( id, level ) =
     [ test (id ++ " has the wrong level") <|
         \_ ->
-            Expect.equal (NoteId.level id) level
+            Expect.equal (Id.level (Id id)) level
     ]

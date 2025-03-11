@@ -1,5 +1,6 @@
 import {
 	ItemView,
+	TAbstractFile,
 	TFile,
 	WorkspaceLeaf,
 	Menu,
@@ -8,12 +9,20 @@ import {
 	setIcon,
 } from "obsidian";
 import IDSidePanelPlugin from "../main";
-import { ID_FIELD_DEFAULT, VIEW_TYPE_ID_PANEL } from "./constants";
+import { VIEW_TYPE_ID_PANEL } from "./constants";
+import { Elm, ElmApp } from "./NoteId.elm";
+import { OpenNoteModal } from "./openNoteModal";
+import { AttachNoteModal } from "./attachNoteModal";
 import { NoteMeta } from "./types";
-import { Elm, ElmApp } from "./Main.elm";
+import { PortNoteMeta } from "/.elm";
 
 export class IDSidePanelView extends ItemView {
 	plugin: IDSidePanelPlugin;
+	private rawMetadata: Array<{
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	}> = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: IDSidePanelPlugin) {
 		super(leaf);
@@ -43,19 +52,31 @@ export class IDSidePanelView extends ItemView {
 				this.elmApp.ports.receiveDisplayIsToc.send(tocShown);
 			}
 		});
+		this.addSearch(header, toolbar);
 
 		const elmContainer = container.createDiv();
 
 		const activeFile = this.app.workspace.getActiveFile();
 
-		this.elmApp = Elm.Main.init({
+		this.elmApp = Elm.NoteId.init({
 			node: elmContainer,
 			flags: {
-				settings: this.plugin.settings,
+				settings: this.plugin.getSettings(),
 				activeFile: activeFile ? activeFile.path : null,
 			},
 		});
 
+		this.initializeCache();
+
+		if (
+			this.elmApp &&
+			this.elmApp.ports.receiveRawFileMeta &&
+			this.rawMetadata.length > 0
+		) {
+			this.elmApp.ports.receiveRawFileMeta.send(this.rawMetadata);
+		}
+
+		this.registerEvents();
 		this.elmApp.ports.openFile.subscribe((filePath: string) => {
 			const file = this.app.vault.getAbstractFileByPath(
 				normalizePath(filePath),
@@ -161,17 +182,176 @@ export class IDSidePanelView extends ItemView {
 			},
 		);
 
+		this.elmApp.ports.provideNotesForSearch.subscribe((notes) => {
+			new OpenNoteModal(
+				this.app,
+				this.plugin.getSettings().idField,
+				this.plugin.getSettings().tocField,
+				this.mapPortNoteMeta(notes),
+			).open();
+		});
+
+		this.elmApp.ports.provideNotesForAttach.subscribe(
+			([currentPath, notes]) => {
+				const currentFile = this.app.vault.getAbstractFileByPath(
+					normalizePath(currentPath),
+				);
+				if (currentFile instanceof TFile && this.elmApp) {
+					new AttachNoteModal(
+						this.app,
+						this.plugin.getSettings().idField,
+						this.plugin.getSettings().tocField,
+						this.mapPortNoteMeta(notes),
+						currentFile,
+						this.elmApp,
+					).open();
+				}
+			},
+		);
+	}
+
+	private registerEvents() {
+		this.registerEvent(
+			this.app.vault.on("modify", async (file) => {
+				await this.handleFileChange(file);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("rename", async (file, oldPath) => {
+				if (this.elmApp && this.elmApp.ports.receiveFileRenamed) {
+					this.elmApp.ports.receiveFileRenamed.send([
+						oldPath,
+						file.path,
+					]);
+				}
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("delete", async (file) => {
+				if (file instanceof TFile && file.extension === "md") {
+					if (this.elmApp && this.elmApp.ports.receiveFileDeleted) {
+						this.elmApp.ports.receiveFileDeleted.send(file.path);
+					}
+				}
+			}),
+		);
+
+		this.registerEvent(
+			this.app.metadataCache.on("changed", async (file) => {
+				await this.handleFileChange(file);
+			}),
+		);
+
 		this.registerEvent(
 			this.app.workspace.on("file-open", (file) => {
-				if (this.elmApp && this.elmApp.ports.receiveFileOpen) {
+				const elmApp = this.getElmApp();
+				if (elmApp && elmApp.ports.receiveFileOpen) {
 					const filePath = file?.path || null;
-					this.elmApp.ports.receiveFileOpen.send(filePath);
+					elmApp.ports.receiveFileOpen.send(filePath);
 				}
 			}),
 		);
 	}
 
-	getUniqueFilePath(path: string) {
+	async handleFileChange(file: TAbstractFile) {
+		if (!(file instanceof TFile) || file.extension !== "md") {
+			return;
+		}
+
+		// Extract raw metadata
+		const rawMeta = this.extractRawFileMeta(file);
+
+		// Update our cached raw metadata
+		const index = this.rawMetadata.findIndex(
+			(item) => item.path === file.path,
+		);
+		if (index >= 0) {
+			this.rawMetadata[index] = rawMeta;
+		} else {
+			this.rawMetadata.push(rawMeta);
+		}
+
+		// Send the changed file metadata to Elm for processing
+		const elmApp = this.getElmApp();
+		if (elmApp && elmApp.ports.receiveFileChange) {
+			elmApp.ports.receiveFileChange.send(rawMeta);
+		}
+	}
+
+	private addSearch(header: HTMLDivElement, toolbar: HTMLDivElement) {
+		const searchButton = toolbar.createDiv(
+			"clickable-icon nav-action-button",
+		);
+		setIcon(searchButton, "search");
+
+		const search = header.createDiv("search-input-container");
+		search.style.display = "none"; // Initially hidden
+
+		const searchInput = search.createEl("input");
+		searchInput.placeholder = "Enter search term…";
+		searchInput.spellcheck = false;
+		searchInput.enterKeyHint = "search";
+		searchInput.type = "search";
+
+		const searchClearButton = search.createDiv("search-input-clear-button");
+		searchClearButton.setText("Clear search");
+		setIcon(searchClearButton, "close");
+
+		searchButton.addEventListener("click", () => {
+			const isVisible = search.style.display !== "none";
+			searchButton.classList.toggle("is-active", !isVisible);
+			if (isVisible) {
+				search.style.display = "none";
+				searchInput.value = "";
+				this.handleSearchInputChanged("");
+			} else {
+				search.style.display = "block";
+				searchInput.focus();
+			}
+		});
+
+		searchInput.addEventListener("input", () => {
+			this.handleSearchInputChanged(searchInput.value);
+		});
+
+		searchClearButton.addEventListener("click", () => {
+			searchInput.value = "";
+			searchInput.focus();
+			this.handleSearchInputChanged("");
+		});
+	}
+
+	private handleSearchInputChanged(text: string) {
+		console.log("Search input changed:", text);
+		if (this.elmApp && this.elmApp.ports.receiveFilter) {
+			this.elmApp.ports.receiveFilter.send(
+				text.trim() === "" ? null : text,
+			);
+		}
+	}
+
+	private mapPortNoteMeta(notes: PortNoteMeta[]): Map<string, NoteMeta> {
+		const noteMap = new Map<string, NoteMeta>();
+
+		notes.forEach((note) => {
+			const file = this.app.vault.getAbstractFileByPath(
+				normalizePath(note.filePath),
+			);
+			if (file instanceof TFile) {
+				noteMap.set(note.filePath, {
+					title: note.title,
+					tocTitle: note.tocTitle,
+					id: note.id,
+					file: file,
+				});
+			}
+		});
+		return noteMap;
+	}
+
+	private getUniqueFilePath(path: string) {
 		let counter = 1;
 		const ext = path.includes(".")
 			? path.substring(path.lastIndexOf("."))
@@ -193,53 +373,52 @@ export class IDSidePanelView extends ItemView {
 		return this.elmApp;
 	}
 
-	renderNotes(changedFiles: string[] = []) {
-		const { showNotesWithoutId } = this.plugin.settings;
-		const allNotes = Array.from(this.plugin.noteCache.values());
-
-		const notesWithID = allNotes
-			.filter((n) => n.id !== null)
-			.sort((a, b) => {
-				if (a.id === null) return 1;
-				if (b.id === null) return -1;
-				return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-			});
-
-		const notesWithoutID = allNotes
-			.filter((n) => n.id === null)
-			.sort((a, b) => a.title.localeCompare(b.title));
-
-		let combined: NoteMeta[] = [];
-		combined = combined.concat(notesWithID);
-		if (showNotesWithoutId) {
-			combined = combined.concat(notesWithoutID);
-		}
-
-		if (
-			this.elmApp &&
-			this.elmApp.ports &&
-			this.elmApp.ports.receiveNotes
-		) {
-			const notes = combined.map((note) => ({
-				title: note.title,
-				tocTitle: note.tocTitle,
-				id: note.id ? note.id.toString() : null, // Convert Maybe to a string
-				filePath: note.file.path,
-			}));
-
-			this.elmApp.ports.receiveNotes.send([notes, changedFiles]);
-		}
-	}
-
 	private async updateId(file: TFile, newValue: string) {
 		if (!file) {
 			new Notice("Couldn't update note");
 			return;
 		}
-		const idField = this.plugin.settings.idField || ID_FIELD_DEFAULT;
+		const idField = this.plugin.getSettings().idField;
 
 		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			frontmatter[idField] = newValue;
 		});
+	}
+
+	private extractRawFileMeta(file: TFile): {
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
+	} {
+		const cache = this.app.metadataCache.getFileCache(file);
+		let frontmatter = null;
+
+		if (cache?.frontmatter && typeof cache.frontmatter === "object") {
+			// Convert frontmatter object to array of key/value pairs with string values for Elm
+			frontmatter = Object.entries(cache.frontmatter).map(
+				([key, value]) => {
+					// Convert all values to strings for simplicity
+					const stringValue =
+						value === null
+							? ""
+							: typeof value === "object"
+								? JSON.stringify(value)
+								: String(value);
+					return [key, stringValue] as [string, string];
+				},
+			);
+		}
+
+		return {
+			path: file.path,
+			basename: file.basename,
+			frontmatter,
+		};
+	}
+
+	private initializeCache() {
+		this.rawMetadata = this.app.vault
+			.getMarkdownFiles()
+			.map((file) => this.extractRawFileMeta(file));
 	}
 }

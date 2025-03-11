@@ -1,9 +1,15 @@
 declare module "*.elm" {
-	export interface NoteMeta {
+	export interface PortNoteMeta {
 		title: string;
 		tocTitle: string | null;
 		id: string | null;
 		filePath: string;
+	}
+
+	export interface RawFileMeta {
+		path: string;
+		basename: string;
+		frontmatter: Array<[string, string]> | null;
 	}
 
 	export interface Settings {
@@ -24,50 +30,74 @@ declare module "*.elm" {
 	}
 
 	export interface ElmApp {
-		ports: {
-			createNote: {
-				subscribe(callback: (data: [string, string]) => void): void;
-			};
-			openFile: {
-				subscribe(callback: (filePath: string) => void): void;
-			};
-			openContextMenu: {
-				subscribe(
-					callback: (data: [number, number, string]) => void,
-				): void;
-			};
-			provideNewIdForNote: {
-				subscribe(callback: (data: [string, string]) => void): void;
-			};
-			toggleTOCButton: {
-				subscribe(callback: (flag: boolean) => void): void;
-			};
-			receiveNotes: {
-				send(data: [NoteMeta[], string[]]): void;
-			};
-			receiveFileOpen: {
-				send(data: string | null): void;
-			};
-			receiveCreateNote: {
-				send(data: [string, boolean]): void;
-			};
-			receiveDisplayIsToc: {
-				send(data: boolean): void;
-			};
-			receiveFileRenamed: {
-				send(data: [string, string]): void;
-			};
-			receiveGetNewIdForNoteFromNote: {
-				send(data: [string, string, boolean]): void;
-			};
-			receiveSettings: {
-				send(data: Settings): void;
-			};
+		ports: ElmPorts;
+	}
+
+	export interface ElmPorts {
+		// Outgoing ports (Elm to TypeScript)
+		createNote: {
+			subscribe(callback: (data: [string, string]) => void): void;
+		};
+		openFile: {
+			subscribe(callback: (filePath: string) => void): void;
+		};
+		openContextMenu: {
+			subscribe(callback: (data: [number, number, string]) => void): void;
+		};
+		provideNewIdForNote: {
+			subscribe(callback: (data: [string, string]) => void): void;
+		};
+		provideNotesForAttach: {
+			subscribe(callback: (data: [string, PortNoteMeta[]]) => void): void;
+		};
+		provideNotesForSearch: {
+			subscribe(callback: (data: PortNoteMeta[]) => void): void;
+		};
+		toggleTOCButton: {
+			subscribe(callback: (flag: boolean) => void): void;
+		};
+
+		// Incoming ports (TypeScript to Elm)
+		receiveFileOpen: {
+			send(data: string | null): void;
+		};
+		receiveCreateNote: {
+			send(data: [string, boolean]): void;
+		};
+		receiveDisplayIsToc: {
+			send(data: boolean): void;
+		};
+		receiveFileRenamed: {
+			send(data: [string, string]): void;
+		};
+		receiveFileDeleted: {
+			send(data: string): void;
+		};
+		receiveFilter: {
+			send(data: string | null): void;
+		};
+		receiveRawFileMeta: {
+			send(data: RawFileMeta[]): void;
+		};
+		receiveFileChange: {
+			send(data: RawFileMeta): void;
+		};
+		receiveGetNewIdForNoteFromNote: {
+			send(data: [string, string, boolean]): void;
+		};
+		receiveRequestAttach: {
+			send(data: string): void;
+		};
+		receiveRequestSearch: {
+			send(data: null): void;
+		};
+		receiveSettings: {
+			send(data: Settings): void;
 		};
 	}
 
 	export const Elm: {
-		Main: {
+		NoteId: {
 			init(options: { node?: HTMLElement | null; flags: Flags }): ElmApp;
 		};
 	};
