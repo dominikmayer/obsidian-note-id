@@ -1,5 +1,5 @@
 import { NoteSearchModal } from "./searchModal";
-import { App, TFile } from "obsidian";
+import { App, TFile, Platform } from "obsidian";
 import { NoteMeta } from "./types";
 import { ElmApp } from "/.elm";
 
@@ -21,7 +21,7 @@ export class AttachNoteModal extends NoteSearchModal {
 				purpose: "set note ID in subsequence",
 			},
 			{
-				command: "⌘ ↵",
+				command: Platform.isMacOS ? "⌘ ↵" : "ctrl ↵",
 				purpose: "set note ID in sequence",
 			},
 		];

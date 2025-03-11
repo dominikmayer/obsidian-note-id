@@ -1,5 +1,5 @@
 import { NoteSearchModal } from "./searchModal";
-import { App, TFile } from "obsidian";
+import { App, TFile, Platform } from "obsidian";
 import { NoteMeta } from "./types";
 
 export class OpenNoteModal extends NoteSearchModal {
@@ -15,11 +15,11 @@ export class OpenNoteModal extends NoteSearchModal {
 				purpose: "open",
 			},
 			{
-				command: "⌘ ↵",
+				command: Platform.isMacOS ? "⌘ ↵" : "ctrl ↵",
 				purpose: "to open in a new tab",
 			},
 			{
-				command: "⌘ ⌥ ↵",
+				command: Platform.isMacOS ? "⌘ ⌥ ↵" : "ctrl alt ↵",
 				purpose: "to open on the right",
 			},
 		];
