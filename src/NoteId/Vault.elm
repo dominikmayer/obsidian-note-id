@@ -55,21 +55,22 @@ isIncluded settings note =
                 |> String.replace "\\" "/"
                 -- convert Windows backslashes to forward slashes
                 |> String.toLower
+                |> Path
 
         normInclude =
             settings.includeFolders
-                |> List.map (\f -> f |> String.replace "/+" "" |> String.toLower)
+                |> List.map Path.normalize
 
         normExclude =
             settings.excludeFolders
-                |> List.map (\f -> f |> String.replace "/+" "" |> String.toLower)
+                |> List.map Path.normalize
 
         included =
             List.isEmpty normInclude
-                || List.any (\folder -> String.startsWith (folder ++ "/") filePath) normInclude
+                || List.any (\folder -> Path.isSubpath folder filePath) normInclude
 
         excluded =
-            List.any (\folder -> String.startsWith (folder ++ "/") filePath) normExclude
+            List.any (\folder -> Path.isSubpath folder filePath) normExclude
     in
     if not included || excluded then
         False

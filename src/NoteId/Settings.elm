@@ -10,12 +10,13 @@ module NoteId.Settings exposing
     )
 
 import Json.Decode as Decode
+import NoteId.Path exposing (Path(..))
 import NoteId.Ports as Ports
 
 
 type alias Settings =
-    { includeFolders : List String
-    , excludeFolders : List String
+    { includeFolders : List Path
+    , excludeFolders : List Path
     , showNotesWithoutId : Bool
     , idField : IdField
     , tocField : TocField
@@ -71,8 +72,8 @@ partialSettingsDecoder =
     Decode.map8
         (\includeFolders excludeFolders showNotesWithoutId idField tocField newTocLevel splitLevel indentation settings ->
             { settings
-                | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
-                , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
+                | includeFolders = includeFolders |> Maybe.map (List.map Path) |> Maybe.withDefault settings.includeFolders
+                , excludeFolders = excludeFolders |> Maybe.map (List.map Path) |> Maybe.withDefault settings.excludeFolders
                 , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
                 , idField = idField |> Maybe.map IdField |> Maybe.withDefault settings.idField
                 , tocField = tocField |> Maybe.map TocField |> Maybe.withDefault settings.tocField
@@ -107,8 +108,8 @@ tocLevelDecoder =
 
 fromPort : Ports.Settings -> Settings
 fromPort portSettings =
-    { includeFolders = portSettings.includeFolders
-    , excludeFolders = portSettings.excludeFolders
+    { includeFolders = List.map Path portSettings.includeFolders
+    , excludeFolders = List.map Path portSettings.excludeFolders
     , showNotesWithoutId = portSettings.showNotesWithoutId
     , idField = IdField portSettings.idField
     , tocField = TocField portSettings.tocField
