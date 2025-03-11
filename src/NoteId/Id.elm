@@ -6,6 +6,7 @@ module NoteId.Id exposing
     , getNewIdInSubsequence
     , level
     , parts
+    , partsToString
     , splitLevel
     , toString
     )
