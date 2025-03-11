@@ -15,7 +15,7 @@ import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
 import NoteId.Notes as Notes exposing (Notes)
 import NoteId.Path as Path exposing (Path(..))
 import NoteId.Ports as Ports exposing (RawFileMeta)
-import NoteId.Settings as Settings exposing (Settings)
+import NoteId.Settings as Settings exposing (IdField(..), Settings)
 import NoteId.Vault as Vault exposing (Vault)
 import Task
 import VirtualList
@@ -302,8 +302,8 @@ createNote model path progression =
     ( model, Ports.createNote ( newPath, fileContent ) )
 
 
-createNoteContent : String -> Id -> String
-createNoteContent idNameFromSettings (Id id) =
+createNoteContent : IdField -> Id -> String
+createNoteContent (IdField idNameFromSettings) (Id id) =
     let
         idName =
             if String.isEmpty idNameFromSettings then

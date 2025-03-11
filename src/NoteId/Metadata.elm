@@ -8,11 +8,12 @@ import NoteId.Id exposing (Id(..))
 import NoteId.NoteMeta exposing (NoteMeta)
 import NoteId.Path exposing (Path(..))
 import NoteId.Ports exposing (RawFileMeta)
+import NoteId.Settings as Settings exposing (IdField(..), TocField(..))
 import String
 
 
 type alias FieldNames =
-    { id : String, toc : String }
+    { id : IdField, toc : TocField }
 
 
 {-| Process multiple raw file metadata records into NoteMeta records
@@ -45,12 +46,12 @@ processMetadata fieldNames file =
         -- Extract ID and TOC title from frontmatter
         id =
             normalizedFrontmatter
-                |> Maybe.andThen (String.toLower fieldNames.id |> findInFrontmatter)
+                |> Maybe.andThen (fieldNames.id |> Settings.idFieldToString |> String.toLower |> findInFrontmatter)
                 |> Maybe.map Id
 
         tocTitle =
             normalizedFrontmatter
-                |> Maybe.andThen (String.toLower fieldNames.toc |> findInFrontmatter)
+                |> Maybe.andThen (fieldNames.toc |> Settings.tocFieldToString |> String.toLower |> findInFrontmatter)
     in
     { title = file.basename
     , tocTitle = tocTitle

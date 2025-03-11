@@ -1,8 +1,12 @@
 module NoteId.Settings exposing
-    ( Settings
+    ( IdField(..)
+    , Settings
+    , TocField(..)
     , decode
     , default
     , fromPort
+    , idFieldToString
+    , tocFieldToString
     )
 
 import Json.Decode as Decode
@@ -13,12 +17,30 @@ type alias Settings =
     { includeFolders : List String
     , excludeFolders : List String
     , showNotesWithoutId : Bool
-    , idField : String
-    , tocField : String
+    , idField : IdField
+    , tocField : TocField
     , tocLevel : Maybe Int
     , splitLevel : Int
     , indentation : Bool
     }
+
+
+type IdField
+    = IdField String
+
+
+idFieldToString : IdField -> String
+idFieldToString (IdField idField) =
+    idField
+
+
+type TocField
+    = TocField String
+
+
+tocFieldToString : TocField -> String
+tocFieldToString (TocField tocField) =
+    tocField
 
 
 default : Settings
@@ -26,8 +48,8 @@ default =
     { includeFolders = []
     , excludeFolders = []
     , showNotesWithoutId = True
-    , idField = "id"
-    , tocField = "toc"
+    , idField = IdField "id"
+    , tocField = TocField "toc"
     , tocLevel = Just 1
     , splitLevel = 0
     , indentation = False
@@ -52,8 +74,8 @@ partialSettingsDecoder =
                 | includeFolders = includeFolders |> Maybe.withDefault settings.includeFolders
                 , excludeFolders = excludeFolders |> Maybe.withDefault settings.excludeFolders
                 , showNotesWithoutId = showNotesWithoutId |> Maybe.withDefault settings.showNotesWithoutId
-                , idField = idField |> Maybe.withDefault settings.idField
-                , tocField = tocField |> Maybe.withDefault settings.tocField
+                , idField = idField |> Maybe.map IdField |> Maybe.withDefault settings.idField
+                , tocField = tocField |> Maybe.map TocField |> Maybe.withDefault settings.tocField
                 , tocLevel = newTocLevel
                 , splitLevel = splitLevel |> Maybe.withDefault settings.splitLevel
                 , indentation = indentation |> Maybe.withDefault settings.indentation
@@ -88,8 +110,8 @@ fromPort portSettings =
     { includeFolders = portSettings.includeFolders
     , excludeFolders = portSettings.excludeFolders
     , showNotesWithoutId = portSettings.showNotesWithoutId
-    , idField = portSettings.idField
-    , tocField = portSettings.tocField
+    , idField = IdField portSettings.idField
+    , tocField = TocField portSettings.tocField
     , tocLevel =
         if portSettings.autoToc then
             Just portSettings.tocLevel
