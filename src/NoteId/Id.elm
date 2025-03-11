@@ -1,5 +1,6 @@
 module NoteId.Id exposing
-    ( IdPart(..)
+    ( Id(..)
+    , IdPart(..)
     , compareId
     , getNewIdInSequence
     , getNewIdInSubsequence
@@ -25,18 +26,27 @@ import Parser
         )
 
 
-getNewIdInSequence : String -> String
+type Id
+    = Id String
+
+
+toString : Id -> String
+toString (Id id) =
+    id
+
+
+getNewIdInSequence : Id -> Id
 getNewIdInSequence id =
     case parts id of
         Ok idParts ->
             case List.reverse idParts of
                 (Number n) :: rest ->
-                    toString (List.reverse (Number (n + 1) :: rest))
+                    Id (partsToString (List.reverse (Number (n + 1) :: rest)))
 
                 (Letters s) :: rest ->
                     case incrementString s of
                         Just newLetters ->
-                            toString (List.reverse (Letters newLetters :: rest))
+                            Id (partsToString (List.reverse (Letters newLetters :: rest)))
 
                         Nothing ->
                             id
@@ -51,7 +61,7 @@ getNewIdInSequence id =
             id
 
 
-getNewIdInSubsequence : String -> String
+getNewIdInSubsequence : Id -> Id
 getNewIdInSubsequence id =
     case parts id of
         Ok idParts ->
@@ -67,7 +77,7 @@ getNewIdInSubsequence id =
                         _ ->
                             idParts
             in
-            toString updatedParts
+            Id (partsToString updatedParts)
 
         Err _ ->
             id
@@ -154,8 +164,8 @@ isDelimiter part =
             True
 
 
-parts : String -> Result String (List IdPart)
-parts id =
+parts : Id -> Result String (List IdPart)
+parts (Id id) =
     case Parser.run idParser id of
         Ok result ->
             Ok result
@@ -219,8 +229,8 @@ parseDelimiter =
             )
 
 
-toString : List IdPart -> String
-toString idParts =
+partsToString : List IdPart -> String
+partsToString idParts =
     idParts
         |> List.map idPartToString
         |> String.concat
@@ -239,11 +249,11 @@ idPartToString part =
             s
 
 
-compareId : String -> String -> Order
+compareId : Id -> Id -> Order
 compareId a b =
     case ( parts a, parts b ) of
         ( Ok partsA, Ok partsB ) ->
-            compareIdParts partsA partsB
+            compareParts partsA partsB
 
         ( Err _, Ok _ ) ->
             LT
@@ -255,13 +265,13 @@ compareId a b =
             EQ
 
 
-compareIdParts : List IdPart -> List IdPart -> Order
-compareIdParts id1 id2 =
+compareParts : List IdPart -> List IdPart -> Order
+compareParts id1 id2 =
     List.Extra.findMap
         (\( p1, p2 ) ->
             let
                 order =
-                    compareIdPart p1 p2
+                    comparePart p1 p2
             in
             if order == EQ then
                 Nothing
@@ -273,8 +283,8 @@ compareIdParts id1 id2 =
         |> Maybe.withDefault (compare (List.length id1) (List.length id2))
 
 
-compareIdPart : IdPart -> IdPart -> Order
-compareIdPart a b =
+comparePart : IdPart -> IdPart -> Order
+comparePart a b =
     case ( a, b ) of
         ( Number n1, Number n2 ) ->
             compare n1 n2
@@ -377,7 +387,7 @@ levelEquals l1 l2 =
            )
 
 
-splitLevel : String -> String -> Maybe Int
+splitLevel : Id -> Id -> Maybe Int
 splitLevel id1 id2 =
     case ( parts id1, parts id2 ) of
         ( Ok tokens1, Ok tokens2 ) ->
@@ -394,7 +404,7 @@ splitLevel id1 id2 =
             Nothing
 
 
-level : String -> Int
+level : Id -> Int
 level id =
     parts id
         |> Result.map (List.filter (not << isDelimiter))

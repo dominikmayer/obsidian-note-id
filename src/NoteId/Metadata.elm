@@ -4,6 +4,7 @@ module NoteId.Metadata exposing
     , processRawNotes
     )
 
+import NoteId.Id exposing (Id(..))
 import NoteId.NoteMeta exposing (NoteMeta)
 import NoteId.Path exposing (Path(..))
 import NoteId.Ports exposing (RawFileMeta)
@@ -45,6 +46,7 @@ processMetadata fieldNames file =
         id =
             normalizedFrontmatter
                 |> Maybe.andThen (String.toLower fieldNames.id |> findInFrontmatter)
+                |> Maybe.map Id
 
         tocTitle =
             normalizedFrontmatter

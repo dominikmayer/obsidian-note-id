@@ -9,7 +9,7 @@ import Html.Events.Extra.Mouse as Mouse
 import Html.Lazy exposing (lazy)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import NoteId.Id as Id
+import NoteId.Id as Id exposing (Id(..))
 import NoteId.Metadata as Metadata
 import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
 import NoteId.Notes as Notes exposing (Notes)
@@ -141,7 +141,7 @@ update msg model =
             let
                 cmd =
                     Notes.getNewIdFromNote model.includedNotes from subsequence
-                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( id, Path.toString for ))
+                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( Id.toString id, Path.toString for ))
                         |> Maybe.withDefault Cmd.none
             in
             ( model, cmd )
@@ -302,8 +302,8 @@ createNote model path child =
     ( model, Ports.createNote ( newPath, fileContent ) )
 
 
-createNoteContent : String -> String -> String
-createNoteContent idNameFromSettings id =
+createNoteContent : String -> Id -> String
+createNoteContent idNameFromSettings (Id id) =
     let
         idName =
             if String.isEmpty idNameFromSettings then
@@ -523,7 +523,7 @@ renderNote model note maybeSplit =
         [ div
             (Html.Attributes.class "tree-item-inner" :: marginLeftStyle)
             (case note.id of
-                Just id ->
+                Just (Id id) ->
                     [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
                     , Html.text title
                     ]

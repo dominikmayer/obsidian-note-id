@@ -1,6 +1,6 @@
 module NoteId.NoteMeta exposing (NoteMeta, forPort, sort)
 
-import NoteId.Id
+import NoteId.Id as Id exposing (Id)
 import NoteId.Path as Path exposing (Path)
 import NoteId.Ports as Ports
 
@@ -8,7 +8,7 @@ import NoteId.Ports as Ports
 type alias NoteMeta =
     { title : String
     , tocTitle : Maybe String
-    , id : Maybe String
+    , id : Maybe Id
     , filePath : Path
     }
 
@@ -17,7 +17,7 @@ forPort : NoteMeta -> Ports.NoteMeta
 forPort note =
     { title = note.title
     , tocTitle = note.tocTitle
-    , id = note.id
+    , id = Maybe.map Id.toString note.id
     , filePath = Path.toString note.filePath
     }
 
@@ -37,6 +37,6 @@ sort notes =
                     LT
 
                 ( Just idA, Just idB ) ->
-                    NoteId.Id.compareId idA idB
+                    Id.compareId idA idB
         )
         notes

@@ -12,7 +12,7 @@ module NoteId.Notes exposing
 
 import Dict exposing (Dict)
 import List
-import NoteId.Id as Id
+import NoteId.Id as Id exposing (Id)
 import NoteId.NoteMeta exposing (NoteMeta)
 import NoteId.Path as Path exposing (Path)
 
@@ -56,7 +56,7 @@ paths (Notes notes) =
     List.map (.note >> .filePath) notes
 
 
-getNewIdFromNote : Notes -> Path -> Bool -> Maybe String
+getNewIdFromNote : Notes -> Path -> Bool -> Maybe Id
 getNewIdFromNote (Notes notes) path child =
     let
         id =
@@ -67,7 +67,7 @@ getNewIdFromNote (Notes notes) path child =
         |> Maybe.andThen (getUniqueId notes)
 
 
-getId : Bool -> String -> String
+getId : Bool -> Id -> Id
 getId child id =
     if child then
         Id.getNewIdInSubsequence id
@@ -76,13 +76,13 @@ getId child id =
         Id.getNewIdInSequence id
 
 
-getUniqueId : List NoteWithSplit -> String -> Maybe String
+getUniqueId : List NoteWithSplit -> Id -> Maybe Id
 getUniqueId notes id =
     -- Prevents infinite loops
     generateUniqueId notes id uniqueIdRetries
 
 
-generateUniqueId : List NoteWithSplit -> String -> Int -> Maybe String
+generateUniqueId : List NoteWithSplit -> Id -> Int -> Maybe Id
 generateUniqueId notes id remainingAttempts =
     if remainingAttempts <= 0 then
         Nothing
@@ -94,7 +94,7 @@ generateUniqueId notes id remainingAttempts =
         Just id
 
 
-isNoteIdTaken : List NoteWithSplit -> String -> Bool
+isNoteIdTaken : List NoteWithSplit -> Id -> Bool
 isNoteIdTaken notes noteId =
     List.any (\noteWithSplit -> noteWithSplit.note.id == Just noteId) notes
 
