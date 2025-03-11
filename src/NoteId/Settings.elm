@@ -2,6 +2,7 @@ module NoteId.Settings exposing
     ( IdField(..)
     , Settings
     , TocField(..)
+    , TocLevel(..)
     , decode
     , default
     , fromPort
@@ -20,10 +21,15 @@ type alias Settings =
     , showNotesWithoutId : Bool
     , idField : IdField
     , tocField : TocField
-    , tocLevel : Maybe Int
+    , tocLevel : TocLevel
     , splitLevel : Int
     , indentation : Bool
     }
+
+
+type TocLevel
+    = TocLevel Int
+    | NoAutoToc
 
 
 type IdField
@@ -51,7 +57,7 @@ default =
     , showNotesWithoutId = True
     , idField = IdField "id"
     , tocField = TocField "toc"
-    , tocLevel = Just 1
+    , tocLevel = TocLevel 1
     , splitLevel = 0
     , indentation = False
     }
@@ -92,18 +98,18 @@ partialSettingsDecoder =
         (Decode.field "indentation" Decode.bool |> Decode.maybe)
 
 
-tocLevelDecoder : Decode.Decoder (Maybe Int)
+tocLevelDecoder : Decode.Decoder TocLevel
 tocLevelDecoder =
     Decode.map2
         (\autoToc tocLevel ->
             if autoToc then
-                tocLevel
+                TocLevel tocLevel
 
             else
-                Nothing
+                NoAutoToc
         )
         (Decode.field "autoToc" Decode.bool |> Decode.maybe |> Decode.map (Maybe.withDefault True))
-        (Decode.field "tocLevel" Decode.int |> Decode.maybe)
+        (Decode.field "tocLevel" Decode.int |> Decode.maybe |> Decode.map (Maybe.withDefault 1))
 
 
 fromPort : Ports.Settings -> Settings
@@ -115,10 +121,10 @@ fromPort portSettings =
     , tocField = TocField portSettings.tocField
     , tocLevel =
         if portSettings.autoToc then
-            Just portSettings.tocLevel
+            TocLevel portSettings.tocLevel
 
         else
-            Nothing
+            NoAutoToc
     , splitLevel = portSettings.splitLevel
     , indentation = portSettings.indentation
     }

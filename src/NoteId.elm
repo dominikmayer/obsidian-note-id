@@ -15,7 +15,7 @@ import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
 import NoteId.Notes as Notes exposing (Notes)
 import NoteId.Path as Path exposing (Path(..))
 import NoteId.Ports as Ports exposing (RawFileMeta)
-import NoteId.Settings as Settings exposing (IdField(..), Settings)
+import NoteId.Settings as Settings exposing (IdField(..), Settings, TocLevel(..))
 import NoteId.Vault as Vault exposing (Vault)
 import Task
 import VirtualList
@@ -345,18 +345,18 @@ updateNotes model changedNotes =
     ( modelWithUpdatedVirtualList, cmd )
 
 
-filterNotesForDisplay : DisplayMode -> Maybe Int -> Notes -> Notes
-filterNotesForDisplay display maybeTocLevel notes =
+filterNotesForDisplay : DisplayMode -> TocLevel -> Notes -> Notes
+filterNotesForDisplay display tocLevel notes =
     case display of
         TOC ->
-            Notes.filter (showInToc maybeTocLevel) notes
+            Notes.filter (showInToc tocLevel) notes
 
         Notes ->
             notes
 
 
-showInToc : Maybe Int -> NoteMeta -> Bool
-showInToc maybeTocLevel note =
+showInToc : TocLevel -> NoteMeta -> Bool
+showInToc tocLevel note =
     let
         hasTocField =
             note.tocTitle /= Nothing
@@ -364,11 +364,11 @@ showInToc maybeTocLevel note =
         noteLevel =
             Maybe.withDefault 0 (note.id |> Maybe.map Id.level)
     in
-    case maybeTocLevel of
-        Just tocLevel ->
-            hasTocField || (0 < noteLevel && noteLevel <= tocLevel)
+    case tocLevel of
+        TocLevel level ->
+            hasTocField || (0 < noteLevel && noteLevel <= level)
 
-        Nothing ->
+        NoAutoToc ->
             hasTocField
 
 
