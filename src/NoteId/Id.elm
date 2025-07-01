@@ -8,7 +8,7 @@ module NoteId.Id exposing
     , isSubsequenceToProgression
     , level
     , parts
-    , partsToString
+    , partsToEscapedString
     , splitLevel
     , toString
     )
@@ -58,12 +58,12 @@ getNewIdInSequence id =
         Ok idParts ->
             case List.reverse idParts of
                 (Number n) :: rest ->
-                    Id (partsToString (List.reverse (Number (n + 1) :: rest)))
+                    Id (partsToEscapedString (List.reverse (Number (n + 1) :: rest)))
 
                 (Letters s) :: rest ->
                     case incrementString s of
                         Just newLetters ->
-                            Id (partsToString (List.reverse (Letters newLetters :: rest)))
+                            Id (partsToEscapedString (List.reverse (Letters newLetters :: rest)))
 
                         Nothing ->
                             id
@@ -94,7 +94,7 @@ getNewIdInSubsequence id =
                         _ ->
                             idParts
             in
-            Id (partsToString updatedParts)
+            Id (partsToEscapedString updatedParts)
 
         Err _ ->
             id
@@ -244,6 +244,19 @@ parseDelimiter =
                 else
                     succeed (Delimiter s)
             )
+
+
+partsToEscapedString : List IdPart -> String
+partsToEscapedString idParts =
+    let
+        raw =
+            partsToString idParts
+    in
+    if isScientificNotation idParts then
+        "\"" ++ raw ++ "\""
+
+    else
+        raw
 
 
 partsToString : List IdPart -> String
@@ -427,3 +440,18 @@ level id =
         |> Result.map (List.filter (not << isDelimiter))
         |> Result.map List.length
         |> Result.withDefault 0
+
+
+isScientificNotation : List IdPart -> Bool
+isScientificNotation rawParts =
+    case rawParts of
+        -- exact 1.6e1
+        [ Number _, Delimiter ".", Number _, Letters letter, Number _ ] ->
+            String.toLower letter == "e"
+
+        -- exact 1e3
+        [ Number _, Letters letter, Number _ ] ->
+            String.toLower letter == "e"
+
+        _ ->
+            False

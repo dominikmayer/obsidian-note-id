@@ -27,6 +27,8 @@ all =
                 , ( "1.27ag7f9zz", "1.27ag7f9zz1" )
                 , ( "1.2.8", "1.2.8a" )
                 , ( "7.9", "7.9a" )
+                , ( "1.6e", "\"1.6e1\"" )
+                , ( "1e", "\"1e1\"" )
                 ]
             ++ testParts
                 [ ( "abc1a", [ Letters "abc", Number 1, Letters "a" ] )
@@ -135,7 +137,7 @@ testSingleParts ( id, expectedSplit ) =
             Expect.equal expectedSplit idParts
     , test (id ++ " not being put together correctly") <|
         \_ ->
-            Expect.equal id (Id.partsToString idParts)
+            Expect.equal id (Id.partsToEscapedString idParts)
     ]
 
 
