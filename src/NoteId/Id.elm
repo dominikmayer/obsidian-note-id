@@ -1,15 +1,17 @@
 module NoteId.Id exposing
-    ( Id(..)
+    ( Id
     , IdPart(..)
     , Progression(..)
     , compareId
+    , fromString
     , getNewIdInSequence
     , getNewIdInSubsequence
     , isSubsequenceToProgression
     , level
     , parts
-    , partsToEscapedString
+    , partsToString
     , splitLevel
+    , toEscapedString
     , toString
     )
 
@@ -47,9 +49,24 @@ isSubsequenceToProgression isSubsequence =
         Sequence
 
 
+fromString : String -> Id
+fromString id =
+    Id id
+
+
 toString : Id -> String
 toString (Id id) =
     id
+
+
+toEscapedString : Id -> String
+toEscapedString id =
+    case parts id of
+        Ok idParts ->
+            partsToEscapedString idParts
+
+        Err _ ->
+            toString id
 
 
 getNewIdInSequence : Id -> Id
@@ -58,12 +75,12 @@ getNewIdInSequence id =
         Ok idParts ->
             case List.reverse idParts of
                 (Number n) :: rest ->
-                    Id (partsToEscapedString (List.reverse (Number (n + 1) :: rest)))
+                    Id (partsToString (List.reverse (Number (n + 1) :: rest)))
 
                 (Letters s) :: rest ->
                     case incrementString s of
                         Just newLetters ->
-                            Id (partsToEscapedString (List.reverse (Letters newLetters :: rest)))
+                            Id (partsToString (List.reverse (Letters newLetters :: rest)))
 
                         Nothing ->
                             id
@@ -94,7 +111,7 @@ getNewIdInSubsequence id =
                         _ ->
                             idParts
             in
-            Id (partsToEscapedString updatedParts)
+            Id (partsToString updatedParts)
 
         Err _ ->
             id
@@ -183,12 +200,28 @@ isDelimiter part =
 
 parts : Id -> Result String (List IdPart)
 parts (Id id) =
-    case Parser.run idParser id of
+    case Parser.run idParser (stripQuotesFromString id) of
         Ok result ->
             Ok result
 
         Err _ ->
             Err "Failed to parse ID"
+
+
+stripQuotes : Id -> Id
+stripQuotes (Id id) =
+    Id (stripQuotesFromString id)
+
+
+stripQuotesFromString : String -> String
+stripQuotesFromString str =
+    if String.startsWith "\"" str && String.endsWith "\"" str then
+        str
+            |> String.dropLeft 1
+            |> String.dropRight 1
+
+    else
+        str
 
 
 idParser : Parser (List IdPart)

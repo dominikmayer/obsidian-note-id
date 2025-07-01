@@ -9,7 +9,7 @@ import Html.Events.Extra.Mouse as Mouse
 import Html.Lazy exposing (lazy)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import NoteId.Id as Id exposing (Id(..))
+import NoteId.Id as Id exposing (Id, fromString)
 import NoteId.Metadata as Metadata
 import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
 import NoteId.Notes as Notes exposing (Notes)
@@ -147,7 +147,7 @@ update msg model =
             let
                 cmd =
                     Notes.getNewIdFromNote model.includedNotes from subsequence
-                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( Id.toString id, Path.toString for ))
+                        |> Maybe.map (\id -> Ports.provideNewIdForNote ( Id.toEscapedString id, Path.toString for ))
                         |> Maybe.withDefault Cmd.none
             in
             ( model, cmd )
@@ -309,7 +309,7 @@ createNote model path progression =
 
 
 createNoteContent : IdField -> Id -> String
-createNoteContent (IdField idNameFromSettings) (Id id) =
+createNoteContent (IdField idNameFromSettings) id =
     let
         idName =
             if String.isEmpty idNameFromSettings then
@@ -318,7 +318,7 @@ createNoteContent (IdField idNameFromSettings) (Id id) =
             else
                 idNameFromSettings
     in
-    "---\n" ++ idName ++ ": " ++ id ++ "\n---"
+    "---\n" ++ idName ++ ": " ++ Id.toEscapedString id ++ "\n---"
 
 
 updateNotes : Model -> List Path -> ( Model, Cmd Msg )
@@ -396,7 +396,7 @@ matchesFilter query note =
     in
     String.contains lowerQuery (String.toLower note.title)
         || check note.tocTitle
-        || check (Maybe.map (\(Id idString) -> idString) note.id)
+        || check (Maybe.map Id.toString note.id)
 
 
 handleFileRename : Model -> ( Path, Path ) -> ( Model, Cmd Msg )
@@ -550,8 +550,8 @@ renderNote model note maybeSplit =
         [ div
             (Html.Attributes.class "tree-item-inner" :: marginLeftStyle)
             (case note.id of
-                Just (Id id) ->
-                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (id ++ ": ") ]
+                Just id ->
+                    [ Html.span [ Html.Attributes.class "note-id" ] [ Html.text (Id.toString id ++ ": ") ]
                     , Html.text title
                     ]
 
