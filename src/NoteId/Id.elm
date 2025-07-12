@@ -1,8 +1,9 @@
 module NoteId.Id exposing
-    ( Id(..)
+    ( Id
     , IdPart(..)
     , Progression(..)
     , compareId
+    , fromString
     , getNewIdInSequence
     , getNewIdInSubsequence
     , isSubsequenceToProgression
@@ -10,6 +11,7 @@ module NoteId.Id exposing
     , parts
     , partsToString
     , splitLevel
+    , toEscapedString
     , toString
     )
 
@@ -47,9 +49,24 @@ isSubsequenceToProgression isSubsequence =
         Sequence
 
 
+fromString : String -> Id
+fromString id =
+    Id id
+
+
 toString : Id -> String
 toString (Id id) =
     id
+
+
+toEscapedString : Id -> String
+toEscapedString id =
+    case parts id of
+        Ok idParts ->
+            partsToEscapedString idParts
+
+        Err _ ->
+            toString id
 
 
 getNewIdInSequence : Id -> Id
@@ -183,12 +200,28 @@ isDelimiter part =
 
 parts : Id -> Result String (List IdPart)
 parts (Id id) =
-    case Parser.run idParser id of
+    case Parser.run idParser (stripQuotesFromString id) of
         Ok result ->
             Ok result
 
         Err _ ->
             Err "Failed to parse ID"
+
+
+stripQuotes : Id -> Id
+stripQuotes (Id id) =
+    Id (stripQuotesFromString id)
+
+
+stripQuotesFromString : String -> String
+stripQuotesFromString str =
+    if String.startsWith "\"" str && String.endsWith "\"" str then
+        str
+            |> String.dropLeft 1
+            |> String.dropRight 1
+
+    else
+        str
 
 
 idParser : Parser (List IdPart)
@@ -244,6 +277,19 @@ parseDelimiter =
                 else
                     succeed (Delimiter s)
             )
+
+
+partsToEscapedString : List IdPart -> String
+partsToEscapedString idParts =
+    let
+        raw =
+            partsToString idParts
+    in
+    if isScientificNotation idParts then
+        "\"" ++ raw ++ "\""
+
+    else
+        raw
 
 
 partsToString : List IdPart -> String
@@ -427,3 +473,18 @@ level id =
         |> Result.map (List.filter (not << isDelimiter))
         |> Result.map List.length
         |> Result.withDefault 0
+
+
+isScientificNotation : List IdPart -> Bool
+isScientificNotation rawParts =
+    case rawParts of
+        -- exact 1.6e1
+        [ Number _, Delimiter ".", Number _, Letters letter, Number _ ] ->
+            String.toLower letter == "e"
+
+        -- exact 1e3
+        [ Number _, Letters letter, Number _ ] ->
+            String.toLower letter == "e"
+
+        _ ->
+            False

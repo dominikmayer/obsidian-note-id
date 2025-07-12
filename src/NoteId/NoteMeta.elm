@@ -17,7 +17,7 @@ forPort : NoteMeta -> Ports.NoteMeta
 forPort note =
     { title = note.title
     , tocTitle = note.tocTitle
-    , id = Maybe.map Id.toString note.id
+    , id = Maybe.map Id.toEscapedString note.id
     , filePath = Path.toString note.filePath
     }
 

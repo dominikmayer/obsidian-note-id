@@ -27,6 +27,9 @@ all =
                 , ( "1.27ag7f9zz", "1.27ag7f9zz1" )
                 , ( "1.2.8", "1.2.8a" )
                 , ( "7.9", "7.9a" )
+                , ( "1.6e", "1.6e1" )
+                , ( "1e", "1e1" )
+                , ( "\"1e6\"", "1e6a" )
                 ]
             ++ testParts
                 [ ( "abc1a", [ Letters "abc", Number 1, Letters "a" ] )
@@ -88,6 +91,14 @@ all =
                 , ( "", 0 )
                 , ( "1a", 2 )
                 ]
+            ++ testEscapedStrings
+                [ ( "abc1a", "abc1a" )
+                , ( "1.6e1", "\"1.6e1\"" )
+                , ( "1e1", "\"1e1\"" )
+                , ( "1.6e1a", "1.6e1a" )
+                , ( "1e", "1e" )
+                , ( "1e6a", "1e6a" )
+                ]
 
 
 testGetNewIdsInSequence : List ( String, String ) -> List Test
@@ -99,7 +110,7 @@ testGetNewIdInSequence : ( String, String ) -> Test
 testGetNewIdInSequence ( id, expectedIncrementedId ) =
     test (id ++ " should be incremented to " ++ expectedIncrementedId) <|
         \_ ->
-            Expect.equal (Id expectedIncrementedId) (getNewIdInSequence (Id id))
+            Expect.equal (Id.fromString expectedIncrementedId) (getNewIdInSequence (Id.fromString id))
 
 
 testGetNewIdsInSubsequence : List ( String, String ) -> List Test
@@ -111,7 +122,7 @@ testGetNewIdInSubsequence : ( String, String ) -> Test
 testGetNewIdInSubsequence ( id, expectedIncrementedId ) =
     test (id ++ " should get a subsequence of " ++ expectedIncrementedId) <|
         \_ ->
-            Expect.equal (Id expectedIncrementedId) (getNewIdInSubsequence (Id id))
+            Expect.equal (Id.fromString expectedIncrementedId) (getNewIdInSubsequence (Id.fromString id))
 
 
 testParts : List ( String, List IdPart ) -> List Test
@@ -123,7 +134,7 @@ testSingleParts : ( String, List IdPart ) -> List Test
 testSingleParts ( id, expectedSplit ) =
     let
         idParts =
-            case parts (Id id) of
+            case parts (Id.fromString id) of
                 Ok partsList ->
                     partsList
 
@@ -148,7 +159,7 @@ testSingleCompare : ( String, String, Order ) -> List Test
 testSingleCompare ( a, b, order ) =
     [ test (a ++ " and " ++ b ++ " ordered incorrectly") <|
         \_ ->
-            Expect.equal (Id.compareId (Id a) (Id b)) order
+            Expect.equal (Id.compareId (Id.fromString a) (Id.fromString b)) order
     ]
 
 
@@ -161,7 +172,7 @@ testBranchLevel : ( String, String, Maybe Int ) -> List Test
 testBranchLevel ( a, b, level ) =
     [ test ("The branch of " ++ a ++ " and " ++ b ++ " is recognized incorrectly") <|
         \_ ->
-            Expect.equal (Id.splitLevel (Id a) (Id b)) level
+            Expect.equal (Id.splitLevel (Id.fromString a) (Id.fromString b)) level
     ]
 
 
@@ -174,5 +185,18 @@ testLevel : ( String, Int ) -> List Test
 testLevel ( id, level ) =
     [ test (id ++ " has the wrong level") <|
         \_ ->
-            Expect.equal (Id.level (Id id)) level
+            Expect.equal (Id.level (Id.fromString id)) level
+    ]
+
+
+testEscapedStrings : List ( String, String ) -> List Test
+testEscapedStrings cases =
+    List.concatMap testEscapedString cases
+
+
+testEscapedString : ( String, String ) -> List Test
+testEscapedString ( raw, expected ) =
+    [ test ("escape " ++ raw ++ " → " ++ expected) <|
+        \_ ->
+            Expect.equal expected (Id.toEscapedString (Id.fromString raw))
     ]

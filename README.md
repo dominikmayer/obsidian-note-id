@@ -107,7 +107,7 @@ The plugin allows you to
 
 ## Feedback and Contributions
 
-Feedback and contributions are welcome! Visit [GitHub](https://github.com/dominikmayer/obsidian-note-id) to [report issues](https://github.com/dominikmayer/obsidian-note-id/issues), [ask questions](https://github.com/dominikmayer/obsidian-note-id/discussions), or submit pull requests.
+Feedback and contributions are welcome! Visit [GitHub](https://github.com/dominikmayer/obsidian-note-id) to [report issues](https://github.com/dominikmayer/obsidian-note-id/issues), [ask questions](https://github.com/dominikmayer/obsidian-note-id/discussions), or submit pull requests. You can also subscribe to the [newsletter](https://www.dominikmayer.com/updates/) to get updates when this plugin changes.
 
 ## Other Plugins
 
