@@ -6,6 +6,7 @@
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"review": "./node_modules/.bin/elm-review",
 		"test": "elm-test",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
@@ -26,7 +27,7 @@
 		"tslib": "2.4.0",
 		"typescript": "4.7.4"
 	},
-  "overrides": {
-    "cross-spawn": "^7.0.0"
-  }
+	"overrides": {
+		"cross-spawn": "^7.0.0"
+	}
 }
