@@ -165,6 +165,14 @@ export class IDSidePanelView extends ItemView {
 			},
 		);
 
+		this.elmApp.ports.suggestId.subscribe((id: string) => {
+			if (id) {
+				new Notice(`Suggested ID: ${id}`);
+			} else {
+				new Notice("Could not generate a suggested ID");
+			}
+		});
+
 		this.elmApp.ports.provideNewIdForNote.subscribe(
 			(data: [string, string]) => {
 				const id = data[0];
