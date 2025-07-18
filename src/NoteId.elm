@@ -188,11 +188,6 @@ update msg model =
 
         SuggestIdRequested filePath noteContent ->
             let
-                suggestedId =
-                    Notes.getNewIdFromNote model.includedNotes filePath Id.Sequence
-                        |> Maybe.map Id.toEscapedString
-                        |> Maybe.withDefault ""
-
                 notesWithIds =
                     Vault.filteredContent model.settings model.vault
                         |> List.filter (\note -> note.id /= Nothing)
@@ -200,40 +195,32 @@ update msg model =
                 currentNote =
                     Vault.getNoteByPath filePath model.vault
 
-                _ =
-                    Debug.log "=== SUGGEST ID DEBUG INFO ===" ""
+                currentNoteTitle =
+                    currentNote
+                        |> Maybe.map .title
+                        |> Maybe.withDefault "Note not found"
+
+                existingNotesString =
+                    notesWithIds
+                        |> List.map
+                            (\note ->
+                                let
+                                    idString =
+                                        note.id
+                                            |> Maybe.map Id.toEscapedString
+                                            |> Maybe.withDefault ""
+                                in
+                                "ID: " ++ idString ++ " - Title: " ++ note.title
+                            )
+                        |> String.join "\n"
+
+                logString =
+                    "Existing notes:\n" ++ existingNotesString ++ "\n\nCurrent note title: " ++ currentNoteTitle ++ "\n\nCurrent note content:\n" ++ noteContent
 
                 _ =
-                    Debug.log "Current note path" (Path.toString filePath)
-
-                _ =
-                    Debug.log "Current note title"
-                        (currentNote
-                            |> Maybe.map .title
-                            |> Maybe.withDefault "Note not found"
-                        )
-
-                _ =
-                    Debug.log "Current note content" noteContent
-
-                _ =
-                    Debug.log "Suggested ID" suggestedId
-
-                _ =
-                    Debug.log "Total notes with IDs" (List.length notesWithIds)
-
-                _ =
-                    Debug.log "Notes with IDs"
-                        (notesWithIds
-                            |> List.map
-                                (\note ->
-                                    { title = note.title
-                                    , id = Maybe.map Id.toString note.id
-                                    }
-                                )
-                        )
+                    Debug.log "Suggest ID Debug" logString
             in
-            ( model, Ports.suggestId suggestedId )
+            ( model, Ports.suggestId "suggestedId" )
 
         VirtualListMsg virtualListMsg ->
             mapVirtualListResult (VirtualList.update virtualListMsg model.virtualList) model
