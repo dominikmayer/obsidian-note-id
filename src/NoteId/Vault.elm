@@ -75,11 +75,8 @@ isIncluded settings note =
     if not included || excluded then
         False
 
-    else if note.id == Nothing && not settings.showNotesWithoutId then
-        False
-
     else
-        True
+        note.id /= Nothing || settings.showNotesWithoutId
 
 
 rename : Vault -> { oldPath : Path, newPath : Path } -> Vault
