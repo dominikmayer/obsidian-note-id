@@ -56,6 +56,9 @@ declare module "*.elm" {
 		toggleTOCButton: {
 			subscribe(callback: (flag: boolean) => void): void;
 		};
+		suggestId: {
+			subscribe(callback: (id: string) => void): void;
+		};
 
 		// Incoming ports (TypeScript to Elm)
 		receiveFileOpen: {
@@ -93,6 +96,9 @@ declare module "*.elm" {
 		};
 		receiveSettings: {
 			send(data: Settings): void;
+		};
+		receiveRequestSuggestId: {
+			send(data: string): void;
 		};
 	}
 

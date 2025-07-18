@@ -81,6 +81,20 @@ export default class IDSidePanelPlugin extends Plugin {
 				});
 			},
 		});
+
+		this.addCommand({
+			id: "suggest-id",
+			name: "Suggest new ID for current note",
+			callback: () => {
+				this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
+					if (elmApp.ports.receiveRequestSuggestId) {
+						elmApp.ports.receiveRequestSuggestId.send(
+							currentNote.path,
+						);
+					}
+				});
+			},
+		});
 	}
 
 	private createNoteFromCommand(subsequence: boolean) {
@@ -129,6 +143,20 @@ export default class IDSidePanelPlugin extends Plugin {
 			const checkElmApp = () => {
 				const elmApp = this.getElmApp();
 				if (elmApp) {
+					// Register port handler for suggest-id
+					if (elmApp.ports.suggestId) {
+						elmApp.ports.suggestId.subscribe(
+							(suggestedId: string) => {
+								if (suggestedId) {
+									new Notice(`Suggested ID: ${suggestedId}`);
+								} else {
+									new Notice(
+										"Could not generate a suggested ID",
+									);
+								}
+							},
+						);
+					}
 					resolve(elmApp);
 				} else if (retries > 0) {
 					setTimeout(() => checkElmApp(), delay);

@@ -21,6 +21,9 @@ port provideNotesForAttach : ( String, List NoteMeta ) -> Cmd msg
 port provideNotesForSearch : List NoteMeta -> Cmd msg
 
 
+port suggestId : String -> Cmd msg
+
+
 port toggleTOCButton : Bool -> Cmd msg
 
 
@@ -62,6 +65,9 @@ port receiveRequestSearch : (() -> msg) -> Sub msg
 
 
 port receiveSettings : (Settings -> msg) -> Sub msg
+
+
+port receiveRequestSuggestId : (String -> msg) -> Sub msg
 
 
 type alias RawFileMeta =
