@@ -1,4 +1,4 @@
-module NoteId.Vault exposing (Vault, empty, fill, filteredContent, insert, remove, rename)
+module NoteId.Vault exposing (Vault, empty, fill, filteredContent, getNoteByPath, insert, remove, rename)
 
 import Dict exposing (Dict)
 import NoteId.Metadata as Metadata exposing (FieldNames)
@@ -112,6 +112,11 @@ remove path (Vault vault) =
     vault
         |> Dict.remove (Path.toString path)
         |> Vault
+
+
+getNoteByPath : Path -> Vault -> Maybe NoteMeta
+getNoteByPath path (Vault vault) =
+    Dict.get (Path.toString path) vault
 
 
 insert : NoteMeta -> Vault -> Vault

@@ -197,8 +197,21 @@ update msg model =
                     Vault.filteredContent model.settings model.vault
                         |> List.filter (\note -> note.id /= Nothing)
 
+                currentNote =
+                    Vault.getNoteByPath filePath model.vault
+
                 _ =
                     Debug.log "=== SUGGEST ID DEBUG INFO ===" ""
+
+                _ =
+                    Debug.log "Current note path" (Path.toString filePath)
+
+                _ =
+                    Debug.log "Current note title"
+                        (currentNote
+                            |> Maybe.map .title
+                            |> Maybe.withDefault "Note not found"
+                        )
 
                 _ =
                     Debug.log "Current note content" noteContent
