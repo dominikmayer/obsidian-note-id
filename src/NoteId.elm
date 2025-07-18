@@ -193,8 +193,33 @@ update msg model =
                         |> Maybe.map Id.toEscapedString
                         |> Maybe.withDefault ""
 
+                notesWithIds =
+                    Vault.filteredContent model.settings model.vault
+                        |> List.filter (\note -> note.id /= Nothing)
+
+                _ =
+                    Debug.log "=== SUGGEST ID DEBUG INFO ===" ""
+
                 _ =
                     Debug.log "Current note content" noteContent
+
+                _ =
+                    Debug.log "Suggested ID" suggestedId
+
+                _ =
+                    Debug.log "Total notes with IDs" (List.length notesWithIds)
+
+                _ =
+                    Debug.log "Notes with IDs"
+                        (notesWithIds
+                            |> List.map
+                                (\note ->
+                                    { path = Path.toString note.filePath
+                                    , title = note.title
+                                    , id = Maybe.map Id.toEscapedString note.id
+                                    }
+                                )
+                        )
             in
             ( model, Ports.suggestId suggestedId )
 
