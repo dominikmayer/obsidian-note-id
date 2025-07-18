@@ -1,7 +1,7 @@
 module NoteIdTest exposing (all)
 
 import Expect
-import NoteId.Id as Id exposing (Id(..), IdPart(..), getNewIdInSequence, getNewIdInSubsequence, parts)
+import NoteId.Id as Id exposing (IdPart(..), getNewIdInSequence, getNewIdInSubsequence, parts)
 import Test exposing (Test, describe, test)
 
 

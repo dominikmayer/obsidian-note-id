@@ -18,9 +18,7 @@ module NoteId.Id exposing
 import List.Extra
 import Parser
     exposing
-        ( (|.)
-        , (|=)
-        , Parser
+        ( Parser
         , andThen
         , chompWhile
         , getChompedString
@@ -206,11 +204,6 @@ parts (Id id) =
 
         Err _ ->
             Err "Failed to parse ID"
-
-
-stripQuotes : Id -> Id
-stripQuotes (Id id) =
-    Id (stripQuotesFromString id)
 
 
 stripQuotesFromString : String -> String

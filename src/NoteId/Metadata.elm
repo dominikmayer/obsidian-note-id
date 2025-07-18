@@ -4,11 +4,11 @@ module NoteId.Metadata exposing
     , processRawNotes
     )
 
-import NoteId.Id as Id exposing (Id)
+import NoteId.Id as Id
 import NoteId.NoteMeta exposing (NoteMeta)
 import NoteId.Path exposing (Path(..))
 import NoteId.Ports exposing (RawFileMeta)
-import NoteId.Settings as Settings exposing (IdField(..), TocField(..))
+import NoteId.Settings as Settings exposing (IdField, TocField)
 import String
 
 

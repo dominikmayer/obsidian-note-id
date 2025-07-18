@@ -9,7 +9,7 @@ import Html.Events.Extra.Mouse as Mouse
 import Html.Lazy exposing (lazy)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import NoteId.Id as Id exposing (Id, fromString)
+import NoteId.Id as Id exposing (Id)
 import NoteId.Metadata as Metadata
 import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
 import NoteId.Notes as Notes exposing (Notes)
@@ -344,11 +344,8 @@ updateNotes model changedNotes =
 
         modelWithSortedNotes =
             { model | includedNotes = annotatedNotes }
-
-        ( modelWithUpdatedVirtualList, cmd ) =
-            updateVirtualListHelper modelWithSortedNotes affectedIds
     in
-    ( modelWithUpdatedVirtualList, cmd )
+    updateVirtualListHelper modelWithSortedNotes affectedIds
 
 
 filterNotesForDisplay : DisplayMode -> TocLevel -> Maybe String -> Notes -> Notes
@@ -373,12 +370,13 @@ showInToc tocLevel note =
     let
         hasTocField =
             note.tocTitle /= Nothing
-
-        noteLevel =
-            Maybe.withDefault 0 (note.id |> Maybe.map Id.level)
     in
     case tocLevel of
         TocLevel level ->
+            let
+                noteLevel =
+                    Maybe.withDefault 0 (note.id |> Maybe.map Id.level)
+            in
             hasTocField || (0 < noteLevel && noteLevel <= level)
 
         NoAutoToc ->
@@ -515,14 +513,15 @@ renderNote model note maybeSplit =
                     Nothing ->
                         []
 
-        level =
-            note.id
-                |> Maybe.map Id.level
-                |> Maybe.withDefault 0
-                |> toFloat
-
         marginLeftStyle =
             if model.settings.indentation then
+                let
+                    level =
+                        note.id
+                            |> Maybe.map Id.level
+                            |> Maybe.withDefault 0
+                            |> toFloat
+                in
                 [ marginLeft level ]
 
             else
