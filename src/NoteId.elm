@@ -7,6 +7,7 @@ import Html.Attributes
 import Html.Events exposing (onClick)
 import Html.Events.Extra.Mouse as Mouse
 import Html.Lazy exposing (lazy)
+import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
 import NoteId.Id as Id exposing (Id)
@@ -116,6 +117,7 @@ type Msg
     | ScrollRequested Path
     | SettingsChanged Ports.Settings
     | SuggestIdRequested Path String
+    | OpenAIResponseReceived (Result Http.Error String)
     | VirtualListMsg VirtualList.Msg
 
 
@@ -189,6 +191,22 @@ update msg model =
         SuggestIdRequested filePath noteContent ->
             suggestIdForNote model filePath noteContent
 
+        OpenAIResponseReceived result ->
+            case result of
+                Ok response ->
+                    let
+                        _ =
+                            Debug.log "OpenAI Response" response
+                    in
+                    ( model, Cmd.none )
+
+                Err error ->
+                    let
+                        _ =
+                            Debug.log "OpenAI Error" (Debug.toString error)
+                    in
+                    ( model, Cmd.none )
+
         VirtualListMsg virtualListMsg ->
             mapVirtualListResult (VirtualList.update virtualListMsg model.virtualList) model
 
@@ -223,7 +241,7 @@ suggestIdForNote model filePath noteContent =
                                     |> Maybe.map Id.toEscapedString
                                     |> Maybe.withDefault ""
                         in
-                        "ID: " ++ idString ++ ", Title: " ++ note.title
+                        "ID: " ++ idString ++ " - Title: " ++ note.title
                     )
                 |> String.join "\n"
 
@@ -232,8 +250,59 @@ suggestIdForNote model filePath noteContent =
 
         _ =
             Debug.log "Suggest ID Debug" logString
+
+        requestPayload =
+            Encode.object
+                [ ( "model", Encode.string "gpt-3.5-turbo" )
+                , ( "input", Encode.string "Hello world! This is a test message from the Obsidian Note ID plugin." )
+                ]
+
+        _ =
+            Debug.log "OpenAI Request Payload" (Encode.encode 2 requestPayload)
+
+        openAIRequest =
+            Http.request
+                { method = "POST"
+                , headers =
+                    [ Http.header "Authorization" "Bearer API-KEY"
+                    ]
+                , url = "https://api.openai.com/v1/responses"
+                , body = Http.jsonBody requestPayload
+                , expect =
+                    Http.expectStringResponse OpenAIResponseReceived
+                        (\response ->
+                            case response of
+                                Http.GoodStatus_ metadata body ->
+                                    let
+                                        _ =
+                                            Debug.log "OpenAI Success Response" body
+                                    in
+                                    Ok body
+
+                                Http.BadStatus_ metadata body ->
+                                    let
+                                        _ =
+                                            Debug.log "OpenAI Error Response Body" body
+
+                                        _ =
+                                            Debug.log "OpenAI Error Response Status" metadata.statusCode
+                                    in
+                                    Err (Http.BadStatus metadata.statusCode)
+
+                                Http.BadUrl_ url ->
+                                    Err (Http.BadUrl url)
+
+                                Http.Timeout_ ->
+                                    Err Http.Timeout
+
+                                Http.NetworkError_ ->
+                                    Err Http.NetworkError
+                        )
+                , timeout = Nothing
+                , tracker = Nothing
+                }
     in
-    ( model, Ports.suggestId suggestedId )
+    ( model, Cmd.batch [ Ports.suggestId suggestedId, openAIRequest ] )
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
