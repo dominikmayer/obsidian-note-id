@@ -227,9 +227,8 @@ update msg model =
                         (notesWithIds
                             |> List.map
                                 (\note ->
-                                    { path = Path.toString note.filePath
-                                    , title = note.title
-                                    , id = Maybe.map Id.toEscapedString note.id
+                                    { title = note.title
+                                    , id = Maybe.map Id.toString note.id
                                     }
                                 )
                         )
