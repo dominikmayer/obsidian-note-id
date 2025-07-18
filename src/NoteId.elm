@@ -197,6 +197,17 @@ update msg model =
                     let
                         _ =
                             Debug.log "OpenAI Response" response
+
+                        parsedResponse =
+                            case Decode.decodeString openAIResponseDecoder response of
+                                Ok parsedData ->
+                                    parsedData
+
+                                Err error ->
+                                    "Error parsing OpenAI response: " ++ Decode.errorToString error
+
+                        _ =
+                            Debug.log "OpenAI Parsed Text" parsedResponse
                     in
                     ( model, Cmd.none )
 
@@ -303,6 +314,11 @@ suggestIdForNote model filePath noteContent =
                 }
     in
     ( model, Cmd.batch [ Ports.suggestId suggestedId, openAIRequest ] )
+
+
+openAIResponseDecoder : Decode.Decoder String
+openAIResponseDecoder =
+    Decode.field "output" (Decode.index 0 (Decode.field "content" (Decode.index 0 (Decode.field "text" Decode.string))))
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
