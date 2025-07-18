@@ -187,43 +187,53 @@ update msg model =
             handleSettingsChange model settings
 
         SuggestIdRequested filePath noteContent ->
-            let
-                notesWithIds =
-                    Vault.filteredContent model.settings model.vault
-                        |> List.filter (\note -> note.id /= Nothing)
-
-                currentNote =
-                    Vault.getNoteByPath filePath model.vault
-
-                currentNoteTitle =
-                    currentNote
-                        |> Maybe.map .title
-                        |> Maybe.withDefault "Note not found"
-
-                existingNotesString =
-                    notesWithIds
-                        |> List.map
-                            (\note ->
-                                let
-                                    idString =
-                                        note.id
-                                            |> Maybe.map Id.toEscapedString
-                                            |> Maybe.withDefault ""
-                                in
-                                "ID: " ++ idString ++ " - Title: " ++ note.title
-                            )
-                        |> String.join "\n"
-
-                logString =
-                    "Existing notes:\n" ++ existingNotesString ++ "\n\nCurrent note title: " ++ currentNoteTitle ++ "\n\nCurrent note content:\n" ++ noteContent
-
-                _ =
-                    Debug.log "Suggest ID Debug" logString
-            in
-            ( model, Ports.suggestId "suggestedId" )
+            suggestIdForNote model filePath noteContent
 
         VirtualListMsg virtualListMsg ->
             mapVirtualListResult (VirtualList.update virtualListMsg model.virtualList) model
+
+
+suggestIdForNote : Model -> Path -> String -> ( Model, Cmd Msg )
+suggestIdForNote model filePath noteContent =
+    let
+        suggestedId =
+            Notes.getNewIdFromNote model.includedNotes filePath Id.Sequence
+                |> Maybe.map Id.toEscapedString
+                |> Maybe.withDefault ""
+
+        notesWithIds =
+            Vault.filteredContent model.settings model.vault
+                |> List.filter (\note -> note.id /= Nothing)
+
+        currentNote =
+            Vault.getNoteByPath filePath model.vault
+
+        currentNoteTitle =
+            currentNote
+                |> Maybe.map .title
+                |> Maybe.withDefault "Note not found"
+
+        existingNotesString =
+            notesWithIds
+                |> List.map
+                    (\note ->
+                        let
+                            idString =
+                                note.id
+                                    |> Maybe.map Id.toEscapedString
+                                    |> Maybe.withDefault ""
+                        in
+                        "ID: " ++ idString ++ ", Title: " ++ note.title
+                    )
+                |> String.join "\n"
+
+        logString =
+            "Existing notes:\n" ++ existingNotesString ++ "\n\nCurrent note title: " ++ currentNoteTitle ++ "\n\nCurrent note content:\n" ++ noteContent
+
+        _ =
+            Debug.log "Suggest ID Debug" logString
+    in
+    ( model, Ports.suggestId suggestedId )
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
