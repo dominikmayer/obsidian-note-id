@@ -85,12 +85,15 @@ export default class IDSidePanelPlugin extends Plugin {
 		this.addCommand({
 			id: "suggest-id",
 			name: "Suggest new ID for current note",
-			callback: () => {
-				this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
+			callback: async () => {
+				this.ensureActiveNoteAndElmApp(async (elmApp, currentNote) => {
 					if (elmApp.ports.receiveRequestSuggestId) {
-						elmApp.ports.receiveRequestSuggestId.send(
+						const noteContent =
+							await this.app.vault.read(currentNote);
+						elmApp.ports.receiveRequestSuggestId.send([
 							currentNote.path,
-						);
+							noteContent,
+						]);
 					}
 				});
 			},
@@ -111,7 +114,7 @@ export default class IDSidePanelPlugin extends Plugin {
 	}
 
 	private ensureActiveNoteAndElmApp(
-		callback: (elmApp: ElmApp, file: TFile) => void,
+		callback: (elmApp: ElmApp, file: TFile) => void | Promise<void>,
 	) {
 		const currentNote = this.app.workspace.getActiveFile();
 		if (!currentNote) {

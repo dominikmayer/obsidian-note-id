@@ -98,7 +98,7 @@ declare module "*.elm" {
 			send(data: Settings): void;
 		};
 		receiveRequestSuggestId: {
-			send(data: string): void;
+			send(data: [string, string]): void;
 		};
 	}
 

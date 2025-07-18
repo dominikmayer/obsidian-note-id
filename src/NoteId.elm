@@ -115,7 +115,7 @@ type Msg
     | SearchRequested
     | ScrollRequested Path
     | SettingsChanged Ports.Settings
-    | SuggestIdRequested Path
+    | SuggestIdRequested Path String
     | VirtualListMsg VirtualList.Msg
 
 
@@ -186,12 +186,15 @@ update msg model =
         SettingsChanged settings ->
             handleSettingsChange model settings
 
-        SuggestIdRequested filePath ->
+        SuggestIdRequested filePath noteContent ->
             let
                 suggestedId =
                     Notes.getNewIdFromNote model.includedNotes filePath Id.Sequence
                         |> Maybe.map Id.toEscapedString
                         |> Maybe.withDefault ""
+
+                _ =
+                    Debug.log "Current note content" noteContent
             in
             ( model, Ports.suggestId suggestedId )
 
@@ -656,5 +659,5 @@ subscriptions _ =
         , Ports.receiveSettings SettingsChanged
         , Ports.receiveRequestSearch (\_ -> SearchRequested)
         , Ports.receiveRequestAttach (\path -> AttachRequested (Path path))
-        , Ports.receiveRequestSuggestId (\path -> SuggestIdRequested (Path path))
+        , Ports.receiveRequestSuggestId (\( path, content ) -> SuggestIdRequested (Path path) content)
         ]

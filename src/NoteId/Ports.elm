@@ -67,7 +67,7 @@ port receiveRequestSearch : (() -> msg) -> Sub msg
 port receiveSettings : (Settings -> msg) -> Sub msg
 
 
-port receiveRequestSuggestId : (String -> msg) -> Sub msg
+port receiveRequestSuggestId : (( String, String ) -> msg) -> Sub msg
 
 
 type alias RawFileMeta =
