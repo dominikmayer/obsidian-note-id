@@ -223,7 +223,7 @@ suggestIdForNote model filePath noteContent =
     let
         suggestedId =
             Notes.getNewIdFromNote model.includedNotes filePath Id.Sequence
-                |> Maybe.map Id.toEscapedString
+                |> Maybe.map Id.toString
                 |> Maybe.withDefault ""
 
         notesWithIds =
@@ -236,38 +236,28 @@ suggestIdForNote model filePath noteContent =
         currentNoteTitle =
             currentNote
                 |> Maybe.map .title
-                |> Maybe.withDefault "Note not found"
+                |> Maybe.withDefault ""
 
-        existingNotesString =
-            notesWithIds
-                |> List.map
-                    (\note ->
-                        let
-                            idString =
-                                note.id
-                                    |> Maybe.map Id.toEscapedString
-                                    |> Maybe.withDefault ""
-                        in
-                        "ID: " ++ idString ++ " - Title: " ++ note.title
-                    )
-                |> String.join "\n"
-
-        logString =
-            "Existing notes:\n" ++ existingNotesString ++ "\n\nCurrent note title: " ++ currentNoteTitle ++ "\n\nCurrent note content:\n" ++ noteContent
-
-        _ =
-            Debug.log "Suggest ID Debug" logString
-
-        requestPayload =
-            Encode.object
-                [ ( "model", Encode.string "gpt-3.5-turbo" )
-                , ( "input", Encode.string "Hello world! This is a test message from the Obsidian Note ID plugin." )
-                ]
-
-        _ =
-            Debug.log "OpenAI Request Payload" (Encode.encode 2 requestPayload)
+        prompt =
+            AI.SuggestId
+                { existingNotes =
+                    notesWithIds
+                        |> List.map
+                            (\note ->
+                                { id =
+                                    note.id
+                                        |> Maybe.map Id.toString
+                                        |> Maybe.withDefault ""
+                                , title = note.title
+                                }
+                            )
+                , newNote =
+                    { title = currentNoteTitle
+                    , content = noteContent
+                    }
+                }
     in
-    ( model, Cmd.batch [ Ports.suggestId suggestedId, AI.openAIRequest OpenAIResponseReceived requestPayload ] )
+    ( model, Cmd.batch [ Ports.suggestId suggestedId, AI.openAIRequest OpenAIResponseReceived prompt ] )
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
