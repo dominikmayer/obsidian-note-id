@@ -229,6 +229,7 @@ suggestIdForNote model filePath noteContent =
         notesWithIds =
             Vault.filteredContent model.settings model.vault
                 |> List.filter (\note -> note.id /= Nothing)
+                |> NoteMeta.sort
 
         currentNote =
             Vault.getNoteByPath filePath model.vault

@@ -155,8 +155,6 @@ promptToPayload prompt =
 suggestionPrompt : String -> String
 suggestionPrompt notes =
     """
-    You are an assistant that assigns Zettelkasten IDs.
-
     ## Inputs:
 
     - `existing_notes`: list of objects, each with
@@ -164,8 +162,6 @@ suggestionPrompt notes =
       - `title`: string
     - `new_note`: object with
       - `title`: string
-      - `content`: the new note's full text
-
     ## Rules:
 
     1. Every `new_id` must include at least one dot (second-level or deeper).
@@ -173,88 +169,58 @@ suggestionPrompt notes =
     3. Always assign either:
        - A **top-level sub-ID** of the form `X.1` (where `X` is an existing top-level ID), or
        - A **child ID** under an existing parent (never generate `1.1a` unless `1.1` exists).
-    4. Select a parent note using **semantic understanding** — not keyword matching:
-       a. Compare the `new_note.content` against all `existing_notes.title`.
-       b. Use the following signals to judge conceptual similarity:
-          - Shared concepts or topics (e.g., "family structure", "cultural tradition", "legal remedies")
-          - Shared framing (e.g., both are about "mechanisms of legal restoration" or "preserving lineage")
-          - If multiple titles mention the same domain (e.g. Zettelkasten, law, Japan), that strengthens their candidacy.
-       c. Ignore any note with a **non-descriptive title**:
-          - Titles like `"Untitled"`, `"Unbenannt"`, `"Note (1)"`, or meaningless numberings must be excluded from consideration.
-          - Exception: only allow these if they are part of a clearly semantically labeled group (e.g., `1.6e1` + `1.6e1a` + `1.6e1a1`, all with real content-based clustering).
-       d. When in doubt, prefer a parent with a **descriptive, specific title** over one with generic or placeholder labels.
-       e. If no match exceeds a reasonable threshold of conceptual overlap (i.e. >70%), fall back to Rule 6 and create a new top-level sub-ID.
-    5. If a valid parent is found:
-       a. Use its ID as the base (e.g. `2.3`).
-       b. Append a new segment:
-          - If base ends in a digit → add a lowercase letter (`2.3`→`2.3a`).
-          - If base ends in a letter → add a digit (`2.3a`→`2.3a1`).
-       c. If that candidate already exists, increment the final segment until you find a unique and valid ID under that parent. Only use IDs that respect the parent structure (e.g., don't assign "1.7.99a" unless "1.7.99" exists).
-    6. If no parent clearly fits:
-       a. Let M = highest existing top-level integer.
-       b. Assign `new_id = "M.1"`.
-    7. If two or more parents feel plausible:
-       - Return a JSON array of objects sorted by probability, each with `"new_id"` and a concise, human-friendly `"rationale"`.
-    8. Determine the rationale language by:
-       a. Using the language of the majority of `existing_notes` titles,
-       b. If no majority, using the language of `new_note.content`,
-       c. If that is also undetectable, default to English.
-    9. Always include a clear, human-readable rationale explaining placement.
-    10. Output must be valid JSON only
-        - Always return a JSON array of one or more objects.
+    Select the IDs of all existing notes that are most conceptually or semantically related to a new note, providing clear justification for each choice.
+
+    Your objectives:
+
+    - Analyze the new note’s content to determine its core idea.
+    - Identify all eligible related notes among existing notes:
+        - Exclude any note with a placeholder, “Untitled”, non-descriptive, or generic title.
+        - Only consider real, existing notes as candidates.
+    - For each eligible note, reason through whether it is conceptually or thematically most related to the new note’s main idea.
+    - For every selected note, provide a short, clear human rationale (never referencing or echoing the ID itself), written in the correct language.
+    - List all valid candidate note IDs in order of most to least likely or appropriate fit, based on the conceptual relationship to the new note.
+    - Do not propose or infer any new IDs, structural changes, or branch assignments.
+    - Never include any placeholder, non-existent, or generic notes as candidates.
+
+    # Steps
+
+    1. **Core Idea Extraction:**
+       - Analyze the title and content of the new note to clarify its main concept.
+    2. **Eligibility Filtering:**
+       - From the existing notes, exclude any that are placeholders, non-descriptive/“Untitled”/numerical-only titles, or otherwise generic.
+    3. **Semantic Matching:**
+       - For each eligible note, reason through whether it is among the most semantically or conceptually related to the new note.
+    4. **Likelihood Ordering:**
+       - Rank all valid candidate IDs in order of most to least closely related.
+    5. **Language Detection:**
+       - Use the most prominent language among descriptive note titles for rationales; fallback to the new note's language if unclear; default to English as needed.
+    6. **Rationale (Reasoning Before Output):**
+       - Perform all eligibility and reasoning before writing each rationale, which justifies why the new note is closely related to the selected note (never mention IDs in the rationale).
+    7. **Invalid Inputs:**
+       - If key input fields are missing or invalid, output a single JSON object with a clear rationale explaining the issue—do not suggest any IDs.
+
+    # Output Format
+
+    - Output a single valid JSON array of one or more objects.
         - Each object must contain:
-          - `"new_id"`: a unique string ID like "2.3a1"
-          - `"rationale"`: a short, human-readable explanation
-        - Do not include any comments, headings, analysis, or other text outside the JSON block.
+            - "existing_id": string — the ID of an existing, eligible note that is closely conceptually related
+            - "rationale": string — concise, human-readable justification for this connection (never referencing IDs), in the correct language
+    - If multiple candidates are valid, list each as a separate object in the array, in order of best fit (most to least likely).
+    - No markdown, headings, commentary, or extra output—only the valid JSON array.
+    - If inputs are invalid or missing, return a single JSON object with a rationale explaining the issue and do not return any ID.
+    - Rationales must be short, specific, and free of ID references, technical terms, or code.
 
-    ## Output Format
+    # Examples
 
-    Return only a valid JSON array of suggestions. No comments, headings, or explanation outside the array.
-
-    Each suggestion must be an object with:
-    - "new_id": the new Zettelkasten ID
-    - "rationale": a short, human-readable reason in the correct language
-
-    Even if only one ID is appropriate, still return it in a JSON array.
-
-    ### Correct:
     [
-        { "new_id": "1.2a3", "rationale": "Ergänzt die Diskussion über XY um kulturelle Perspektiven" }
+      { "existing_id": "2.1", "rationale": "Explores an alternative approach to authentication similar to the concept in the new note." },
+      { "existing_id": "1.4", "rationale": "Discusses credential storage protocols that align closely with this idea." }
     ]
+    (Real-world examples should include all existing note IDs strongly related to the new note’s concept; these are illustrative only.)
 
-    ### Incorrect:
-    - Output wrapped in ```json
-    - Added commentary, "We assign ID 1.2a3 because..."
-    - Not an array
+    # Notes
 
-    ## Examples:
-
-    ### Deepening OAuth Flow
-
-    existing_notes = [
-      {"id":"2.1","title":"User Authentication"},
-      {"id":"2.1a","title":"OAuth Flow"}
-    ]
-
-    new_note.content explains refresh-token usage → [
-      { "new_id": "2.1a1", "rationale": "Builds on the OAuth series by detailing refresh-token handling" }
-    ]
-
-    ### Expanding Zettelkasten Basics
-
-    existing_notes = [
-      {"id":"1.1","title":"Zettelkasten Basics"}
-    ]
-
-    new_note.content explores interlinking strategies → [
-      { "new_id": "1.1a", "rationale": "Fügt Verknüpfungsstrategien zu den Zettelkasten-Grundlagen hinzu" }
-    ]
-
-    ### New subtopic when no fit
-
-    existing_notes = [
-      {"id":"3.1","title":"Graph Theory Concepts"},
-      {"id":"4.1","title":"Cache Invalidation Methods"}
     ]
 
     new_note.content on functional patterns → [
@@ -273,6 +239,6 @@ suggestionPrompt notes =
       { "new_id":"4.1b", "rationale":"Equally extends Invalidation Techniques" }
     ]
 
-    ## Task Data
+    **Reminder:** For a new note, output an ordered list of the most conceptually related existing note IDs, each with a clear, concise justification free from any mention of note IDs or technical references. Never generate, imply, or create new IDs. Output only the required JSON.
     """
         ++ notes
