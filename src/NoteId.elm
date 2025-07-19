@@ -10,6 +10,7 @@ import Html.Lazy exposing (lazy)
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
+import NoteId.AI as AI
 import NoteId.Id as Id exposing (Id)
 import NoteId.Metadata as Metadata
 import NoteId.NoteMeta as NoteMeta exposing (NoteMeta)
@@ -117,7 +118,7 @@ type Msg
     | ScrollRequested Path
     | SettingsChanged Ports.Settings
     | SuggestIdRequested Path String
-    | OpenAIResponseReceived (Result Http.Error String)
+    | OpenAIResponseReceived AI.Result
     | VirtualListMsg VirtualList.Msg
 
 
@@ -193,7 +194,7 @@ update msg model =
 
         OpenAIResponseReceived result ->
             case result of
-                Ok response ->
+                AI.Success response ->
                     let
                         _ =
                             Debug.log "OpenAI Response" response
@@ -211,7 +212,7 @@ update msg model =
                     in
                     ( model, Cmd.none )
 
-                Err error ->
+                AI.Failure error ->
                     let
                         _ =
                             Debug.log "OpenAI Error" (Debug.toString error)
@@ -270,50 +271,8 @@ suggestIdForNote model filePath noteContent =
 
         _ =
             Debug.log "OpenAI Request Payload" (Encode.encode 2 requestPayload)
-
-        openAIRequest =
-            Http.request
-                { method = "POST"
-                , headers =
-                    [ Http.header "Authorization" "Bearer API-KEY"
-                    ]
-                , url = "https://api.openai.com/v1/responses"
-                , body = Http.jsonBody requestPayload
-                , expect =
-                    Http.expectStringResponse OpenAIResponseReceived
-                        (\response ->
-                            case response of
-                                Http.GoodStatus_ metadata body ->
-                                    let
-                                        _ =
-                                            Debug.log "OpenAI Success Response" body
-                                    in
-                                    Ok body
-
-                                Http.BadStatus_ metadata body ->
-                                    let
-                                        _ =
-                                            Debug.log "OpenAI Error Response Body" body
-
-                                        _ =
-                                            Debug.log "OpenAI Error Response Status" metadata.statusCode
-                                    in
-                                    Err (Http.BadStatus metadata.statusCode)
-
-                                Http.BadUrl_ url ->
-                                    Err (Http.BadUrl url)
-
-                                Http.Timeout_ ->
-                                    Err Http.Timeout
-
-                                Http.NetworkError_ ->
-                                    Err Http.NetworkError
-                        )
-                , timeout = Nothing
-                , tracker = Nothing
-                }
     in
-    ( model, Cmd.batch [ Ports.suggestId suggestedId, openAIRequest ] )
+    ( model, Cmd.batch [ Ports.suggestId suggestedId, AI.openAIRequest OpenAIResponseReceived requestPayload ] )
 
 
 openAIResponseDecoder : Decode.Decoder String
