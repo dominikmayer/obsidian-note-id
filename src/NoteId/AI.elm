@@ -1,12 +1,28 @@
-module NoteId.AI exposing (Error(..), Result(..), openAIRequest)
+module NoteId.AI exposing (Error(..), Response, Result(..), openAIRequest)
 
 import Http
+import Json.Decode as Decode
 import Json.Encode
 
 
 type Result
-    = Success String
+    = Success Response
     | Failure Error
+
+
+type alias Response =
+    { id : String
+    , object : String
+    , createdAt : Int
+    , status : String
+    , model : String
+    , text : String
+    , usage :
+        { inputTokens : Int
+        , outputTokens : Int
+        , totalTokens : Int
+        }
+    }
 
 
 type Error
@@ -27,11 +43,16 @@ openAIRequest toMsg payload =
         , url = "https://api.openai.com/v1/responses"
         , body = Http.jsonBody payload
         , expect =
-            Http.expectString
+            Http.expectJson
                 (\result ->
                     case result of
-                        Ok body ->
-                            toMsg (Success body)
+                        Ok jsonResponse ->
+                            case Decode.decodeValue openAIResponseDecoder jsonResponse of
+                                Ok parsedResponse ->
+                                    toMsg (Success parsedResponse)
+
+                                Err decodeError ->
+                                    toMsg (Failure (BadRequest ("JSON decode error: " ++ Decode.errorToString decodeError)))
 
                         Err error ->
                             case error of
@@ -56,6 +77,25 @@ openAIRequest toMsg payload =
                                 Http.BadBody body ->
                                     toMsg (Failure (BadRequest body))
                 )
+                Decode.value
         , timeout = Nothing
         , tracker = Nothing
         }
+
+
+openAIResponseDecoder : Decode.Decoder Response
+openAIResponseDecoder =
+    Decode.map7 Response
+        (Decode.field "id" Decode.string)
+        (Decode.field "object" Decode.string)
+        (Decode.field "created_at" Decode.int)
+        (Decode.field "status" Decode.string)
+        (Decode.field "model" Decode.string)
+        (Decode.field "output" (Decode.index 0 (Decode.field "content" (Decode.index 0 (Decode.field "text" Decode.string)))))
+        (Decode.field "usage"
+            (Decode.map3 (\input output total -> { inputTokens = input, outputTokens = output, totalTokens = total })
+                (Decode.field "input_tokens" Decode.int)
+                (Decode.field "output_tokens" Decode.int)
+                (Decode.field "total_tokens" Decode.int)
+            )
+        )
