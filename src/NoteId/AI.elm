@@ -155,20 +155,6 @@ promptToPayload prompt =
 suggestionPrompt : String -> String
 suggestionPrompt notes =
     """
-    ## Inputs:
-
-    - `existing_notes`: list of objects, each with
-      - `id`: string like "1.2a3"
-      - `title`: string
-    - `new_note`: object with
-      - `title`: string
-    ## Rules:
-
-    1. Every `new_id` must include at least one dot (second-level or deeper).
-    2. Never duplicate an existing ID.
-    3. Always assign either:
-       - A **top-level sub-ID** of the form `X.1` (where `X` is an existing top-level ID), or
-       - A **child ID** under an existing parent (never generate `1.1a` unless `1.1` exists).
     Select the IDs of all existing notes that are most conceptually or semantically related to a new note, providing clear justification for each choice.
 
     Your objectives:
@@ -221,23 +207,12 @@ suggestionPrompt notes =
 
     # Notes
 
-    ]
-
-    new_note.content on functional patterns → [
-      { "new_id": "4.1", "rationale": "Introduces a new functional-patterns subtopic" }
-    ]
-
-    ### Tie between two clusters
-
-    existing_notes = [
-      {"id":"3.2","title":"Cache Design"},
-      {"id":"4.1","title":"Invalidation Techniques"}
-    ]
-
-    Content matches both → [
-      { "new_id":"3.2a", "rationale":"Continues Cache Design with layout details" },
-      { "new_id":"4.1b", "rationale":"Equally extends Invalidation Techniques" }
-    ]
+    - Only select real, descriptive, non-placeholder notes as candidates. Never include or suggest notes whose titles are non-existent, placeholders, or non-descriptive.
+    - Review all existing notes and constraints before producing any candidate.
+    - All rationales must be concise, conceptual justifications; do not mention, echo, or allude to IDs or note structure.
+    - Multiple suggestions are required—ordered by conceptual fit, not alphabetically.
+    - Output must be only the valid raw JSON; no markdown, extra explanation, or commentary.
+    - Complete all reasoning and eligibility checks before outputting any answer.
 
     **Reminder:** For a new note, output an ordered list of the most conceptually related existing note IDs, each with a clear, concise justification free from any mention of note IDs or technical references. Never generate, imply, or create new IDs. Output only the required JSON.
     """
