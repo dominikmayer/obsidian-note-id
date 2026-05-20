@@ -1,4 +1,4 @@
-module NoteId.AI exposing (Error(..), Prompt(..), Response, Result(..), openAIRequest)
+module NoteId.AI exposing (Error(..), Prompt(..), Response, Result(..), errorToString, openAIRequest)
 
 import Http
 import Json.Decode as Decode
@@ -43,8 +43,27 @@ type Error
     | UnknownError Int
 
 
-openAIRequest : (Result -> msg) -> Prompt -> Cmd msg
-openAIRequest toMsg prompt =
+errorToString : Error -> String
+errorToString error =
+    case error of
+        BadRequest msg ->
+            "Bad request: " ++ msg
+
+        InvalidKey ->
+            "Invalid API key"
+
+        NetworkProblem ->
+            "Network problem"
+
+        Timeout ->
+            "Request timed out"
+
+        UnknownError code ->
+            "Unknown error (status " ++ String.fromInt code ++ ")"
+
+
+openAIRequest : (Result -> msg) -> String -> Prompt -> Cmd msg
+openAIRequest toMsg apiKey prompt =
     let
         payload =
             promptToPayload prompt
@@ -52,7 +71,7 @@ openAIRequest toMsg prompt =
     Http.request
         { method = "POST"
         , headers =
-            [ Http.header "Authorization" "Bearer API-Key"
+            [ Http.header "Authorization" ("Bearer " ++ apiKey)
             ]
         , url = "https://api.openai.com/v1/responses"
         , body = Http.jsonBody payload

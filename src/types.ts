@@ -10,6 +10,7 @@ export interface IDSidePanelSettings {
 	tocLevel: number;
 	splitLevel: number;
 	indentation: boolean;
+	openAiApiKey: string;
 }
 
 export const DEFAULT_SETTINGS: IDSidePanelSettings = {
@@ -22,6 +23,7 @@ export const DEFAULT_SETTINGS: IDSidePanelSettings = {
 	tocLevel: 1,
 	splitLevel: 0,
 	indentation: false,
+	openAiApiKey: "",
 };
 
 export interface NoteMeta {

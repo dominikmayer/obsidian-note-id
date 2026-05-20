@@ -95,4 +95,5 @@ type alias Settings =
     , tocLevel : Int
     , splitLevel : Int
     , indentation : Bool
+    , openAiApiKey : String
     }

@@ -24,6 +24,7 @@ type alias Settings =
     , tocLevel : TocLevel
     , splitLevel : Int
     , indentation : Bool
+    , openAiApiKey : String
     }
 
 
@@ -60,6 +61,7 @@ default =
     , tocLevel = TocLevel 1
     , splitLevel = 0
     , indentation = False
+    , openAiApiKey = ""
     }
 
 
@@ -75,6 +77,20 @@ decode settings newSettings =
 
 partialSettingsDecoder : Decode.Decoder (Settings -> Settings)
 partialSettingsDecoder =
+    Decode.map2
+        (\applyBase openAiApiKey settings ->
+            let
+                s =
+                    applyBase settings
+            in
+            { s | openAiApiKey = openAiApiKey |> Maybe.withDefault s.openAiApiKey }
+        )
+        baseSettingsDecoder
+        (Decode.field "openAiApiKey" Decode.string |> Decode.maybe)
+
+
+baseSettingsDecoder : Decode.Decoder (Settings -> Settings)
+baseSettingsDecoder =
     Decode.map8
         (\includeFolders excludeFolders showNotesWithoutId idField tocField newTocLevel splitLevel indentation settings ->
             { settings
@@ -127,4 +143,5 @@ fromPort portSettings =
             NoAutoToc
     , splitLevel = portSettings.splitLevel
     , indentation = portSettings.indentation
+    , openAiApiKey = portSettings.openAiApiKey
     }

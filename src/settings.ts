@@ -178,5 +178,30 @@ export class IDSidePanelSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		containerEl.createEl("br");
+		const aiSection = containerEl.createEl("div", {
+			cls: "setting-item setting-item-heading",
+		});
+		const aiSectionInfo = aiSection.createEl("div", {
+			cls: "setting-item-info",
+		});
+		aiSectionInfo.createEl("div", {
+			text: "Note Intelligence",
+			cls: "setting-item-name",
+		});
+
+		new Setting(containerEl)
+			.setName("OpenAI API key")
+			.setDesc("API key for AI-powered ID suggestions.")
+			.addText((text) =>
+				text
+					.setPlaceholder("sk-...")
+					.setValue(this.plugin.settings.openAiApiKey)
+					.onChange(async (value) => {
+						this.plugin.settings.openAiApiKey = value.trim();
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 }

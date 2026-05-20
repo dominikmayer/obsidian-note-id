@@ -210,7 +210,7 @@ update msg model =
                 AI.Failure error ->
                     let
                         _ =
-                            Debug.log "OpenAI Error" (Debug.toString error)
+                            Debug.log "OpenAI Error" (AI.errorToString error)
                     in
                     ( model, Cmd.none )
 
@@ -258,7 +258,7 @@ suggestIdForNote model filePath noteContent =
                     }
                 }
     in
-    ( model, Cmd.batch [ Ports.suggestId suggestedId, AI.openAIRequest OpenAIResponseReceived prompt ] )
+    ( model, Cmd.batch [ Ports.suggestId suggestedId, AI.openAIRequest OpenAIResponseReceived model.settings.openAiApiKey prompt ] )
 
 
 handleDisplayChange : Model -> Bool -> ( Model, Cmd Msg )
