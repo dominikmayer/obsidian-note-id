@@ -141,47 +141,38 @@ splitHasChanged { oldNoteMap, newNoteMap } note =
 annotate : List NoteMeta -> Notes
 annotate notes =
     let
-        annotateNote xs =
-            case xs of
-                [] ->
-                    []
-
-                first :: rest ->
-                    let
-                        initialSplit =
-                            case first.id of
-                                Nothing ->
-                                    Just 1
-
-                                Just _ ->
-                                    Nothing
-                    in
-                    { note = first, splitLevel = initialSplit }
-                        :: annotateRest first rest
-
-        annotateRest prev xs =
-            case xs of
-                [] ->
-                    []
-
-                current :: rest ->
-                    let
-                        computedSplit =
-                            case ( prev.id, current.id ) of
-                                ( Just prevId, Just currId ) ->
-                                    Id.splitLevel prevId currId
-
-                                ( Just _, Nothing ) ->
-                                    Just 1
-
-                                ( Nothing, Just _ ) ->
-                                    Just 1
-
-                                ( Nothing, Nothing ) ->
-                                    -- If two consecutive notes lack an id, assume they belong to the same block.
-                                    Nothing
-                    in
-                    { note = current, splitLevel = computedSplit }
-                        :: annotateRest current rest
+        ( _, reversedResult ) =
+            List.foldl annotateNote ( Nothing, [] ) notes
     in
-    Notes (annotateNote notes)
+    Notes (List.reverse reversedResult)
+
+
+annotateNote : NoteMeta -> ( Maybe NoteMeta, List NoteWithSplit ) -> ( Maybe NoteMeta, List NoteWithSplit )
+annotateNote current ( maybePrev, acc ) =
+    let
+        computedSplit =
+            case maybePrev of
+                Nothing ->
+                    case current.id of
+                        Nothing ->
+                            Just 1
+
+                        Just _ ->
+                            Nothing
+
+                Just prev ->
+                    case ( prev.id, current.id ) of
+                        ( Just prevId, Just currId ) ->
+                            Id.splitLevel prevId currId
+
+                        ( Just _, Nothing ) ->
+                            Just 1
+
+                        ( Nothing, Just _ ) ->
+                            Just 1
+
+                        ( Nothing, Nothing ) ->
+                            -- If two consecutive notes lack an id, assume they belong to the same block.
+                            Nothing
+    in
+    ( Just current, { note = current, splitLevel = computedSplit } :: acc )
