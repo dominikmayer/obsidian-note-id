@@ -212,12 +212,6 @@ export class IDSidePanelView extends ItemView {
 
 	private registerEvents() {
 		this.registerEvent(
-			this.app.vault.on("modify", async (file) => {
-				await this.handleFileChange(file);
-			}),
-		);
-
-		this.registerEvent(
 			this.app.vault.on("rename", async (file, oldPath) => {
 				if (this.elmApp && this.elmApp.ports.receiveFileRenamed) {
 					this.elmApp.ports.receiveFileRenamed.send([
