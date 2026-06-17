@@ -79,6 +79,7 @@ export class IDSidePanelView extends ItemView {
 			this.elmApp.ports.receiveRawFileMeta.send(this.rawMetadata);
 		}
 
+		this.registerResizeObserver(container);
 		this.registerEvents();
 		this.elmApp.ports.openFile.subscribe((filePath: string) => {
 			const file = this.app.vault.getAbstractFileByPath(
@@ -199,6 +200,17 @@ export class IDSidePanelView extends ItemView {
 				}
 			},
 		);
+	}
+
+	private registerResizeObserver(container: HTMLElement) {
+		const observer = new ResizeObserver(() => {
+			const listEl = container.querySelector("#virtual-list");
+			if (listEl) {
+				listEl.dispatchEvent(new Event("scroll"));
+			}
+		});
+		observer.observe(container);
+		this.register(() => observer.disconnect());
 	}
 
 	private registerEvents() {
