@@ -28,7 +28,6 @@ export default class IDSidePanelPlugin extends Plugin {
 
 		this.registerView(VIEW_TYPE_ID_PANEL, (leaf) => {
 			const view = new IDSidePanelView(leaf, this);
-			view.icon = "file-digit";
 			return view;
 		});
 
@@ -43,24 +42,30 @@ export default class IDSidePanelPlugin extends Plugin {
 		this.addCommand({
 			id: "open-id-side-panel",
 			name: "Open side panel",
-			callback: () => this.activateView(),
+			callback: async () => {
+				await this.activateView();
+			},
 		});
 		this.addCommand({
 			id: "create-note-in-sequence",
 			name: "Create new note in sequence",
-			callback: () => this.createNoteFromCommand(false),
+			callback: async () => {
+				await this.createNoteFromCommand(false);
+			},
 		});
 		this.addCommand({
 			id: "create-note-in-subsequence",
 			name: "Create new note in subsequence",
-			callback: () => this.createNoteFromCommand(true),
+			callback: async () => {
+				await this.createNoteFromCommand(true);
+			},
 		});
 
 		this.addCommand({
 			id: "note-search",
 			name: "Search notes by title, title of contents title or ID",
-			callback: () => {
-				this.ensurePanelAndElmApp((elmApp) => {
+			callback: async () => {
+				await this.ensurePanelAndElmApp((elmApp) => {
 					if (elmApp.ports.receiveRequestSearch) {
 						elmApp.ports.receiveRequestSearch.send(null);
 					}
@@ -70,9 +75,9 @@ export default class IDSidePanelPlugin extends Plugin {
 
 		this.addCommand({
 			id: "attach-note",
-			name: "Set note ID based on another note",
-			callback: () => {
-				this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
+			name: "Set ID based on another note",
+			callback: async () => {
+				await this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
 					if (elmApp.ports.receiveRequestAttach) {
 						elmApp.ports.receiveRequestAttach.send(
 							currentNote.path,
@@ -83,8 +88,8 @@ export default class IDSidePanelPlugin extends Plugin {
 		});
 	}
 
-	private createNoteFromCommand(subsequence: boolean) {
-		this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
+	private async createNoteFromCommand(subsequence: boolean): Promise<void> {
+		await this.ensureActiveNoteAndElmApp((elmApp, currentNote) => {
 			if (elmApp.ports.receiveCreateNote) {
 				elmApp.ports.receiveCreateNote.send([
 					currentNote.path,
@@ -96,42 +101,44 @@ export default class IDSidePanelPlugin extends Plugin {
 		});
 	}
 
-	private ensureActiveNoteAndElmApp(
+	private async ensureActiveNoteAndElmApp(
 		callback: (elmApp: ElmApp, file: TFile) => void,
-	) {
+	): Promise<void> {
 		const currentNote = this.app.workspace.getActiveFile();
 		if (!currentNote) {
 			new Notice("No active note");
 			return;
 		}
-		this.ensurePanelAndElmApp((elmApp) => {
+		await this.ensurePanelAndElmApp((elmApp) => {
 			callback(elmApp, currentNote);
 		});
 	}
 
-	private ensurePanelAndElmApp(callback: (elmApp: ElmApp) => void) {
-		this.getOrCreateActivePanelView().then((panelView) => {
-			if (!panelView) {
-				new Notice("Failed to open the side panel");
-				return;
-			}
+	private async ensurePanelAndElmApp(
+		callback: (elmApp: ElmApp) => void,
+	): Promise<void> {
+		const panelView = await this.getOrCreateActivePanelView();
+		if (!panelView) {
+			new Notice("Failed to open the side panel");
+			return;
+		}
 
-			this.waitForElmApp()
-				.then(callback)
-				.catch(() => {
-					new Notice("Please try again");
-				});
-		});
+		try {
+			const elmApp = await this.waitForElmApp();
+			callback(elmApp);
+		} catch {
+			new Notice("Please try again");
+		}
 	}
 
-	private waitForElmApp(retries = 10, delay = 200): Promise<ElmApp | null> {
+	private waitForElmApp(retries = 10, delay = 200): Promise<ElmApp> {
 		return new Promise((resolve, reject) => {
 			const checkElmApp = () => {
 				const elmApp = this.getElmApp();
 				if (elmApp) {
 					resolve(elmApp);
 				} else if (retries > 0) {
-					setTimeout(() => checkElmApp(), delay);
+					window.setTimeout(() => checkElmApp(), delay);
 					retries--;
 				} else {
 					reject(new Error("Elm app failed to load"));
@@ -158,7 +165,7 @@ export default class IDSidePanelPlugin extends Plugin {
 
 	async activateView() {
 		const leaf = await this.getOrCreateLeaf();
-		this.app.workspace.revealLeaf(leaf);
+		await this.app.workspace.revealLeaf(leaf);
 	}
 
 	async getOrCreateLeaf(): Promise<WorkspaceLeaf> {

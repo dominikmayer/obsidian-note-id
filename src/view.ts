@@ -37,6 +37,9 @@ export class IDSidePanelView extends ItemView {
 	getDisplayText() {
 		return "Notes by ID";
 	}
+	getIcon(): string {
+		return "file-digit";
+	}
 
 	async onOpen() {
 		const container = this.containerEl.children[1] as HTMLElement;
@@ -83,31 +86,19 @@ export class IDSidePanelView extends ItemView {
 			);
 			if (file instanceof TFile) {
 				const leaf = this.app.workspace.getLeaf();
-				leaf.openFile(file);
+				void leaf.openFile(file);
 			}
 		});
 
 		this.elmApp.ports.createNote.subscribe(
-			async ([filePath, content]: [string, string]) => {
-				const uniqueFilePath = this.getUniqueFilePath(
-					normalizePath(filePath),
-				);
-				const file = await this.app.vault.create(
-					uniqueFilePath,
-					content,
-				);
-				if (file instanceof TFile) {
-					const leaf = this.app.workspace.getLeaf();
-					leaf.openFile(file);
-				}
+			([filePath, content]: [string, string]) => {
+				void this.createNote(filePath, content);
 			},
 		);
 
-		this.elmApp.ports.toggleTOCButton.subscribe(
-			async (toggled: boolean) => {
-				tocButton.classList.toggle("is-active", toggled);
-			},
-		);
+		this.elmApp.ports.toggleTOCButton.subscribe((toggled: boolean) => {
+			tocButton.classList.toggle("is-active", toggled);
+		});
 
 		this.elmApp.ports.openContextMenu.subscribe(
 			([x, y, filePath]: [number, number, string]) => {
@@ -175,7 +166,7 @@ export class IDSidePanelView extends ItemView {
 				);
 
 				if (file instanceof TFile) {
-					this.updateId(file, id);
+					void this.updateId(file, id);
 				} else {
 					new Notice("Couldn't update note");
 				}
@@ -280,8 +271,7 @@ export class IDSidePanelView extends ItemView {
 		);
 		setIcon(searchButton, "search");
 
-		const search = header.createDiv("search-input-container");
-		search.style.display = "none"; // Initially hidden
+		const search = header.createDiv("search-input-container is-hidden");
 
 		const searchInput = search.createEl("input");
 		searchInput.placeholder = "Enter search term…";
@@ -294,14 +284,14 @@ export class IDSidePanelView extends ItemView {
 		setIcon(searchClearButton, "close");
 
 		searchButton.addEventListener("click", () => {
-			const isVisible = search.style.display !== "none";
+			const isVisible = !search.hasClass("is-hidden");
 			searchButton.classList.toggle("is-active", !isVisible);
 			if (isVisible) {
-				search.style.display = "none";
+				search.addClass("is-hidden");
 				searchInput.value = "";
 				this.handleSearchInputChanged("");
 			} else {
-				search.style.display = "block";
+				search.removeClass("is-hidden");
 				searchInput.focus();
 			}
 		});
@@ -377,6 +367,17 @@ export class IDSidePanelView extends ItemView {
 		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			frontmatter[idField] = newValue;
 		});
+	}
+
+	private async createNote(filePath: string, content: string): Promise<void> {
+		const uniqueFilePath = this.getUniqueFilePath(
+			normalizePath(filePath),
+		);
+		const file = await this.app.vault.create(uniqueFilePath, content);
+		if (file instanceof TFile) {
+			const leaf = this.app.workspace.getLeaf();
+			await leaf.openFile(file);
+		}
 	}
 
 	private extractRawFileMeta(file: TFile): {

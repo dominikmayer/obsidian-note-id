@@ -36,11 +36,11 @@ export class OpenNoteModal extends NoteSearchModal {
 		const open = !isMod && !isAlt && !isShift;
 
 		if (splitRight) {
-			this.app.workspace.getLeaf("split").openFile(item);
+			void this.app.workspace.getLeaf("split").openFile(item);
 		} else if (newLeaf) {
-			this.app.workspace.openLinkText(item.path, "", newLeaf);
+			void this.app.workspace.openLinkText(item.path, "", newLeaf);
 		} else if (open) {
-			this.app.workspace.openLinkText(item.path, "", newLeaf);
+			void this.app.workspace.openLinkText(item.path, "", newLeaf);
 		}
 	}
 }

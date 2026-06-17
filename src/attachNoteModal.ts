@@ -40,9 +40,9 @@ export class AttachNoteModal extends NoteSearchModal {
 		const subsequence = !isMod && !isAlt && !isShift;
 
 		if (sequence) {
-			this.updateId(item, false);
+			void this.updateId(item, false);
 		} else if (subsequence) {
-			this.updateId(item, true);
+			void this.updateId(item, true);
 		}
 	}
 

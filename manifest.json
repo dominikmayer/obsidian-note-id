@@ -2,7 +2,7 @@
 	"id": "note-id",
 	"name": "Note ID",
 	"version": "1.4.4",
-	"minAppVersion": "0.15.0",
+	"minAppVersion": "1.5.3",
 	"description": "Displays notes by their ID, enabling structured sequences for manuscripts or Zettelkasten (\"Folgezettel\").",
 	"author": "Dominik Mayer",
 	"authorUrl": "https://www.dominikmayer.com",

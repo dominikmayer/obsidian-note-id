@@ -17,6 +17,10 @@
 	padding-left: var(--size-4-2);
 }
 
+.is-hidden {
+	display: none;
+}
+
 .virtual-list-item {
 	flex-grow: 1;
 	left: 0;

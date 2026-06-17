@@ -50,8 +50,8 @@ export abstract class NoteSearchModal extends FuzzySuggestModal<TFile> {
 		this.limit = 20;
 	}
 
-	onOpen(): void {
-		super.onOpen();
+	async onOpen(): Promise<void> {
+		await super.onOpen();
 		this.inputEl.addEventListener("keydown", this.handleKeyDown, true);
 	}
 
@@ -210,29 +210,26 @@ export abstract class NoteSearchModal extends FuzzySuggestModal<TFile> {
 		const toc = noteMeta?.tocTitle ?? fallbackToc;
 		const alias = fallbackAlias;
 
-		let suggestionTitle = "";
+		let titleText = "";
 		let noteLeft = "";
 		let noteRight = "";
 
 		if (matchType === "title") {
 			// Show note title in the suggestion title (highlighted).
 			// Note: note is "id: toc title"
-			suggestionTitle = this.highlightText(title, query);
+			titleText = title;
 			noteLeft = id ? String(id) : "";
 			noteRight = toc ? toc : "";
 		} else if (matchType === "aliases" || matchType === "toc") {
 			// Show alias (or toc) in the suggestion title (highlighted).
 			// Note: note is "id: note title"
-			suggestionTitle = this.highlightText(
-				matchType === "aliases" ? alias : toc,
-				query,
-			);
+			titleText = matchType === "aliases" ? alias : toc;
 			noteLeft = id ? String(id) : "";
 			noteRight = title;
 		} else if (matchType === "id") {
 			// Show id in the suggestion title (highlighted).
 			// Note: note is "toc title: note title"
-			suggestionTitle = this.highlightText(String(id), query);
+			titleText = id ? String(id) : "";
 			noteLeft = toc ? toc : "";
 			noteRight = title;
 		}
@@ -250,26 +247,42 @@ export abstract class NoteSearchModal extends FuzzySuggestModal<TFile> {
 		const titleEl = contentEl.createEl("div", { cls: "suggestion-title" });
 		const noteEl = contentEl.createEl("div", { cls: "suggestion-note" });
 
-		titleEl.innerHTML = suggestionTitle;
+		this.renderHighlightedText(titleEl, titleText, query);
 		noteEl.setText(noteText);
 	}
 
-	private highlightText(text: string, query: string): string {
-		if (!query) return text;
+	private renderHighlightedText(
+		element: HTMLElement,
+		text: string,
+		query: string,
+	): void {
+		element.empty();
+		if (!query) {
+			element.setText(text);
+			return;
+		}
+
 		const indices = this.fuzzyMatchIndices(text, query);
-		if (indices.length === 0) return text;
-		let result = "";
+		if (indices.length === 0) {
+			element.setText(text);
+			return;
+		}
+
 		let lastIndex = 0;
 		indices.forEach((index) => {
-			result +=
-				text.slice(lastIndex, index) +
-				'<span class="suggestion-highlight">' +
-				text[index] +
-				"</span>";
+			if (index > lastIndex) {
+				element.appendText(text.slice(lastIndex, index));
+			}
+			const span = element.createEl("span", {
+				cls: "suggestion-highlight",
+			});
+			span.setText(text[index]);
 			lastIndex = index + 1;
 		});
-		result += text.slice(lastIndex);
-		return result;
+
+		if (lastIndex < text.length) {
+			element.appendText(text.slice(lastIndex));
+		}
 	}
 
 	private fuzzyMatchIndices(text: string, query: string): number[] {
