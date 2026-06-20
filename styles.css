@@ -17,7 +17,7 @@
 	padding-left: var(--size-4-2);
 }
 
-.is-hidden {
+.workspace-leaf-content[data-type="id-side-panel"] .is-hidden {
 	display: none;
 }
 
