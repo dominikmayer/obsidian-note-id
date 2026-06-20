@@ -88,6 +88,9 @@ declare module "*.elm" {
 		receiveRequestAttach: {
 			send(data: string): void;
 		};
+		receiveRemeasureViewport: {
+			send(data: null): void;
+		};
 		receiveRequestSearch: {
 			send(data: null): void;
 		};

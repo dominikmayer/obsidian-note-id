@@ -203,14 +203,26 @@ export class IDSidePanelView extends ItemView {
 	}
 
 	private registerResizeObserver(container: HTMLElement) {
+		let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 		const observer = new ResizeObserver(() => {
-			const listEl = container.querySelector("#virtual-list");
-			if (listEl) {
-				listEl.dispatchEvent(new Event("scroll"));
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer);
 			}
+			debounceTimer = setTimeout(() => {
+				debounceTimer = null;
+				const elmApp = this.getElmApp();
+				if (elmApp && elmApp.ports.receiveRemeasureViewport) {
+					elmApp.ports.receiveRemeasureViewport.send(null);
+				}
+			}, 50);
 		});
 		observer.observe(container);
-		this.register(() => observer.disconnect());
+		this.register(() => {
+			observer.disconnect();
+			if (debounceTimer !== null) {
+				clearTimeout(debounceTimer);
+			}
+		});
 	}
 
 	private registerEvents() {

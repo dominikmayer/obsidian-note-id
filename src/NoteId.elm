@@ -114,6 +114,7 @@ type Msg
     | RawFileMetaReceived (List RawFileMeta)
     | SearchRequested
     | ScrollRequested Path
+    | ViewportRemeasureRequested
     | SettingsChanged Ports.Settings
     | VirtualListMsg VirtualList.Msg
 
@@ -181,6 +182,9 @@ update msg model =
 
         ScrollRequested path ->
             scrollToNote model path
+
+        ViewportRemeasureRequested ->
+            mapVirtualListResult ( model.virtualList, VirtualList.remeasureViewport model.virtualList ) model
 
         SettingsChanged settings ->
             handleSettingsChange model settings
@@ -643,6 +647,7 @@ subscriptions _ =
         , Ports.receiveRawFileMeta RawFileMetaReceived
         , Ports.receiveFileChange NoteChangeReceived
         , Ports.receiveGetNewIdForNoteFromNote (\( for, from, subsequence ) -> NewIdRequestedForNoteFromNote ( Path for, Path from, Id.isSubsequenceToProgression subsequence ))
+        , Ports.receiveRemeasureViewport (\_ -> ViewportRemeasureRequested)
         , Ports.receiveSettings SettingsChanged
         , Ports.receiveRequestSearch (\_ -> SearchRequested)
         , Ports.receiveRequestAttach (\path -> AttachRequested (Path path))

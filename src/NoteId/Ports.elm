@@ -61,6 +61,9 @@ port receiveRequestAttach : (String -> msg) -> Sub msg
 port receiveRequestSearch : (() -> msg) -> Sub msg
 
 
+port receiveRemeasureViewport : (() -> msg) -> Sub msg
+
+
 port receiveSettings : (Settings -> msg) -> Sub msg
 
 
